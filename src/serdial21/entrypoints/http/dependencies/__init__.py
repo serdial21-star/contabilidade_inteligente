@@ -1,0 +1,2 @@
+'''Dependências HTTP compartilhadas.'''
+
