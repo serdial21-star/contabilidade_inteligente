@@ -1,6 +1,7 @@
 '''Configurações tipadas carregadas exclusivamente do ambiente.'''
 
 from functools import lru_cache
+from pathlib import Path
 from typing import Literal, Self
 
 from pydantic import AliasChoices, Field, SecretStr, field_validator, model_validator
@@ -69,6 +70,10 @@ class AppSettings(BaseSettings):
         ge=1,
         le=300,
         validation_alias='DATABASE_WRITE_TIMEOUT_SECONDS',
+    )
+    object_storage_path: Path = Field(
+        default=Path('.serdial21-storage'),
+        validation_alias='OBJECT_STORAGE_PATH',
     )
 
     @field_validator('api_prefix')

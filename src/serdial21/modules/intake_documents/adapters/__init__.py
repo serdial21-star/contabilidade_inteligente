@@ -1,0 +1,2 @@
+'''Adaptadores do intake documental.'''
+

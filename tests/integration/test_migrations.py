@@ -10,20 +10,28 @@ from serdial21.bootstrap.settings import get_settings
 
 
 EXPECTED_TABLES = {
+    'artifact_receipts',
+    'audit_events',
     'companies',
     'company_accesses',
     'establishments',
+    'evidence_artifacts',
+    'import_batches',
+    'import_items',
+    'lineage_edges',
     'permissions',
     'role_bindings',
     'role_permissions',
     'roles',
     'tenant_memberships',
     'tenants',
+    'transformation_runs',
+    'validation_issues',
     'users',
 }
 
 
-def test_model_registry_contains_only_approved_access_control_tables() -> None:
+def test_model_registry_contains_approved_tables() -> None:
     load_models()
 
     assert set(metadata.tables) == EXPECTED_TABLES

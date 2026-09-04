@@ -1,3 +1,5 @@
+from pathlib import Path
+
 from pydantic import ValidationError
 import pytest
 
@@ -11,6 +13,7 @@ def test_defaults_are_safe_for_local_development() -> None:
     assert settings.debug is False
     assert settings.api_prefix == '/api/v1'
     assert settings.database_url is None
+    assert settings.object_storage_path == Path('.serdial21-storage')
     assert settings.resolved_database_pool_size == 5
     assert settings.resolved_database_max_overflow == 5
 
@@ -60,6 +63,16 @@ def test_database_url_uses_exact_environment_name(monkeypatch: pytest.MonkeyPatc
 
     assert settings.database_url is not None
     assert settings.database_url.get_secret_value().startswith('mysql+pymysql://')
+
+
+def test_object_storage_path_uses_exact_environment_name(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv('OBJECT_STORAGE_PATH', 'var/evidence')
+
+    settings = AppSettings(_env_file=None)
+
+    assert settings.object_storage_path == Path('var/evidence')
 
 
 def test_non_mysql_driver_is_rejected_outside_test() -> None:

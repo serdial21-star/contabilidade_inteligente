@@ -12,6 +12,7 @@ from serdial21.bootstrap.database import (
     create_database_engine,
     create_session_factory,
 )
+from serdial21.bootstrap.audit import AuditContext, audit_scope
 from serdial21.bootstrap.model_registry import load_models
 from serdial21.bootstrap.settings import AppSettings
 from serdial21.modules.access_control.adapters.outbound.persistence.models import (
@@ -35,6 +36,7 @@ from serdial21.modules.access_control.application.services.authorization import 
     AuthorizationService,
 )
 from serdial21.modules.access_control.domain.permissions import PermissionCode
+from serdial21.modules.audit.domain.entities import AuditOrigin
 
 
 NOW = datetime(2026, 9, 3, 15, 0, tzinfo=UTC)
@@ -68,7 +70,15 @@ def database_session() -> Generator[Session, None, None]:
     factory = create_session_factory(engine)
     session = factory()
     try:
-        yield session
+        with audit_scope(
+            session,
+            AuditContext(
+                correlation_id=uuid4(),
+                origin=AuditOrigin.AUTOMATION,
+                reason='security test fixture',
+            ),
+        ):
+            yield session
     finally:
         session.close()
         Base.metadata.drop_all(engine)
