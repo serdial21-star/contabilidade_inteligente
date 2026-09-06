@@ -11,6 +11,7 @@ ACCESS_CONTROL_ROOT = (
 )
 AUDIT_ROOT = PROJECT_ROOT / 'src' / 'serdial21' / 'modules' / 'audit'
 INTAKE_ROOT = PROJECT_ROOT / 'src' / 'serdial21' / 'modules' / 'intake_documents'
+FISCAL_ROOT = PROJECT_ROOT / 'src' / 'serdial21' / 'modules' / 'fiscal_documents'
 
 
 def test_domain_does_not_import_framework_or_persistence() -> None:
@@ -44,22 +45,42 @@ def test_intake_domain_does_not_import_framework_or_persistence() -> None:
     assert not any('adapters' in module for module in imported)
 
 
+def test_fiscal_domain_does_not_import_framework_or_persistence() -> None:
+    imported = imported_modules(FISCAL_ROOT / 'domain')
+
+    assert imported.isdisjoint({'fastapi', 'sqlalchemy'})
+    assert not any('adapters' in module for module in imported)
+
+
+def test_fiscal_application_does_not_import_private_fiscal_adapter() -> None:
+    imported = imported_modules(FISCAL_ROOT / 'application')
+
+    assert not any(
+        module.startswith('serdial21.modules.fiscal_documents.adapters')
+        for module in imported
+    )
+
+
 def test_all_scoped_access_tables_carry_tenant_id() -> None:
     load_models()
     tenant_scoped_tables = {
         'artifact_receipts',
         'audit_events',
+        'canonical_records',
         'tenant_memberships',
         'companies',
         'establishments',
         'company_accesses',
         'evidence_artifacts',
+        'fiscal_document_items',
+        'fiscal_documents',
         'import_batches',
         'import_items',
         'lineage_edges',
         'roles',
         'role_permissions',
         'role_bindings',
+        'tax_details',
         'transformation_runs',
         'validation_issues',
     }

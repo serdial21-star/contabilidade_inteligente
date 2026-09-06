@@ -24,11 +24,14 @@ Esta primeira fatia executável contém:
 - fundação documental com evidência bruta imutável e deduplicação por SHA-256;
 - recebimentos repetidos, lotes, itens, transformações, validações e linhagem;
 - porta ObjectStorage com adaptador local fora do versionamento;
+- importador seguro de NF-e modelo 55 com normalização de cabeçalho, itens,
+  tributos suportados presentes, totais e envelope canônico;
+- reentrega idempotente e quarentena para chave NF-e com hash divergente;
 - testes automatizados da fundação.
 
-As entidades documentais da Execução 05 estão materializadas sem parser de
-NF-e. Autenticação externa, regras contábeis e integrações ainda não foram
-implementadas.
+O importador da Execução 06 trata exclusivamente NF-e modelo 55. CT-e, NFS-e,
+autenticação externa, regras contábeis e integrações ainda não foram
+implementados.
 
 ## Preparação local no Windows
 
@@ -79,4 +82,5 @@ DATABASE_URL no arquivo .env antes de executar:
 - [Decisão da fronteira de acesso](docs/adr/0003-fronteira-acesso.md)
 - [Decisão da auditoria transversal](docs/adr/0004-auditoria-transversal-inicial.md)
 - [Decisão da fundação documental](docs/adr/0005-evidencia-documental-imutavel.md)
+- [Decisão do importador NF-e 55](docs/adr/0006-importador-nfe55.md)
 

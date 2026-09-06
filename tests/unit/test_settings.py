@@ -14,6 +14,7 @@ def test_defaults_are_safe_for_local_development() -> None:
     assert settings.api_prefix == '/api/v1'
     assert settings.database_url is None
     assert settings.object_storage_path == Path('.serdial21-storage')
+    assert settings.nfe_max_xml_bytes == 5 * 1024 * 1024
     assert settings.resolved_database_pool_size == 5
     assert settings.resolved_database_max_overflow == 5
 

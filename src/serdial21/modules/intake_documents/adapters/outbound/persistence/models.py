@@ -208,6 +208,11 @@ class TransformationRunModel(Base):
             ['transformation_runs.tenant_id', 'transformation_runs.company_id', 'transformation_runs.id'],
             name='fk_transformation_runs_previous',
         ),
+        Index(
+            'ux_transformation_runs_scope_artifact_id',
+            'tenant_id', 'company_id', 'artifact_id', 'id',
+            unique=True,
+        ),
         Index('ix_transformation_runs_scope_status', 'tenant_id', 'company_id', 'status'),
         TABLE_OPTIONS,
     )
@@ -324,8 +329,8 @@ def _prevent_completed_run_update(
 ) -> None:
     history = inspect(target).attrs.status.history
     previous_status = history.deleted[0] if history.deleted else target.status
-    if previous_status == 'COMPLETED':
-        raise ImmutableDocumentError('transformação concluída é imutável')
+    if previous_status in {'COMPLETED', 'FAILED'}:
+        raise ImmutableDocumentError('transformação terminal é imutável')
 
 
 @event.listens_for(TransformationRunModel, 'before_delete')
@@ -334,5 +339,5 @@ def _prevent_completed_run_delete(
     __: object,
     target: TransformationRunModel,
 ) -> None:
-    if target.status == 'COMPLETED':
-        raise ImmutableDocumentError('transformação concluída é imutável')
+    if target.status in {'COMPLETED', 'FAILED'}:
+        raise ImmutableDocumentError('transformação terminal é imutável')

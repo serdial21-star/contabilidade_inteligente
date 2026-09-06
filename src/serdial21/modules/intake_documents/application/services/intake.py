@@ -165,6 +165,11 @@ class DocumentIntakeService:
         })
         return batch
 
+    def require_access(self, context: IntakeContext) -> None:
+        '''Revalida o acesso antes de uma leitura ou efeito crítico posterior.'''
+
+        self._authorize(context)
+
     def upload(
         self,
         context: IntakeContext,

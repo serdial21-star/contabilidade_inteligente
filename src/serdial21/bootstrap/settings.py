@@ -75,6 +75,12 @@ class AppSettings(BaseSettings):
         default=Path('.serdial21-storage'),
         validation_alias='OBJECT_STORAGE_PATH',
     )
+    nfe_max_xml_bytes: int = Field(
+        default=5 * 1024 * 1024,
+        ge=1,
+        le=50 * 1024 * 1024,
+        validation_alias='NFE_MAX_XML_BYTES',
+    )
 
     @field_validator('api_prefix')
     @classmethod
