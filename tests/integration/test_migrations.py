@@ -35,6 +35,12 @@ EXPECTED_TABLES = {
     'transformation_runs',
     'validation_issues',
     'users',
+    'workflow_cases',
+    'workflow_work_items',
+    'workflow_approval_requests',
+    'authorized_effects',
+    'pre_homologation_export_batches',
+    'nfe_journey_checkpoints',
 }
 
 

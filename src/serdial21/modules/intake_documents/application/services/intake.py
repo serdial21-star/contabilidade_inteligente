@@ -170,6 +170,21 @@ class DocumentIntakeService:
 
         self._authorize(context)
 
+    def read_evidence(self, context: IntakeContext, artifact_id: UUID) -> bytes:
+        """Consulta autorizada dos bytes originais com confer?ncia de integridade."""
+        self._authorize(context)
+        if not self._repository.company_has_receipt(
+            context.tenant_id, context.company_id, artifact_id,
+        ):
+            raise IntakeResourceUnavailableError('resource unavailable')
+        artifact = self._repository.get_artifact(context.tenant_id, artifact_id)
+        if artifact is None:
+            raise IntakeResourceUnavailableError('resource unavailable')
+        content = self._storage.read(artifact.storage_key)
+        if sha256(content).hexdigest() != artifact.content_hash:
+            raise ValueError('evidence integrity mismatch')
+        return content
+
     def upload(
         self,
         context: IntakeContext,

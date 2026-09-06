@@ -162,3 +162,24 @@ class SqlAlchemyAuthorizationRepository:
         )
         return self._session.scalar(statement) is not None
 
+
+    def has_role(
+        self, tenant_id: UUID, membership_id: UUID, company_id: UUID | None,
+        role_name: str, at: datetime,
+    ) -> bool:
+        scope = RoleBindingModel.company_id.is_(None)
+        if company_id is not None:
+            scope = or_(scope, RoleBindingModel.company_id == company_id)
+        return self._session.scalar(
+            select(RoleBindingModel.id).join(RoleModel,
+                (RoleModel.tenant_id == RoleBindingModel.tenant_id)
+                & (RoleModel.id == RoleBindingModel.role_id),
+            ).where(
+                RoleBindingModel.tenant_id == tenant_id,
+                RoleBindingModel.membership_id == membership_id,
+                RoleBindingModel.status == ACTIVE_STATUS,
+                RoleBindingModel.valid_from <= at,
+                or_(RoleBindingModel.valid_until.is_(None), RoleBindingModel.valid_until > at),
+                scope, RoleModel.name == role_name, RoleModel.is_active.is_(True),
+            ).limit(1)
+        ) is not None

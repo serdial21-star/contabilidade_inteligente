@@ -11,7 +11,9 @@ def load_models() -> None:
         models as fiscal_models,
     )
     from serdial21.modules.banking.adapters.outbound.persistence import models as banking_models
+    from serdial21.modules.workflow.adapters.outbound.persistence import models as workflow_models
+    from serdial21.modules.workflow.adapters.outbound.persistence import journeys as journey_models
     from serdial21.bootstrap.audit import install_audit_hooks
 
-    _ = (models, audit_models, intake_models, fiscal_models, banking_models)
+    _ = (models, audit_models, intake_models, fiscal_models, banking_models, workflow_models, journey_models)
     install_audit_hooks()

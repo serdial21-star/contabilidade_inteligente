@@ -42,6 +42,7 @@ def make_session():
 def seed(session, tenant_id, company_id):
     with audit_scope(session, AuditContext(uuid4(), AuditOrigin.AUTOMATION, uuid4(), reason='test setup')):
         session.add(TenantModel(id=tenant_id,name='Tenant',timezone='America/Sao_Paulo',currency_code='BRL',status='active'))
+        session.flush()
         session.add(CompanyModel(id=company_id,tenant_id=tenant_id,legal_name='Company',tax_identifier=company_id.hex[:14],timezone='America/Sao_Paulo',currency_code='BRL',status='active',valid_from=NOW))
         session.commit()
 

@@ -111,7 +111,9 @@ class PreHomologationJourneyService:
             block_reasons=list(BLOCK_REASONS), correlation_id=context.correlation_id,
             created_at=now,
         )
-        self._session.add_all((case, item, request, effect, batch))
+        for model in (case, item, request, effect, batch):
+            self._session.add(model)
+            self._session.flush()
         self._record(context, 'workflow_case.created', 'WorkflowCase', case.id,
                      {'status': case.status, 'subject_type': case.subject_type})
         self._record(context, 'work_item.created', 'WorkItem', item.id,
@@ -119,7 +121,7 @@ class PreHomologationJourneyService:
         self._record(context, 'approval_request.pending', 'ApprovalRequest', request.id,
                      {'status': request.status, 'requested_role': request.requested_role})
         self._record(context, 'authorized_effect.pending', 'AuthorizedEffect', effect.id,
-                     {'authorization_status': effect.authorization_status, 'execution_status': effect.execution_status})
+                     {'approval_status': effect.authorization_status, 'execution_status': effect.execution_status})
         self._record(context, 'export_batch.blocked_for_homologation', 'ExportBatch', batch.id,
                      {'status': batch.status, 'block_reasons': list(BLOCK_REASONS)})
         return PreHomologationJourney(case.id, item.id, request.id, effect.id, batch.id,

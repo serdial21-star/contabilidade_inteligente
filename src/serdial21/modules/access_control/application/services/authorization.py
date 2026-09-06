@@ -48,6 +48,7 @@ class AuthorizationService:
         request: AuthorizationRequest,
         *,
         at: datetime | None = None,
+        role_name: str | None = None,
     ) -> AuthorizedContext:
         checked_at = at or datetime.now(UTC)
         if checked_at.tzinfo is None or checked_at.utcoffset() is None:
@@ -85,6 +86,11 @@ class AuthorizationService:
             request.company_id,
             request.permission.value,
             checked_at,
+        ):
+            raise AccessDeniedError()
+
+        if role_name is not None and not self._repository.has_role(
+            request.tenant_id, membership_id, request.company_id, role_name, checked_at,
         ):
             raise AccessDeniedError()
 
