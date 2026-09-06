@@ -11,6 +11,9 @@ from serdial21.bootstrap.settings import get_settings
 
 EXPECTED_TABLES = {
     'artifact_receipts',
+    'bank_accounts',
+    'bank_statements',
+    'bank_transactions',
     'audit_events',
     'canonical_records',
     'companies',

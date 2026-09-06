@@ -10,7 +10,8 @@ def load_models() -> None:
     from serdial21.modules.fiscal_documents.adapters.outbound.persistence import (
         models as fiscal_models,
     )
+    from serdial21.modules.banking.adapters.outbound.persistence import models as banking_models
     from serdial21.bootstrap.audit import install_audit_hooks
 
-    _ = (models, audit_models, intake_models, fiscal_models)
+    _ = (models, audit_models, intake_models, fiscal_models, banking_models)
     install_audit_hooks()
