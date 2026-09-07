@@ -15,11 +15,13 @@ from serdial21.modules.integrations.adapters.outbound.dominio import DominioConn
 from serdial21.modules.workflow.adapters.outbound.persistence.journeys import SqlAlchemyJourneyRepository
 from serdial21.modules.workflow.application.journey import JourneyCatalog
 from serdial21.modules.workflow.application.services.nfe_to_dominio import NFeToDominioService
+from serdial21.shared_kernel.observability import MetricsRegistry
 
 
 def create_nfe_to_dominio_runtime(
     session: Session, settings: AppSettings, catalog: JourneyCatalog,
     *, clock: Callable[[], datetime] | None = None,
+    metrics: MetricsRegistry | None = None,
 ) -> NFeToDominioService:
     nfe = create_nfe55_runtime(session, settings, clock=clock)
     return NFeToDominioService(
@@ -27,6 +29,6 @@ def create_nfe_to_dominio_runtime(
         AuthorizationService(SqlAlchemyAuthorizationRepository(session)),
         nfe.intake, nfe.importer, SqlAlchemyFiscalDocumentRepository(session),
         AuditService(SqlAlchemyAuditRepository(session), clock=clock),
-        DominioConnector(), clock=clock,
+        DominioConnector(), clock=clock, metrics=metrics,
     )
 

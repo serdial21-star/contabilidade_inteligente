@@ -38,6 +38,7 @@ from serdial21.modules.workflow.application.journey import (
     JourneyUnavailableError, PostingPolicy, PreparationPlan,
 )
 from serdial21.modules.workflow.domain.entities import WorkflowVersion
+from serdial21.shared_kernel.observability import MetricsRegistry
 
 NOW = datetime(2026, 9, 6, 12, tzinfo=UTC)
 FIXTURE = Path(__file__).parents[1] / 'fixtures/nfe55/valid_minimal.xml'
@@ -69,9 +70,13 @@ class Environment:
     accountant: UUID
     accountant_access: UUID
     catalog: SyntheticCatalog
+    metrics: MetricsRegistry
 
     def runtime(self):
-        return create_nfe_to_dominio_runtime(self.session, self.settings, self.catalog, clock=lambda: NOW)
+        return create_nfe_to_dominio_runtime(
+            self.session, self.settings, self.catalog, clock=lambda: NOW,
+            metrics=self.metrics,
+        )
 
     def context(self, actor: UUID | None = None) -> IntakeContext:
         return IntakeContext(self.tenant, self.company, actor or self.accountant, AuditOrigin.HUMAN, uuid4())
@@ -151,7 +156,7 @@ def env(tmp_path: Path) -> Iterator[Environment]:
         tuple((account.account_id, ()) for account in accounts),
     ))
     try:
-        yield Environment(session, settings, tenant, company, proposer, accountant, access, catalog)
+        yield Environment(session, settings, tenant, company, proposer, accountant, access, catalog, MetricsRegistry())
     finally:
         session.close()
         Base.metadata.drop_all(engine)
@@ -194,6 +199,9 @@ def test_vertical_all_internal_stages_and_reverse_trace_to_original_xml(env: Env
         'export_batch.created', 'export_batch.blocked_for_homologation',
     }
     assert all(audit.verify_integrity(event) for event in events)
+    metrics = env.metrics.snapshot()
+    assert metrics['imports_total'] == metrics['proposals_total'] == metrics['approvals_total'] == 1
+    assert metrics['pending_total'] == metrics['exports_total'] == 1
     # O único arquivo existente é a evidência original; nenhum TXT fictício.
     assert [path.read_bytes() for path in env.settings.object_storage_path.rglob('*') if path.is_file()] == [original]
 

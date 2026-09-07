@@ -37,6 +37,7 @@ from serdial21.modules.workflow.domain.entities import (
     ApprovalRequest, ApprovalStep, AuthorizedEffect, WorkflowCase,
     WorkItem, WorkItemSubject, decide,
 )
+from serdial21.shared_kernel.observability import MetricsRegistry, processing_started
 
 
 def digest(value: object) -> str:
@@ -65,6 +66,7 @@ class NFeToDominioService:
         importer: NFe55ImportService, fiscal: FiscalDocumentRepository,
         audit: AuditService, connector: ConnectorPort,
         *, clock: Callable[[], datetime] | None = None,
+        metrics: MetricsRegistry | None = None,
     ) -> None:
         self._repository = repository
         self._catalog = catalog
@@ -75,9 +77,11 @@ class NFeToDominioService:
         self._audit = audit
         self._connector = connector
         self._clock = clock or (lambda: datetime.now(UTC))
+        self._metrics = metrics or MetricsRegistry()
 
     def prepare(self, command: JourneyCommand, *, content: bytes, filename: str) -> Journey:
         """Importa e prepara; jamais toma uma decisão de aprovação."""
+        started = processing_started()
         now = self._now()
         self._require(command.tenant_id, command.company_id, command.actor_id, 'journal.propose')
         if not command.idempotency_key.strip() or len(command.idempotency_key) > 128:
@@ -89,7 +93,8 @@ class NFeToDominioService:
         if existing is not None:
             if existing.command_hash != command_hash:
                 raise JourneyConflictError('idempotency content conflict')
-            return existing
+            self._metrics.increment('retries_total')
+            return self._completed(existing, started)
         if command.approval_expires_at <= now:
             raise JourneyNotReadyError('approval expiry must be in the future')
         if not command.period_start <= command.accounting_date <= command.period_end:
@@ -103,11 +108,17 @@ class NFeToDominioService:
             command.idempotency_key, command_hash, 1, 'IMPORTED', command.actor_id, imported,
         )
         if imported.status not in {'IMPORTED', 'IDEMPOTENT_REDELIVERY'}:
-            return self._save(replace(journey, status='QUARANTINED'), command.actor_id, 'journey.quarantined')
+            return self._completed(
+                self._save(replace(journey, status='QUARANTINED'), command.actor_id, 'journey.quarantined'),
+                started,
+            )
         self._save(journey, command.actor_id, 'journey.imported')
         plan = self._catalog.preparation(command.tenant_id, command.company_id)
         if plan is None:
-            return self._save(journey.advance(status='PENDING_RULE'), command.actor_id, 'journey.pending_rule')
+            return self._completed(
+                self._save(journey.advance(status='PENDING_RULE'), command.actor_id, 'journey.pending_rule'),
+                started,
+            )
         scope = (command.tenant_id, command.company_id)
         if any((obj.tenant_id, obj.company_id) != scope for obj in (
             plan.release, plan.ledger, plan.posting, *plan.accounts, *plan.rules,
@@ -136,7 +147,10 @@ class NFeToDominioService:
         journey = self._save(journey.advance(plan=plan, evaluation=evaluation, status='EVALUATED'),
                              command.actor_id, 'rule_evaluation.completed')
         if evaluation.proposal is None:
-            return self._save(journey.advance(status='PENDING_RULE'), command.actor_id, 'journey.pending_rule')
+            return self._completed(
+                self._save(journey.advance(status='PENDING_RULE'), command.actor_id, 'journey.pending_rule'),
+                started,
+            )
         amount = document.invoice_total
         quantum = Decimal(1).scaleb(-plan.posting.decimal_places)
         if not amount.is_finite() or amount <= 0 or amount != amount.quantize(quantum):
@@ -170,8 +184,11 @@ class NFeToDominioService:
             command.approval_expires_at, True, command.actor_id,
         )
         step = ApprovalStep(uuid4(), request.id, 1, 'CONTADOR', 'PENDING')
-        return self._save(journey.advance(request=request, step=step, status='PENDING_APPROVAL'),
-                          command.actor_id, 'approval_request.created')
+        return self._completed(
+            self._save(journey.advance(request=request, step=step, status='PENDING_APPROVAL'),
+                       command.actor_id, 'approval_request.created'),
+            started,
+        )
 
     def record_decision(
         self, context: IntakeContext, journey_id: UUID, *, expected_version: int,
@@ -221,6 +238,7 @@ class NFeToDominioService:
         if journey.batch is not None:
             if journey.batch.route_id != route_id or journey.connector_configuration != configuration:
                 raise JourneyConflictError('export content conflict')
+            self._metrics.increment('retries_total')
             return journey
         batch = ExportBatch(uuid4(), journey.tenant_id, journey.company_id, route_id, 'PREPARING')
         journey = self._save(journey.advance(batch=batch, connector_configuration=configuration),
@@ -351,6 +369,28 @@ class NFeToDominioService:
                    'export_batch_id': journey.batch.id if journey.batch else None},
             reason=None, correlation_id=journey.correlation_id,
         ))
+        self._record_metric(action, journey.status)
+        return journey
+
+    def _record_metric(self, action: str, status: str) -> None:
+        if action == 'journey.imported':
+            self._metrics.increment('imports_total')
+        elif action == 'journey.quarantined':
+            self._metrics.increment('imports_total')
+            self._metrics.increment('errors_total')
+        elif action == 'accounting_proposal.created':
+            self._metrics.increment('proposals_total')
+        elif action == 'approval_decision.recorded':
+            self._metrics.increment(
+                'approvals_total' if status == 'APPROVED' else 'rejections_total',
+            )
+        elif action in {'journey.pending_rule', 'approval_request.created'}:
+            self._metrics.increment('pending_total')
+        elif action == 'export_batch.created':
+            self._metrics.increment('exports_total')
+
+    def _completed(self, journey: Journey, started: float) -> Journey:
+        self._metrics.observe_processing(processing_started() - started)
         return journey
 
     def _now(self) -> datetime:

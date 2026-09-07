@@ -8,6 +8,7 @@ from serdial21.modules.access_control.application.ports.authorization import (
     AuthorizationRepository,
 )
 from serdial21.modules.access_control.domain.permissions import PermissionCode
+from serdial21.shared_kernel.observability import security_event
 
 
 class AccessDeniedError(PermissionError):
@@ -55,7 +56,7 @@ class AuthorizationService:
             raise ValueError('instante de autorização deve possuir timezone')
 
         if not self._repository.is_user_active(request.user_id):
-            raise AccessDeniedError()
+            self._deny('inactive_user')
 
         membership_id = self._repository.find_active_membership(
             request.tenant_id,
@@ -63,7 +64,7 @@ class AuthorizationService:
             checked_at,
         )
         if membership_id is None:
-            raise AccessDeniedError()
+            self._deny('membership_unavailable')
 
         if request.company_id is not None:
             if not self._repository.company_belongs_to_tenant(
@@ -71,14 +72,14 @@ class AuthorizationService:
                 request.company_id,
                 checked_at,
             ):
-                raise AccessDeniedError()
+                self._deny('company_out_of_scope')
             if not self._repository.has_active_company_access(
                 request.tenant_id,
                 membership_id,
                 request.company_id,
                 checked_at,
             ):
-                raise AccessDeniedError()
+                self._deny('company_access_unavailable')
 
         if not self._repository.has_permission(
             request.tenant_id,
@@ -87,12 +88,12 @@ class AuthorizationService:
             request.permission.value,
             checked_at,
         ):
-            raise AccessDeniedError()
+            self._deny('permission_unavailable')
 
         if role_name is not None and not self._repository.has_role(
             request.tenant_id, membership_id, request.company_id, role_name, checked_at,
         ):
-            raise AccessDeniedError()
+            self._deny('role_unavailable')
 
         return AuthorizedContext(
             tenant_id=request.tenant_id,
@@ -102,3 +103,8 @@ class AuthorizationService:
             permission=request.permission,
             authorized_at=checked_at,
         )
+
+    @staticmethod
+    def _deny(reason: str) -> None:
+        security_event('authorization.denied', fields={'reason': reason})
+        raise AccessDeniedError()

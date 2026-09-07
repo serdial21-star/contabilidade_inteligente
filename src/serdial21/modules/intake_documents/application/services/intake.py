@@ -27,6 +27,7 @@ from serdial21.modules.intake_documents.domain.entities import (
     TransformationRun,
     ValidationIssue,
 )
+from serdial21.shared_kernel.observability import data_access_event
 
 
 class IntakeResourceUnavailableError(LookupError):
@@ -187,13 +188,17 @@ class DocumentIntakeService:
         if not self._repository.company_has_receipt(
             context.tenant_id, context.company_id, artifact_id,
         ):
+            data_access_event('evidence.read.denied', fields={'result': 'unavailable'})
             raise IntakeResourceUnavailableError('resource unavailable')
         artifact = self._repository.get_artifact(context.tenant_id, artifact_id)
         if artifact is None:
+            data_access_event('evidence.read.denied', fields={'result': 'unavailable'})
             raise IntakeResourceUnavailableError('resource unavailable')
         content = self._storage.read(artifact.storage_key)
         if sha256(content).hexdigest() != artifact.content_hash:
+            data_access_event('evidence.read.failed', fields={'result': 'integrity_mismatch'})
             raise ValueError('evidence integrity mismatch')
+        data_access_event('evidence.read.completed', fields={'result': 'allowed'})
         return content
 
     def upload(

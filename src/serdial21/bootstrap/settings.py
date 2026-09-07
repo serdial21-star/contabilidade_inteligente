@@ -11,6 +11,7 @@ from sqlalchemy.exc import ArgumentError
 
 
 Environment = Literal['development', 'test', 'production']
+LogLevel = Literal['DEBUG', 'INFO', 'WARNING', 'ERROR']
 
 
 class AppSettings(BaseSettings):
@@ -27,6 +28,10 @@ class AppSettings(BaseSettings):
     app_name: str = 'Serdial21 Contabilidade Inteligente'
     environment: Environment = 'development'
     debug: bool = False
+    log_level: LogLevel = Field(
+        default='INFO',
+        validation_alias=AliasChoices('LOG_LEVEL', 'SERDIAL21_LOG_LEVEL'),
+    )
     api_prefix: str = '/api/v1'
     database_url: SecretStr | None = Field(
         default=None,

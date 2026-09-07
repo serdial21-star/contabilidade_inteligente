@@ -14,7 +14,11 @@ from serdial21.entrypoints.http.middleware.correlation_id import (
 from serdial21.entrypoints.http.middleware.security_headers import (
     SecurityHeadersMiddleware,
 )
+from serdial21.entrypoints.http.middleware.request_observability import (
+    RequestObservabilityMiddleware,
+)
 from serdial21.entrypoints.http.routes.health import router as health_router
+from serdial21.shared_kernel.observability import MetricsRegistry, configure_technical_logging
 
 
 def create_app(settings: AppSettings | None = None) -> FastAPI:
@@ -22,6 +26,8 @@ def create_app(settings: AppSettings | None = None) -> FastAPI:
 
     resolved_settings = settings or get_settings()
     database = DatabaseRuntime.from_settings(resolved_settings)
+    metrics = MetricsRegistry()
+    configure_technical_logging(resolved_settings.log_level)
 
     @asynccontextmanager
     async def lifespan(_: FastAPI) -> AsyncIterator[None]:
@@ -38,6 +44,8 @@ def create_app(settings: AppSettings | None = None) -> FastAPI:
     )
     app.state.settings = resolved_settings
     app.state.database = database
+    app.state.metrics = metrics
+    app.add_middleware(RequestObservabilityMiddleware, metrics=metrics)
     app.add_middleware(SecurityHeadersMiddleware)
     app.add_middleware(CorrelationIdMiddleware)
     app.include_router(health_router, prefix=resolved_settings.api_prefix)

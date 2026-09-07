@@ -50,6 +50,18 @@ def test_liveness_contract() -> None:
     assert response.headers['x-frame-options'] == 'DENY'
 
 
+def test_request_metric_is_aggregated_without_request_data() -> None:
+    app = build_app()
+
+    response = asyncio.run(async_get(app, '/api/v1/health/live'))
+    metrics = app.state.metrics.snapshot()
+
+    assert response.status_code == 200
+    assert metrics['processing_duration_count'] == 1
+    assert metrics['errors_total'] == 0
+    assert 'tenant_id' not in metrics and 'company_id' not in metrics
+
+
 def test_valid_correlation_id_is_propagated() -> None:
     correlation_id = str(uuid4())
 
