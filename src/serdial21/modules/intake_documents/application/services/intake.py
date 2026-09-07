@@ -37,6 +37,13 @@ class InvalidLineageError(ValueError):
     '''Indica auto-referência ou ciclo na linhagem.'''
 
 
+class UploadTooLargeError(ValueError):
+    '''Indica que o conteúdo excede o limite aceito antes de qualquer persistência.'''
+
+
+DEFAULT_MAX_UPLOAD_BYTES = 10 * 1024 * 1024
+
+
 @dataclass(frozen=True, slots=True)
 class IntakeContext:
     tenant_id: UUID
@@ -118,13 +125,17 @@ class DocumentIntakeService:
         *,
         id_factory: Callable[[], UUID] = uuid4,
         clock: Callable[[], datetime] | None = None,
+        max_upload_bytes: int = DEFAULT_MAX_UPLOAD_BYTES,
     ) -> None:
+        if max_upload_bytes < 1:
+            raise ValueError('limite de upload deve ser positivo')
         self._repository = repository
         self._storage = storage
         self._audit = audit
         self._authorization = authorization
         self._id_factory = id_factory
         self._clock = clock or (lambda: datetime.now(UTC))
+        self._max_upload_bytes = max_upload_bytes
 
     def start_batch(
         self,
@@ -198,14 +209,8 @@ class DocumentIntakeService:
         if not request.media_type.strip() or not request.classification.strip():
             raise ValueError('mídia e classificação são obrigatórias')
 
-        content_hash = sha256(request.content).hexdigest()
-        storage_key = _storage_key(context.tenant_id, content_hash)
-        stored = self._storage.put_if_absent(
-            storage_key,
-            request.content,
-            expected_hash=content_hash,
-        )
-
+        # O lote é validado antes de gravar bytes: um ID ausente ou fora do
+        # escopo não pode ser usado para criar evidência órfã no storage.
         batch = self._repository.get_batch(
             context.tenant_id,
             context.company_id,
@@ -213,6 +218,16 @@ class DocumentIntakeService:
         )
         if batch is None:
             raise IntakeResourceUnavailableError('resource unavailable')
+        if len(request.content) > self._max_upload_bytes:
+            raise UploadTooLargeError('conteúdo excede o limite de upload')
+
+        content_hash = sha256(request.content).hexdigest()
+        storage_key = _storage_key(context.tenant_id, content_hash)
+        stored = self._storage.put_if_absent(
+            storage_key,
+            request.content,
+            expected_hash=content_hash,
+        )
 
         artifact = self._repository.find_artifact_by_hash(
             context.tenant_id,

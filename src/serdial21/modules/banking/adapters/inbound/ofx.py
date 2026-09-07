@@ -111,11 +111,13 @@ def _statement_from_xml(node: ElementTree.Element) -> ParsedOfxStatement:
     account = _find(node, 'BANKACCTFROM')
     if account is None:
         raise OfxParseError('MISSING_ACCOUNT', 'extrato sem BANKACCTFROM')
+    balance = _find(node, 'BALAMT')
+    ledger_balance = _find(node, 'LEDGERBAL')
     return _build_statement(
         _value_xml(account, 'BANKID'), _value_xml(account, 'BRANCHID'), _value_xml(account, 'ACCTID'),
         _value_xml(account, 'ACCTTYPE'), _value_xml(node, 'CURDEF'), _value_xml(node, 'DTSTART'),
-        _value_xml(node, 'DTEND'), _value_xml(_find(node, 'BALAMT') or node, 'BALAMT'),
-        _value_xml(_find(node, 'LEDGERBAL') or node, 'BALAMT'),
+        _value_xml(node, 'DTEND'), _value_xml(balance if balance is not None else node, 'BALAMT'),
+        _value_xml(ledger_balance if ledger_balance is not None else node, 'BALAMT'),
         [_transaction_xml(item) for item in _find_all(node, 'STMTTRN')],
     )
 

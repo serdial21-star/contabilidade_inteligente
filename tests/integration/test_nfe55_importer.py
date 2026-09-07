@@ -226,7 +226,7 @@ def test_imports_valid_nfe55_with_items_taxes_and_canonical_lineage(
     run = database_session.get(TransformationRunModel, result.transformation_run_id)
     assert run is not None
     assert (run.parser_name, run.parser_version, run.schema_version) == (
-        'serdial21.nfe55.xml', '1.1.0', '4.00'
+        'serdial21.nfe55.xml', '1.2.0', '4.00'
     )
     expected_hash = sha256(fixture('valid_minimal.xml')).hexdigest()
     assert run.input_hash == expected_hash == result.content_hash

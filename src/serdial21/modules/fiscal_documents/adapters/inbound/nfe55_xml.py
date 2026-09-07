@@ -19,6 +19,7 @@ from serdial21.modules.fiscal_documents.domain.entities import (
 
 NFE_NAMESPACE = 'http://www.portalfiscal.inf.br/nfe'
 DEFAULT_MAX_XML_BYTES = 5 * 1024 * 1024
+DEFAULT_MAX_XML_ELEMENTS = 100_000
 ACCESS_KEY_PATTERN = re.compile(r'^\d{44}$')
 XML_DECIMAL_PATTERN = re.compile(r'^[+-]?\d+(?:\.\d+)?$')
 NFE_TAG_PREFIX = f'{{{NFE_NAMESPACE}}}'
@@ -27,12 +28,20 @@ MAX_BIGINT = 2**63 - 1
 
 class SafeNFe55XmlParser:
     parser_name = 'serdial21.nfe55.xml'
-    parser_version = '1.1.0'
+    parser_version = '1.2.0'
 
-    def __init__(self, *, max_xml_bytes: int = DEFAULT_MAX_XML_BYTES) -> None:
+    def __init__(
+        self,
+        *,
+        max_xml_bytes: int = DEFAULT_MAX_XML_BYTES,
+        max_xml_elements: int = DEFAULT_MAX_XML_ELEMENTS,
+    ) -> None:
         if max_xml_bytes < 1:
             raise ValueError('limite XML deve ser positivo')
+        if max_xml_elements < 1:
+            raise ValueError('limite de elementos XML deve ser positivo')
         self._max_xml_bytes = max_xml_bytes
+        self._max_xml_elements = max_xml_elements
 
     def parse(self, content: bytes) -> ParsedNFe55:
         self._preflight(content)
@@ -314,12 +323,26 @@ class SafeNFe55XmlParser:
         parser.ExternalEntityRefHandler = _reject_external_entity
         parser.SkippedEntityHandler = _reject_unsafe_declaration
         parser.SetParamEntityParsing(expat.XML_PARAM_ENTITY_PARSING_NEVER)
+        element_count = 0
+
+        def count_element(_: str, __: dict[str, str]) -> None:
+            nonlocal element_count
+            element_count += 1
+            if element_count > self._max_xml_elements:
+                raise _XmlStructureLimit
+
+        parser.StartElementHandler = count_element
         try:
             parser.Parse(content, True)
         except _UnsafeXmlDeclaration as error:
             raise FiscalXmlParseError(
                 'UNSAFE_XML_DECLARATION',
                 'DTD e entidades XML não são permitidas',
+            ) from error
+        except _XmlStructureLimit as error:
+            raise FiscalXmlParseError(
+                'XML_STRUCTURE_LIMIT',
+                'XML excede o limite de elementos permitido',
             ) from error
         except expat.ExpatError as error:
             raise FiscalXmlParseError('MALFORMED_XML', 'XML malformado') from error
@@ -803,6 +826,10 @@ def _has_valid_access_key_digit(access_key: str) -> bool:
 
 class _UnsafeXmlDeclaration(Exception):
     '''Sinal interno levantado antes que qualquer entidade seja expandida.'''
+
+
+class _XmlStructureLimit(Exception):
+    '''Sinal interno para interromper XML excessivamente estruturado.'''
 
 
 def _reject_unsafe_declaration(*_: object) -> None:

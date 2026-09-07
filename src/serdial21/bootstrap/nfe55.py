@@ -66,11 +66,15 @@ def create_nfe55_runtime(
         LocalObjectStorage(settings.object_storage_path),
         audit,
         authorization,
+        max_upload_bytes=settings.document_max_upload_bytes,
         clock=clock,
     )
     importer = NFe55ImportService(
         intake,
-        SafeNFe55XmlParser(max_xml_bytes=settings.nfe_max_xml_bytes),
+        SafeNFe55XmlParser(
+            max_xml_bytes=settings.nfe_max_xml_bytes,
+            max_xml_elements=settings.nfe_max_xml_elements,
+        ),
         SqlAlchemyFiscalDocumentRepository(session),
         audit,
         clock=clock,

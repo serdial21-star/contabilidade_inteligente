@@ -38,6 +38,16 @@ def test_liveness_contract() -> None:
         'version': __version__,
     }
     UUID(response.headers['x-correlation-id'])
+    assert response.headers['cache-control'] == 'no-store'
+    assert response.headers['content-security-policy'] == (
+        "default-src 'none'; base-uri 'none'; frame-ancestors 'none'"
+    )
+    assert response.headers['permissions-policy'] == (
+        'camera=(), geolocation=(), microphone=()'
+    )
+    assert response.headers['referrer-policy'] == 'no-referrer'
+    assert response.headers['x-content-type-options'] == 'nosniff'
+    assert response.headers['x-frame-options'] == 'DENY'
 
 
 def test_valid_correlation_id_is_propagated() -> None:

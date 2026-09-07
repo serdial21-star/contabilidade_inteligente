@@ -44,6 +44,7 @@ from serdial21.modules.intake_documents.application.services.intake import (
     StartBatchRequest,
     TransformationRequest,
     UploadRequest,
+    UploadTooLargeError,
     ValidationIssueRequest,
 )
 
@@ -221,6 +222,59 @@ def test_authorization_is_required_before_batch_or_storage_write(
     assert list(tmp_path.rglob('*')) == []
     assert database_session.scalar(
         select(func.count()).select_from(ImportBatchModel)
+    ) == 0
+
+
+def test_invalid_batch_cannot_create_orphaned_storage_object(
+    database_session: Session,
+    tmp_path: Path,
+) -> None:
+    tenant_id, company_id = uuid4(), uuid4()
+    seed_company(database_session, tenant_id, company_id)
+    service = service_for(database_session, tmp_path)
+    context = intake_context(tenant_id, company_id)
+
+    with pytest.raises(IntakeResourceUnavailableError, match='resource unavailable'):
+        service.upload(context, upload_request(uuid4()))
+
+    assert list(tmp_path.rglob('*')) == []
+    assert database_session.scalar(
+        select(func.count()).select_from(EvidenceArtifactModel)
+    ) == 0
+
+
+def test_upload_limit_rejects_content_before_storage_write(
+    database_session: Session,
+    tmp_path: Path,
+) -> None:
+    tenant_id, company_id = uuid4(), uuid4()
+    seed_company(database_session, tenant_id, company_id)
+    service = DocumentIntakeService(
+        SqlAlchemyIntakeRepository(database_session),
+        LocalObjectStorage(tmp_path),
+        AuditService(SqlAlchemyAuditRepository(database_session), clock=lambda: NOW),
+        AllowDocumentAuthorization(),
+        max_upload_bytes=4,
+        clock=lambda: NOW,
+    )
+    context = intake_context(tenant_id, company_id)
+    batch = start_batch(service, context)
+    request = upload_request(batch.id)
+    oversized = UploadRequest(
+        batch_id=request.batch_id,
+        content=b'12345',
+        original_filename=request.original_filename,
+        media_type=request.media_type,
+        classification=request.classification,
+        channel=request.channel,
+    )
+
+    with pytest.raises(UploadTooLargeError, match='limite de upload'):
+        service.upload(context, oversized)
+
+    assert list(tmp_path.rglob('*')) == []
+    assert database_session.scalar(
+        select(func.count()).select_from(EvidenceArtifactModel)
     ) == 0
 
 

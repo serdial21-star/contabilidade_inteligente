@@ -92,6 +92,15 @@ def test_rejects_oversized_xml_before_parsing() -> None:
     assert failure.value.code == 'XML_TOO_LARGE'
 
 
+def test_rejects_xml_with_too_many_elements_before_tree_construction() -> None:
+    content = b'<root><node/><node/><node/></root>'
+
+    with pytest.raises(FiscalXmlParseError) as failure:
+        SafeNFe55XmlParser(max_xml_elements=3).parse(content)
+
+    assert failure.value.code == 'XML_STRUCTURE_LIMIT'
+
+
 def test_rejects_entity_expansion_encoded_as_utf16() -> None:
     content = (
         '<?xml version=\x271.0\x27 encoding=\x27UTF-16\x27?>'

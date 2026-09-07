@@ -75,11 +75,23 @@ class AppSettings(BaseSettings):
         default=Path('.serdial21-storage'),
         validation_alias='OBJECT_STORAGE_PATH',
     )
+    document_max_upload_bytes: int = Field(
+        default=10 * 1024 * 1024,
+        ge=1,
+        le=50 * 1024 * 1024,
+        validation_alias='DOCUMENT_MAX_UPLOAD_BYTES',
+    )
     nfe_max_xml_bytes: int = Field(
         default=5 * 1024 * 1024,
         ge=1,
         le=50 * 1024 * 1024,
         validation_alias='NFE_MAX_XML_BYTES',
+    )
+    nfe_max_xml_elements: int = Field(
+        default=100_000,
+        ge=1,
+        le=1_000_000,
+        validation_alias='NFE_MAX_XML_ELEMENTS',
     )
 
     @field_validator('api_prefix')

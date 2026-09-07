@@ -11,6 +11,9 @@ from serdial21.bootstrap.settings import AppSettings, get_settings
 from serdial21.entrypoints.http.middleware.correlation_id import (
     CorrelationIdMiddleware,
 )
+from serdial21.entrypoints.http.middleware.security_headers import (
+    SecurityHeadersMiddleware,
+)
 from serdial21.entrypoints.http.routes.health import router as health_router
 
 
@@ -35,6 +38,7 @@ def create_app(settings: AppSettings | None = None) -> FastAPI:
     )
     app.state.settings = resolved_settings
     app.state.database = database
+    app.add_middleware(SecurityHeadersMiddleware)
     app.add_middleware(CorrelationIdMiddleware)
     app.include_router(health_router, prefix=resolved_settings.api_prefix)
     return app

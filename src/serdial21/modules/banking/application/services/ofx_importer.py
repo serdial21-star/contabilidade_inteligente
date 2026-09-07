@@ -1,7 +1,7 @@
 '''Orquestra a importa\u00e7\u00e3o OFX sem atribuir significado cont\u00e1bil ao sinal.''' 
 
 from collections.abc import Callable
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, is_dataclass
 from datetime import UTC, datetime
 from hashlib import sha256
 import json
@@ -131,7 +131,8 @@ def _account_identity(bank: str | None, branch: str | None, account: str, accoun
 
 
 def _fingerprint(value: object) -> str:
-    return sha256(json.dumps(_json_value(asdict(value)), ensure_ascii=False, sort_keys=True,
+    payload = asdict(value) if is_dataclass(value) else value
+    return sha256(json.dumps(_json_value(payload), ensure_ascii=False, sort_keys=True,
                              separators=(',', ':')).encode('utf-8')).hexdigest()
 
 
