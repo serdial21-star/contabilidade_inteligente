@@ -9,6 +9,12 @@ canônicos, regras, propostas, workflow, aprovações, integrações e auditoria
 
 Esta primeira fatia executável contém:
 
+- autenticação OIDC por access token JWT RS256 e contexto tenant confiável;
+- onboarding/offboarding auditados com revalidação de CompanyAccess, papel e
+  permissão;
+- catálogo operacional persistente de plano, regras, mappings e workflow, com
+  versões DRAFT/REVIEW/PUBLISHED;
+
 - aplicação FastAPI com fábrica de aplicação;
 - configurações tipadas por variáveis de ambiente;
 - endpoint de vivacidade;
@@ -29,9 +35,11 @@ Esta primeira fatia executável contém:
 - reentrega idempotente e quarentena para chave NF-e com hash divergente;
 - testes automatizados da fundação.
 
-O importador da Execução 06 trata exclusivamente NF-e modelo 55. CT-e, NFS-e,
-autenticação externa, regras contábeis e integrações ainda não foram
-implementados.
+O importador da Execução 06 trata exclusivamente NF-e modelo 55. CT-e, NFS-e e
+integrações oficiais ainda não foram implementados. O catálogo operacional não
+contém conteúdo contábil padrão: plano, regras, mappings e workflow reais devem
+ser cadastrados, revisados e publicados pelo escritório. O IdP também deve ser
+provisionado e configurado antes do deploy piloto.
 
 ## Preparação local no Windows
 
@@ -83,4 +91,7 @@ DATABASE_URL no arquivo .env antes de executar:
 - [Decisão da auditoria transversal](docs/adr/0004-auditoria-transversal-inicial.md)
 - [Decisão da fundação documental](docs/adr/0005-evidencia-documental-imutavel.md)
 - [Decisão do importador NF-e 55](docs/adr/0006-importador-nfe55.md)
+- [Identidade e segurança de tenant](docs/IDENTITY_AND_TENANT_SECURITY.md)
+- [Runbook de onboarding/offboarding](docs/RUNBOOK_ONBOARDING_OFFBOARDING.md)
+- [Governança do catálogo de produção](docs/PRODUCTION_CATALOG_GOVERNANCE.md)
 

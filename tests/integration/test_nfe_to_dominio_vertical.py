@@ -51,7 +51,9 @@ class SyntheticCatalog:
     plan: PreparationPlan | None
     current_locks: tuple[AccountLock, ...] = ()
 
-    def preparation(self, tenant_id: UUID, company_id: UUID) -> PreparationPlan | None:
+    def preparation(
+        self, tenant_id: UUID, company_id: UUID, at: date | None = None,
+    ) -> PreparationPlan | None:
         if self.plan and (self.plan.ledger.tenant_id, self.plan.ledger.company_id) != (tenant_id, company_id):
             return None
         return self.plan
@@ -118,7 +120,7 @@ def env(tmp_path: Path) -> Iterator[Environment]:
     tenant, company, proposer, _ = seed_authorized_actor(session)
     accountant, membership, role, access = uuid4(), uuid4(), uuid4(), uuid4()
     with audit_scope(session, AuditContext(uuid4(), AuditOrigin.AUTOMATION, proposer, reason='synthetic E2E roles')):
-        session.add(UserModel(id=accountant, provider_subject=str(accountant), display_name='Synthetic accountant', is_active=True))
+        session.add(UserModel(id=accountant, provider_issuer='urn:serdial21:test', provider_subject=str(accountant), display_name='Synthetic accountant', is_active=True))
         session.add(RoleModel(id=role, tenant_id=tenant, name='CONTADOR', is_active=True))
         session.flush()
         session.add(TenantMembershipModel(id=membership, tenant_id=tenant, user_id=accountant, status='active',

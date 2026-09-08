@@ -79,7 +79,10 @@ class NFeToDominioService:
         self._clock = clock or (lambda: datetime.now(UTC))
         self._metrics = metrics or MetricsRegistry()
 
-    def prepare(self, command: JourneyCommand, *, content: bytes, filename: str) -> Journey:
+    def prepare(
+        self, command: JourneyCommand, *, content: bytes, filename: str,
+        correlation_id: UUID | None = None,
+    ) -> Journey:
         """Importa e prepara; jamais toma uma decisão de aprovação."""
         started = processing_started()
         now = self._now()
@@ -99,7 +102,7 @@ class NFeToDominioService:
             raise JourneyNotReadyError('approval expiry must be in the future')
         if not command.period_start <= command.accounting_date <= command.period_end:
             raise JourneyNotReadyError('invalid accounting period')
-        correlation_id = uuid4()
+        correlation_id = correlation_id or uuid4()
         context = IntakeContext(command.tenant_id, command.company_id, command.actor_id, AuditOrigin.HUMAN, correlation_id)
         batch = self._intake.start_batch(context, StartBatchRequest('NFE55_VERTICAL', command.idempotency_key))
         imported = self._importer.import_xml(context, NFe55ImportRequest(batch.id, content, filename))
@@ -113,7 +116,9 @@ class NFeToDominioService:
                 started,
             )
         self._save(journey, command.actor_id, 'journey.imported')
-        plan = self._catalog.preparation(command.tenant_id, command.company_id)
+        plan = self._catalog.preparation(
+            command.tenant_id, command.company_id, command.accounting_date,
+        )
         if plan is None:
             return self._completed(
                 self._save(journey.advance(status='PENDING_RULE'), command.actor_id, 'journey.pending_rule'),
@@ -175,7 +180,7 @@ class NFeToDominioService:
         journey = self._save(journey.advance(validation_status='VALID', status='VALIDATED'),
                              command.actor_id, 'journal_revision.validated')
         case = WorkflowCase(uuid4(), *scope, plan.workflow.id, revision.id, 'OPEN')
-        item = WorkItem(uuid4(), case.id, 'OPEN', 'CONTADOR')
+        item = WorkItem(uuid4(), case.id, 'OPEN', plan.responsible_role)
         subject = WorkItemSubject(uuid4(), item.id, 'JournalEntryRevision', revision.id, journey.revision_hash)
         journey = self._save(journey.advance(case=case, item=item, subject=subject, status='IN_REVIEW'),
                              command.actor_id, 'work_item.created')
@@ -183,7 +188,7 @@ class NFeToDominioService:
             uuid4(), *scope, case.id, revision.id, journey.revision_hash, 'PENDING',
             command.approval_expires_at, True, command.actor_id,
         )
-        step = ApprovalStep(uuid4(), request.id, 1, 'CONTADOR', 'PENDING')
+        step = ApprovalStep(uuid4(), request.id, 1, plan.approval_role, 'PENDING')
         return self._completed(
             self._save(journey.advance(request=request, step=step, status='PENDING_APPROVAL'),
                        command.actor_id, 'approval_request.created'),
@@ -196,8 +201,17 @@ class NFeToDominioService:
     ) -> Journey:
         """Comando humano autenticado, vinculado à revisão vista pelo Contador."""
         self._human(context)
-        self._require(context.tenant_id, context.company_id, context.actor_id, 'journal.approve', role_name='CONTADOR')
+        self._require(
+            context.tenant_id, context.company_id, context.actor_id,
+            'journal.approve',
+        )
         journey = self._get(context, journey_id)
+        if journey.plan is None:
+            raise JourneyNotReadyError('published workflow required')
+        self._require(
+            context.tenant_id, context.company_id, context.actor_id,
+            'journal.approve', role_name=journey.plan.approval_role,
+        )
         self._expected(journey, expected_version)
         if journey.status != 'PENDING_APPROVAL' or journey.request is None or journey.step is None or journey.revision is None:
             raise JourneyNotReadyError('pending approval required')

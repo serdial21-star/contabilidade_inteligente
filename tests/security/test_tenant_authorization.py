@@ -106,12 +106,14 @@ def boundary(database_session: Session) -> BoundaryIds:
             ),
             UserModel(
                 id=ids.user_a,
+                provider_issuer='urn:serdial21:test',
                 provider_subject='provider-user-a',
                 display_name='User A',
                 is_active=True,
             ),
             UserModel(
                 id=ids.user_b,
+                provider_issuer='urn:serdial21:test',
                 provider_subject='provider-user-b',
                 display_name='User B',
                 is_active=True,

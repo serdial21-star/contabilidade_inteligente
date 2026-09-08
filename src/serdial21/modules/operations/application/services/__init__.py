@@ -1,1 +1,1 @@
-'''Serviços de orquestração de operações.'''
+'''Serviços da borda operacional.''' 

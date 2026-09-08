@@ -55,6 +55,9 @@ class PreparationPlan:
     workflow: WorkflowVersion
     # Hierarquia completa fornecida pelo catálogo de contas para os locks.
     account_groups: tuple[tuple[UUID, tuple[UUID, ...]], ...]
+    # Defaults preservam leitura de checkpoints anteriores à migration 0011.
+    approval_role: str = 'CONTADOR'
+    responsible_role: str = 'CONTADOR'
 
 
 @dataclass(frozen=True, slots=True)
@@ -122,6 +125,8 @@ class JourneyCatalog(Protocol):
     coordenar locks com seus escritores até o commit. Não há catálogo permissivo
     ou regra contábil de conveniência no bootstrap.
     """
-    def preparation(self, tenant_id: UUID, company_id: UUID) -> PreparationPlan | None: ...
+    def preparation(
+        self, tenant_id: UUID, company_id: UUID, at: date | None = None,
+    ) -> PreparationPlan | None: ...
     def locks(self, tenant_id: UUID, company_id: UUID) -> tuple[AccountLock, ...]: ...
 

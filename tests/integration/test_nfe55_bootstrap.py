@@ -102,6 +102,7 @@ def seed_authorized_actor(
             ),
             UserModel(
                 id=actor_id,
+                provider_issuer='urn:serdial21:test',
                 provider_subject=f'synthetic-{actor_id}',
                 display_name='Synthetic actor',
                 is_active=True,

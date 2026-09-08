@@ -52,7 +52,11 @@ class TenantModel(Base):
 class UserModel(Base):
     __tablename__ = 'users'
     __table_args__ = (
-        UniqueConstraint('provider_subject', name='uq_users_provider_subject'),
+        UniqueConstraint(
+            'provider_issuer',
+            'provider_subject',
+            name='uq_users_provider_identity',
+        ),
         {
             'mysql_charset': 'utf8mb4',
             'mysql_collate': 'utf8mb4_unicode_ci',
@@ -60,6 +64,7 @@ class UserModel(Base):
     )
 
     id: Mapped[UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid4)
+    provider_issuer: Mapped[str] = mapped_column(String(255), nullable=False)
     provider_subject: Mapped[str] = mapped_column(String(255), nullable=False)
     display_name: Mapped[str] = mapped_column(String(200), nullable=False)
     email: Mapped[str | None] = mapped_column(String(320), nullable=True)

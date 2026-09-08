@@ -21,13 +21,14 @@ from serdial21.bootstrap.settings import AppSettings
 RUNTIME_DATABASE = 'u621451815_serdial21_hom'
 MIGRATION_DATABASE = 'u621451815_serdial21_mig'
 MIGRATION_USER = 'u621451815_serdial21_mapp'
-MIGRATION_HEAD = '20260907_0009'
+MIGRATION_HEAD = '20260908_0011'
 _migration_lock = Lock()
 
 
 def pytest_configure(config: pytest.Config) -> None:
     config.addinivalue_line('markers', 'mariadb_runtime: requer Runtime Homologation HEAD')
     config.addinivalue_line('markers', 'mariadb_migration: requer Migration Lab descartável')
+    config.addinivalue_line('markers', 'mariadb_restore: validação read-only do restore')
 
 
 def pytest_collection_modifyitems(items: list[pytest.Item]) -> None:

@@ -42,6 +42,8 @@ EXPECTED_TABLES = {
     'authorized_effects',
     'pre_homologation_export_batches',
     'nfe_journey_checkpoints',
+    'production_catalogs',
+    'production_catalog_versions',
 }
 
 
@@ -65,7 +67,7 @@ def test_upgrade_and_downgrade_initial_revision(
     try:
         command.upgrade(config, 'head')
         assert table_names(database_path) == EXPECTED_TABLES | {'alembic_version'}
-        assert permission_count(database_path) == 9
+        assert permission_count(database_path) == 12
         command.check(config)
 
         command.downgrade(config, 'base')

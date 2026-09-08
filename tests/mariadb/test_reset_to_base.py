@@ -37,7 +37,7 @@ def test_reset_dedicated_database_to_base(migration_lab_at_revision: object) -> 
                 count == (9 if name == 'permissions' else 0)
                 for name, count in counts.items()
             ), counts
-            assert connection.scalar(text('SELECT version_num FROM alembic_version')) == '20260907_0009'
+            assert connection.scalar(text('SELECT version_num FROM alembic_version')) == '20260908_0011'
         os.environ['DATABASE_URL'] = database_url
         get_settings.cache_clear()
         command.downgrade(Config('alembic.ini'), 'base')
@@ -46,6 +46,6 @@ def test_reset_dedicated_database_to_base(migration_lab_at_revision: object) -> 
             assert inspect(connection).get_table_names() == ['alembic_version']
         command.upgrade(Config('alembic.ini'), 'head')
         with engine.connect() as connection:
-            assert connection.scalar(text('SELECT version_num FROM alembic_version')) == '20260907_0009'
+            assert connection.scalar(text('SELECT version_num FROM alembic_version')) == '20260908_0011'
         get_settings.cache_clear()
         os.environ.pop('DATABASE_URL', None)

@@ -19,6 +19,7 @@ class Tenant:
 @dataclass(frozen=True, slots=True)
 class User:
     id: UUID
+    provider_issuer: str
     provider_subject: str
     display_name: str
     is_active: bool

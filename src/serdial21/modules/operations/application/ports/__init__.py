@@ -1,1 +1,1 @@
-'''Portas de persistência transacional para operações.'''
+'''Portas da borda operacional.''' 

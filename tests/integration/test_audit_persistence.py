@@ -230,6 +230,7 @@ def test_commit_hook_audits_creation_and_change_of_initial_entities(
     tenant_model = tenant(tenant_id, 'Tenant A')
     user_model = UserModel(
         id=user_id,
+        provider_issuer='urn:serdial21:test',
         provider_subject='audit-user',
         display_name='Audit User',
         is_active=True,

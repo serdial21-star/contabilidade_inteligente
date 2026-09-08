@@ -16,6 +16,9 @@ INITIAL_PERMISSION_CODES: tuple[str, ...] = (
     'lock.manage',
     'export.execute',
     'audit.read',
+    'identity.manage',
+    'catalog.manage',
+    'catalog.review',
 )
 
 

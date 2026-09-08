@@ -1,1 +1,1 @@
-'''Casos de uso de operações idempotentes.'''
+'''Casos de uso da borda operacional.''' 

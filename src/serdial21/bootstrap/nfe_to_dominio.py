@@ -10,6 +10,7 @@ from serdial21.modules.access_control.adapters.outbound.persistence.repositories
 from serdial21.modules.access_control.application.services.authorization import AuthorizationService
 from serdial21.modules.audit.adapters.outbound.persistence.repositories import SqlAlchemyAuditRepository
 from serdial21.modules.audit.application.services.audit import AuditService
+from serdial21.modules.catalog.adapters.outbound.persistence.repositories import SqlAlchemyJourneyCatalog
 from serdial21.modules.fiscal_documents.adapters.outbound.persistence.repositories import SqlAlchemyFiscalDocumentRepository
 from serdial21.modules.integrations.adapters.outbound.dominio import DominioConnector
 from serdial21.modules.workflow.adapters.outbound.persistence.journeys import SqlAlchemyJourneyRepository
@@ -19,13 +20,13 @@ from serdial21.shared_kernel.observability import MetricsRegistry
 
 
 def create_nfe_to_dominio_runtime(
-    session: Session, settings: AppSettings, catalog: JourneyCatalog,
+    session: Session, settings: AppSettings, catalog: JourneyCatalog | None = None,
     *, clock: Callable[[], datetime] | None = None,
     metrics: MetricsRegistry | None = None,
 ) -> NFeToDominioService:
     nfe = create_nfe55_runtime(session, settings, clock=clock)
     return NFeToDominioService(
-        SqlAlchemyJourneyRepository(session), catalog,
+        SqlAlchemyJourneyRepository(session), catalog or SqlAlchemyJourneyCatalog(session),
         AuthorizationService(SqlAlchemyAuthorizationRepository(session)),
         nfe.intake, nfe.importer, SqlAlchemyFiscalDocumentRepository(session),
         AuditService(SqlAlchemyAuditRepository(session), clock=clock),

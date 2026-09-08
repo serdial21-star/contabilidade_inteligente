@@ -1,1 +1,1 @@
-'''Operações retomáveis, idempotência e mensageria confiável.'''
+'''Borda operacional do piloto.''' 

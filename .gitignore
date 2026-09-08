@@ -15,3 +15,4 @@ build/
 .idea/
 .vscode/*.local.json
 .serdial21-storage/
+.backups/

@@ -4,7 +4,7 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Literal, Self
 
-from pydantic import AliasChoices, Field, SecretStr, field_validator, model_validator
+from pydantic import AliasChoices, Field, HttpUrl, SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from sqlalchemy.engine import make_url
 from sqlalchemy.exc import ArgumentError
@@ -76,6 +76,21 @@ class AppSettings(BaseSettings):
         le=300,
         validation_alias='DATABASE_WRITE_TIMEOUT_SECONDS',
     )
+    oidc_issuer: str | None = Field(default=None, validation_alias='OIDC_ISSUER')
+    oidc_audience: str | None = Field(default=None, validation_alias='OIDC_AUDIENCE')
+    oidc_jwks_url: HttpUrl | None = Field(default=None, validation_alias='OIDC_JWKS_URL')
+    oidc_clock_skew_seconds: int = Field(
+        default=30,
+        ge=0,
+        le=120,
+        validation_alias='OIDC_CLOCK_SKEW_SECONDS',
+    )
+    oidc_jwks_timeout_seconds: int = Field(
+        default=5,
+        ge=1,
+        le=30,
+        validation_alias='OIDC_JWKS_TIMEOUT_SECONDS',
+    )
     object_storage_path: Path = Field(
         default=Path('.serdial21-storage'),
         validation_alias='OBJECT_STORAGE_PATH',
@@ -109,12 +124,36 @@ class AppSettings(BaseSettings):
             raise ValueError('api_prefix não pode ser vazio')
         return normalized
 
+    @field_validator('oidc_issuer')
+    @classmethod
+    def normalize_oidc_issuer(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        normalized = value.strip().rstrip('/')
+        if not normalized:
+            raise ValueError('OIDC_ISSUER não pode ser vazio')
+        return normalized
+
     @model_validator(mode='after')
     def validate_deployment_settings(self) -> Self:
         if self.environment == 'production' and self.database_url is None:
             raise ValueError('DATABASE_URL é obrigatória em production')
         if self.environment == 'production' and self.debug:
             raise ValueError('debug não pode estar ativo em production')
+
+        oidc_values = (self.oidc_issuer, self.oidc_audience, self.oidc_jwks_url)
+        if any(value is not None for value in oidc_values) and not all(
+            value is not None for value in oidc_values
+        ):
+            raise ValueError('configuração OIDC exige issuer, audience e JWKS URL')
+        if self.environment == 'production' and not self.oidc_configured:
+            raise ValueError('configuração OIDC é obrigatória em production')
+        if self.environment == 'production':
+            assert self.oidc_issuer is not None and self.oidc_jwks_url is not None
+            if not self.oidc_issuer.startswith('https://'):
+                raise ValueError('OIDC_ISSUER deve usar HTTPS em production')
+            if self.oidc_jwks_url.scheme != 'https':
+                raise ValueError('OIDC_JWKS_URL deve usar HTTPS em production')
 
         if self.database_url is not None:
             try:
@@ -131,6 +170,10 @@ class AppSettings(BaseSettings):
                     ' (sqlite+pysqlite é permitido somente em test)'
                 )
         return self
+
+    @property
+    def oidc_configured(self) -> bool:
+        return all((self.oidc_issuer, self.oidc_audience, self.oidc_jwks_url))
 
     @property
     def resolved_database_pool_size(self) -> int:

@@ -44,6 +44,9 @@ def test_production_rejects_debug() -> None:
             environment='production',
             debug=True,
             database_url='mysql+pymysql://user:secret@db/serdial21',
+            oidc_issuer='https://id.example.test',
+            oidc_audience='serdial21-api',
+            oidc_jwks_url='https://id.example.test/jwks.json',
         )
 
 
@@ -97,9 +100,30 @@ def test_environment_profiles_have_distinct_pool_defaults() -> None:
         _env_file=None,
         environment='production',
         database_url='mysql+pymysql://user:secret@db/serdial21',
+        oidc_issuer='https://id.example.test',
+        oidc_audience='serdial21-api',
+        oidc_jwks_url='https://id.example.test/jwks.json',
     )
 
     assert test_settings.resolved_database_pool_size == 1
     assert test_settings.resolved_database_max_overflow == 0
     assert production_settings.resolved_database_pool_size == 10
     assert production_settings.resolved_database_max_overflow == 20
+
+
+def test_production_requires_complete_https_oidc_configuration() -> None:
+    with pytest.raises(ValidationError, match='OIDC'):
+        AppSettings(
+            _env_file=None,
+            environment='production',
+            database_url='mysql+pymysql://user:secret@db/serdial21',
+        )
+    with pytest.raises(ValidationError, match='HTTPS'):
+        AppSettings(
+            _env_file=None,
+            environment='production',
+            database_url='mysql+pymysql://user:secret@db/serdial21',
+            oidc_issuer='http://id.example.test',
+            oidc_audience='serdial21-api',
+            oidc_jwks_url='http://id.example.test/jwks.json',
+        )

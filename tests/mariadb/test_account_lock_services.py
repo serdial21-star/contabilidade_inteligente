@@ -50,8 +50,8 @@ def _seed(session: object) -> tuple[UUID, UUID, UUID, UUID, UUID]:
     with audit_scope(session, AuditContext(uuid4(), actor_id=allowed_user, origin=AuditOrigin.AUTOMATION, reason='MariaDB AccountLock test fixture')):  # type: ignore[arg-type]
         session.add_all([  # type: ignore[attr-defined]
             TenantModel(id=tenant_id, name=f'Lock tenant {tenant_id}', timezone='UTC', currency_code='BRL', status='active'),
-            UserModel(id=allowed_user, provider_subject=f'lock-allowed-{allowed_user}', display_name='Lock Allowed', is_active=True),
-            UserModel(id=denied_user, provider_subject=f'lock-denied-{denied_user}', display_name='Lock Denied', is_active=True),
+            UserModel(id=allowed_user, provider_issuer='urn:serdial21:test', provider_subject=f'lock-allowed-{allowed_user}', display_name='Lock Allowed', is_active=True),
+            UserModel(id=denied_user, provider_issuer='urn:serdial21:test', provider_subject=f'lock-denied-{denied_user}', display_name='Lock Denied', is_active=True),
         ])
         session.flush()  # type: ignore[attr-defined]
         session.add_all([  # type: ignore[attr-defined]
@@ -81,6 +81,9 @@ def factory() -> object:
     try:
         with engine.connect() as connection:
             assert connection.scalar(text('SELECT DATABASE()')) == 'u621451815_serdial21_hom'
+            revision = connection.scalar(text('SELECT version_num FROM alembic_version'))
+            if revision != '20260908_0011':
+                pytest.skip('Runtime ainda não recebeu as migrations 0010/0011')
         yield create_session_factory(engine)
     finally:
         engine.dispose()

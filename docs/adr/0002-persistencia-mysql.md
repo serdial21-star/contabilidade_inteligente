@@ -56,3 +56,14 @@ criação não são inventados nesta etapa.
 - Alembic exige DATABASE_URL.
 - Testes SQLite não substituem upgrade/downgrade e integração no MySQL real.
 - A versão exata de servidor ainda deve ser comprovada na homologação real.
+
+## Adendo — banco homologado do piloto
+
+Em 08/09/2026, MariaDB 11.8.x foi homologado como banco do piloto, com prova na
+versão 11.8.8 e conexão pelo driver existente `mysql+pymysql`. A decisão
+histórica de MySQL 8.x (`>=8.0,<9.0`) é preservada; o adendo registra o alvo
+efetivamente disponível e homologado para o piloto.
+
+A política operacional do Runtime é forward-only: somente upgrades versionados,
+revisados e previamente testados são permitidos. Downgrade de schema não é
+mecanismo de recuperação; recuperação operacional utiliza backup + restore.
