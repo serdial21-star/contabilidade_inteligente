@@ -10,6 +10,7 @@ from serdial21.bootstrap.settings import get_settings
 
 
 EXPECTED_TABLES = {
+    'account_locks',
     'artifact_receipts',
     'bank_accounts',
     'bank_statements',

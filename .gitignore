@@ -1,4 +1,6 @@
 .env
+.env.mysql-homologation
+.env.mariadb-migration-lab
 .venv/
 __pycache__/
 *.py[cod]

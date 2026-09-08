@@ -355,24 +355,12 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    op.drop_index(
-        'ix_role_bindings_membership_scope_status',
-        table_name='role_bindings',
-    )
     op.drop_table('role_bindings')
     op.drop_table('role_permissions')
-    op.drop_index(
-        'ix_company_accesses_membership_company_status',
-        table_name='company_accesses',
-    )
     op.drop_table('company_accesses')
     op.drop_table('establishments')
     op.drop_table('roles')
     op.drop_table('companies')
-    op.drop_index(
-        'ix_tenant_memberships_tenant_user_status',
-        table_name='tenant_memberships',
-    )
     op.drop_table('tenant_memberships')
     op.drop_table('permissions')
     op.drop_table('users')

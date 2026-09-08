@@ -7,7 +7,7 @@
 ## Contexto
 
 A fundação inicial possuía metadata SQLAlchemy e Alembic sem models. A Execução
-02 determina MySQL com PyMySQL, DATABASE_URL, ambientes diferenciáveis,
+02 determina MySQL 8.x (`>=8.0,<9.0`) com PyMySQL, DATABASE_URL, ambientes diferenciáveis,
 pool_pre_ping, timeouts prudentes, utf8mb4, rollback e health check.
 
 O modelo lógico aprova Tenant como raiz de isolamento. Company, memberships,
@@ -19,6 +19,8 @@ implementadas e não pertencem a esta migration.
 - Ambientes suportados: development, test e production.
 - Production exige DATABASE_URL e proíbe debug.
 - O driver operacional é mysql+pymysql.
+- A faixa suportada formal é MySQL 8.x (`>=8.0,<9.0`); a homologação deve
+  registrar a versão exata do servidor utilizado antes do piloto.
 - sqlite+pysqlite é aceito somente no ambiente test para testes locais rápidos;
   a homologação final de migrations continua obrigatória no MySQL suportado.
 - A engine usa pool_pre_ping, rollback ao devolver conexão, reciclagem de 30
@@ -53,4 +55,4 @@ criação não são inventados nesta etapa.
   retorna 503.
 - Alembic exige DATABASE_URL.
 - Testes SQLite não substituem upgrade/downgrade e integração no MySQL real.
-- A versão mínima suportada do MySQL ainda precisa ser formalizada e homologada.
+- A versão exata de servidor ainda deve ser comprovada na homologação real.
