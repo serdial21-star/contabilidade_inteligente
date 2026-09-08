@@ -1,0 +1,1 @@
+"""Portas de privacidade."""

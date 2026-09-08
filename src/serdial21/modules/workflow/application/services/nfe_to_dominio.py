@@ -198,6 +198,7 @@ class NFeToDominioService:
     def record_decision(
         self, context: IntakeContext, journey_id: UUID, *, expected_version: int,
         revision_id: UUID, revision_hash: str, decision: str,
+        idempotency_key: str,
     ) -> Journey:
         """Comando humano autenticado, vinculado à revisão vista pelo Contador."""
         self._human(context)
@@ -212,6 +213,22 @@ class NFeToDominioService:
             context.tenant_id, context.company_id, context.actor_id,
             'journal.approve', role_name=journey.plan.approval_role,
         )
+        if not idempotency_key.strip() or len(idempotency_key) > 128:
+            raise ValueError('invalid idempotency key')
+        payload_hash = digest({
+            'actor_id': context.actor_id,
+            'journey_id': journey_id,
+            'expected_version': expected_version,
+            'revision_id': revision_id,
+            'revision_hash': revision_hash,
+            'decision': decision,
+        })
+        if journey.decision is not None:
+            if (journey.decision_idempotency_key == idempotency_key
+                    and journey.decision_payload_hash == payload_hash):
+                self._metrics.increment('retries_total')
+                return journey
+            raise JourneyConflictError('decision idempotency conflict')
         self._expected(journey, expected_version)
         if journey.status != 'PENDING_APPROVAL' or journey.request is None or journey.step is None or journey.revision is None:
             raise JourneyNotReadyError('pending approval required')
@@ -225,6 +242,8 @@ class NFeToDominioService:
             decision=result, request=replace(journey.request, status=decision),
             step=replace(journey.step, status=decision),
             item=replace(journey.item, status='COMPLETED'),
+            decision_idempotency_key=idempotency_key,
+            decision_payload_hash=payload_hash,
             status=decision, revision=(journey.revision.approve() if decision == 'APPROVED'
                                       else replace(journey.revision, status='REJECTED')),
         ), context.actor_id, 'approval_decision.recorded')

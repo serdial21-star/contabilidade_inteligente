@@ -4,7 +4,7 @@ from dataclasses import dataclass
 import re
 
 
-PERMISSION_PATTERN = re.compile(r'^[a-z][a-z0-9_]*[.][a-z][a-z0-9_]*$')
+PERMISSION_PATTERN = re.compile(r'^[a-z][a-z0-9_]*(?:[.][a-z][a-z0-9_]*)+$')
 
 INITIAL_PERMISSION_CODES: tuple[str, ...] = (
     'company.read',
@@ -19,6 +19,11 @@ INITIAL_PERMISSION_CODES: tuple[str, ...] = (
     'identity.manage',
     'catalog.manage',
     'catalog.review',
+    'privacy.dsr.manage',
+    'privacy.dsr.search',
+    'privacy.dsr.export',
+    'privacy.retention.evaluate',
+    'privacy.legal_hold.manage',
 )
 
 

@@ -238,9 +238,10 @@ def review(
 def approve(
     company_id: UUID, journey_id: UUID, payload: DecisionRequest,
     request: Request, principal: PrincipalDependency, session: SessionDependency,
+    idempotency_key: IdempotencyKey,
 ) -> DecisionResponse:
     return _decision(
-        company_id, journey_id, payload, 'APPROVED', request, principal, session,
+        company_id, journey_id, payload, 'APPROVED', idempotency_key, request, principal, session,
     )
 
 
@@ -248,9 +249,10 @@ def approve(
 def reject(
     company_id: UUID, journey_id: UUID, payload: DecisionRequest,
     request: Request, principal: PrincipalDependency, session: SessionDependency,
+    idempotency_key: IdempotencyKey,
 ) -> DecisionResponse:
     return _decision(
-        company_id, journey_id, payload, 'REJECTED', request, principal, session,
+        company_id, journey_id, payload, 'REJECTED', idempotency_key, request, principal, session,
     )
 
 
@@ -284,7 +286,7 @@ def audit_events(
 
 def _decision(
     company_id: UUID, journey_id: UUID, payload: DecisionRequest, decision: str,
-    request: Request, principal: AuthenticatedPrincipal, session: Session,
+    idempotency_key: str, request: Request, principal: AuthenticatedPrincipal, session: Session,
 ) -> DecisionResponse:
     try:
         journey = create_operational_runtime(session, request.app.state.settings).decide(
@@ -292,7 +294,7 @@ def _decision(
             UUID(request.state.correlation_id), journey_id,
             expected_version=payload.expected_version,
             revision_id=payload.revision_id, revision_hash=payload.revision_hash,
-            decision=decision,
+            decision=decision, idempotency_key=idempotency_key,
         )
     except Exception as error:
         _map_error(session, error)

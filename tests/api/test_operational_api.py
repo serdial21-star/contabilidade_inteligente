@@ -312,7 +312,7 @@ def test_authenticated_nfe_review_and_approval_e2e(operational: OperationalFixtu
     summary = detail.json()['summary']
     approved = operational.client.post(
         f'/api/v1/operations/companies/{operational.company}/reviews/{journey_id}/approve',
-        headers=operational.headers('accountant'),
+        headers=operational.headers('accountant') | {'Idempotency-Key': 'approve-e2e'},
         json={
             'expected_version': summary['version'],
             'revision_id': summary['revision_id'],
@@ -321,6 +321,17 @@ def test_authenticated_nfe_review_and_approval_e2e(operational: OperationalFixtu
     )
     assert approved.status_code == 200, approved.text
     assert approved.json()['status'] == 'APPROVED'
+    retried = operational.client.post(
+        f'/api/v1/operations/companies/{operational.company}/reviews/{journey_id}/approve',
+        headers=operational.headers('accountant') | {'Idempotency-Key': 'approve-e2e'},
+        json={
+            'expected_version': summary['version'],
+            'revision_id': summary['revision_id'],
+            'revision_hash': summary['revision_hash'],
+        },
+    )
+    assert retried.status_code == 200
+    assert retried.json() == approved.json()
 
     audit = operational.client.get(
         f'/api/v1/operations/companies/{operational.company}/audit-events',
@@ -448,11 +459,11 @@ def test_insufficient_role_cannot_decide_and_reject_is_available(
     }
     denied = operational.client.post(
         f"/api/v1/operations/companies/{operational.company}/reviews/{imported['resource_id']}/approve",
-        headers=operational.headers('proposer'), json=payload,
+        headers=operational.headers('proposer') | {'Idempotency-Key': 'denied-decision'}, json=payload,
     )
     rejected = operational.client.post(
         f"/api/v1/operations/companies/{operational.company}/reviews/{imported['resource_id']}/reject",
-        headers=operational.headers('accountant'), json=payload,
+        headers=operational.headers('accountant') | {'Idempotency-Key': 'reject-decision'}, json=payload,
     )
     assert denied.status_code == 403
     assert rejected.status_code == 200 and rejected.json()['status'] == 'REJECTED'

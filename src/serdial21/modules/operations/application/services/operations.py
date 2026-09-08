@@ -224,12 +224,13 @@ class OperationalService:
         self, tenant_id: UUID, company_id: UUID, actor_id: UUID,
         correlation_id: UUID, journey_id: UUID, *, expected_version: int,
         revision_id: UUID, revision_hash: str, decision: str,
+        idempotency_key: str,
     ) -> Journey:
         return self._nfe.record_decision(IntakeContext(
             tenant_id, company_id, actor_id, AuditOrigin.HUMAN, correlation_id,
         ), journey_id, expected_version=expected_version,
             revision_id=revision_id, revision_hash=revision_hash,
-            decision=decision)
+            decision=decision, idempotency_key=idempotency_key)
 
     def exceptions(
         self, tenant_id: UUID, company_id: UUID, actor_id: UUID, *, limit: int,

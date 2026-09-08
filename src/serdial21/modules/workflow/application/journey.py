@@ -98,6 +98,10 @@ class Journey:
     request: ApprovalRequest | None = None
     step: ApprovalStep | None = None
     decision: ApprovalDecision | None = None
+    # A chave pertence ao comando humano que produziu a decisão. Ela é
+    # persistida no checkpoint imutável para tornar seguro o retry da borda.
+    decision_idempotency_key: str | None = None
+    decision_payload_hash: str | None = None
     effect: AuthorizedEffect | None = None
     batch: ExportBatch | None = None
     connector_configuration: ConnectorConfiguration | None = None

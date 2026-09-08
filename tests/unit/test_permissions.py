@@ -18,7 +18,6 @@ def test_initial_permissions_are_atomic(code: str) -> None:
         'company.*',
         '*.read',
         'Company.read',
-        'company.read.extra',
         'company read',
     ),
 )

@@ -1,0 +1,1 @@
+"""Saídas de privacidade."""

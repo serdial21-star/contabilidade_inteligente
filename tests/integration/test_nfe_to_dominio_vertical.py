@@ -97,7 +97,8 @@ class Environment:
         # Simula submissão explícita do Contador pelo caso de uso real.
         result = self.runtime().record_decision(
             self.context(), journey.id, expected_version=journey.version,
-            revision_id=journey.revision.id, revision_hash=journey.revision_hash, decision=decision,
+            revision_id=journey.revision.id, revision_hash=journey.revision_hash,
+            decision=decision, idempotency_key=f'decision-{journey.id}',
         )
         self.session.commit()
         return result
@@ -294,7 +295,8 @@ def test_invalid_human_decisions_have_no_effect(env: Environment, invalid: str) 
     journey = env.prepare()
     context = env.context()
     kwargs = dict(expected_version=journey.version, revision_id=journey.revision.id,
-                  revision_hash=journey.revision_hash, decision='APPROVED')
+                  revision_hash=journey.revision_hash, decision='APPROVED',
+                  idempotency_key='invalid-decision')
     if invalid == 'hash':
         kwargs['revision_hash'] = '0' * 64
     elif invalid == 'revision':
@@ -334,7 +336,8 @@ def test_revoked_company_access_blocks_existing_session(env: Environment, stage:
     with pytest.raises(AccessDeniedError):
         if stage == 'decision':
             runtime.record_decision(env.context(), journey.id, expected_version=journey.version,
-                                    revision_id=journey.revision.id, revision_hash=journey.revision_hash, decision='APPROVED')
+                                    revision_id=journey.revision.id, revision_hash=journey.revision_hash,
+                                    decision='APPROVED', idempotency_key='revoked-decision')
         elif stage == 'export':
             runtime.request_export(env.context(), journey.id, expected_version=journey.version, route_id=uuid4(), configuration=CONFIG)
         else:
@@ -361,9 +364,9 @@ def test_foreign_and_missing_exports_are_uniformly_unavailable(env: Environment)
 def test_repeat_decision_and_stale_writer_do_not_duplicate_effect(env: Environment) -> None:
     pending = env.prepare()
     approved = env.approve(pending)
-    with pytest.raises(JourneyConflictError):
-        env.approve(pending)
-    env.session.rollback()
+    retried = env.approve(pending)
+    assert retried.decision.id == approved.decision.id
+    assert retried.effect.id == approved.effect.id
     with pytest.raises(JourneyConflictError):
         SqlAlchemyJourneyRepository(env.session).append(pending.advance(status='REJECTED'))
     env.session.rollback()

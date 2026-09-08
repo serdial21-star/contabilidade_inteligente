@@ -1,4 +1,6 @@
 .env
+.env.*
+!.env.example
 .env.mysql-homologation
 .env.mariadb-migration-lab
 .venv/
