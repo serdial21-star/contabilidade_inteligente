@@ -1,0 +1,33 @@
+# Component Inventory
+
+READY = fundação de apresentação implementada; PROTOTYPE = comportamento local demonstrativo; PLANNED = contrato/integração futura. Não significa prontidão de produção. Implementação central em `app/foundation.js`, CSS em `ui/foundation.css`, tokens em `ui/tokens.css`; mocks em `app/mocks.js`.
+
+| COMPONENT | PURPOSE | VARIANTS | STATUS | USED_IN | ACCESSIBILITY NOTES |
+| --- | --- | --- | --- | --- | --- |
+| BrandAsset | Reutilizar marca oficial | Principal, vertical, simplificada | READY | Login, shell, galeria | Alt e proporção original |
+| AppShell | Sidebar/topbar/content | Desktop, compacto, mobile drawer | READY | Todas as telas internas | Landmark, skip link, menu nomeado |
+| Navigation | Organização em nove grupos | Atual, futuro, compacto | PROTOTYPE | Shell | aria-current; display-only |
+| LoginUX | Mostrar acesso coerente com OIDC | Desabilitado, explorar protótipo | PROTOTYPE | Login | Não recebe senha, labels e aviso |
+| Button | Ações consistentes | Primary, secondary, tertiary, ghost, danger; small/default/large | READY | Todas | Nome, foco, disabled; danger não substitui confirmação |
+| Badge | Status sem ambiguidade | success, warning, danger, info, neutral, intelligent | READY | Cards/tabelas/revisão | Texto+ícone, ouro com texto escuro |
+| Alert | Explicar resultado/condição | Info, success, warning, error | READY | Galeria, revisão, dialogs | Ícone+título+mensagem |
+| Widget | Conteúdo reutilizável | METRIC, LIST, STATUS, TIMELINE, PROGRESS, TABLE_PREVIEW | PROTOTYPE | Minha Visão | Dez itens, títulos, sem drag obrigatório |
+| WidgetControls | Organizar visão | Add/remove/move/resize/save | PROTOTYPE | Dashboard/settings | Botões nomeados, foco restaurado, apenas memória |
+| PresetSelect | Cinco organizações | Executiva, Contábil, Fiscal, Operacional, Minha Visão | PROTOTYPE | Dashboard/settings | Não muda permissões |
+| SmartQueue | Priorizar intervenção | Tipo/empresa/motivo/prioridade/data/responsável/ação | PROTOTYPE | Dashboard | Tabela e ação explícita |
+| DataTable | Consulta sintética | Sort, seleção, paginação, status, ações, vazio | PROTOTYPE | Documentos/propostas | Região rolável, aria-sort, checkbox nomeado |
+| FilterBar / FilterDrawer | Pesquisa consistente | Search/status/company/date range/responsible | PROTOTYPE | Listas | Labels, erro de período, limpar filtros |
+| FormField | Entrada padronizada | Text/textarea/select/multi/date/currency/checkbox/radio/switch/file | READY | Galeria/dialogs | Default/focus/disabled/error/success/read-only; file desabilitado |
+| InformationModal | Contexto adicional | Informação | READY | Galeria/login futuro | dialog nativo, fechar/Escape |
+| FormModal | Exemplo de formulário | Nome de visão | PROTOTYPE | Galeria | Required, nenhuma persistência |
+| ConfirmationModal | Ação deliberada | Confirmação/decisão | PROTOTYPE | Revisão/galeria | Conferência e confirmação explícitas |
+| DestructiveConfirmation | Confirmar descarte local | Reset da visão em memória | PROTOTYPE | Settings/galeria | Checkbox explícito; não remove dados reais |
+| Drawer | Contexto sem sair da tela | Detalhes/histórico/filtros/menu | READY | Listas e shell | Título, retorno de foco; validar em navegador |
+| DecisionLine | Mostrar cadeia de evidência | NF-e e OFX, pendente/aprovado/rejeitado | PROTOTYPE | Página/drawer | Etapas textuais, mock de ator/data |
+| ReviewDetail | Conferência profissional | Débito/crédito, balanceado, bloqueado, sem regra | PROTOTYPE | Revisão | Valores rotulados; sem conta/regra real |
+| AccountLockNotice | Explicar impedimento | Escopo/motivo/ator/data sintéticos | PROTOTYPE | DOC-003 | Texto explícito e ações disabled |
+| EmptyState | Orientar próximo passo | Lista filtrada, revisão vazia | READY | Listas/galeria | Título descritivo + CTA |
+| LoadingState | Indicar espera | Skeleton/spinner | READY | Galeria | Texto de estado e reduced motion |
+| ErrorState | Comunicar falhas sem vazamento | Page/inline/permission/not found/temporary | READY | Galeria/dialogs | Erro uniforme; não expõe existência protegida |
+| NotificationCenter | Notificações reais | Transporte/contador/persistência | PLANNED | Topbar mostra só aviso | Sem badge real inventado |
+| CompactDensity | Uso avançado | Compact | PLANNED | Settings | Desabilitado, não persistido |

@@ -1,0 +1,24 @@
+/* Official brand palette: identidade visual S21 v1.png, supplied by user.
+   Semantic/interaction tokens are UI choices, not additional brand colors. */
+.foundation {
+  --brand-primary:#17295b; --brand-gold:#daa84f; --brand-red:#d8232a;
+  --background:#f3f4f6; --surface:#fff; --text:#17295b; --text-secondary:#566174;
+  --border:#dce1e9; --control-border:#7b8596; --success:#216c48;
+  --warning:#80520c; --danger:#b51f2b; --info:#285d95; --intelligent:#77500a;
+  --success-bg:#eaf5ee; --warning-bg:#fff3db; --danger-bg:#fff0ef;
+  --info-bg:#edf4fc; --intelligent-bg:#fff8e9; --neutral-bg:#eef0f3;
+  --space-1:4px; --space-2:8px; --space-3:12px; --space-4:16px;
+  --space-5:20px; --space-6:24px; --space-8:32px; --space-10:40px; --space-12:48px;
+  --radius-sm:6px; --radius-md:10px; --radius-lg:16px;
+  --shadow-sm:0 2px 8px #17295b08; --shadow-lg:0 16px 60px #17295b24;
+  --font-ui:Inter,'Segoe UI',Arial,sans-serif;
+  --font-heading:Manrope,Inter,'Segoe UI',Arial,sans-serif;
+  --font-caption:.75rem; --font-small:.8125rem; --font-body:.9375rem;
+  --font-h3:1rem; --font-h2:1.25rem; --font-h1:2rem; --font-display:2.75rem; --font-metric:2rem;
+  --weight-normal:400; --weight-medium:500; --weight-semibold:600; --weight-bold:700;
+  --leading-body:1.6; --leading-heading:1.2;
+  --z-header:10; --z-sidebar:20; --z-toast:40;
+  --sidebar-width:240px; --content-width:1440px; --drawer-width:560px;
+  --duration-fast:160ms;
+  /* Media queries use literal 1200 / 800 / 480px: CSS variables cannot define breakpoints. */
+}

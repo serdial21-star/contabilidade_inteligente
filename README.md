@@ -82,6 +82,7 @@ DATABASE_URL no arquivo .env antes de executar:
 
 ## Documentação
 
+- [Baseline de productização — Phase 01, inventário, arquitetura, roadmap e gates](docs/PRODUCT_RELEASE_BASELINE.md)
 - [Instruções permanentes](AGENTS.md)
 - [Baseline técnico](docs/TECHNICAL_BASELINE.md)
 - [Índice da engenharia do produto](docs/engenharia-produto/00-indice-e-rastreabilidade.md)
