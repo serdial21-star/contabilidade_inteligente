@@ -1,0 +1,4 @@
+User-agent: *
+Disallow: /
+
+# Pre-publication default. Review indexing and add the approved sitemap at launch.
