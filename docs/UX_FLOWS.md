@@ -1,5 +1,13 @@
 # UX Flows
 
+## Atualização — Phase 05
+
+`Minha Visão` agora é a home funcional do shell autenticado: `IDENTITY/ME -> CONTEXTO AUTORIZADO -> CATÁLOGO POR PERMISSÃO -> LOADING POR WIDGET -> READY/EMPTY/ERROR`. A troca de empresa invalida a geração corrente, descarta o estado anterior e recarrega apenas empresas presentes na projeção autenticada. `Todas as empresas autorizadas` usa a interseção conservadora de capacidades empresariais.
+
+`DASHBOARD -> PRESET` aplica uma organização e remove widgets não autorizados. `DASHBOARD -> PERSONALIZAR -> ADD/REMOVE/MOVE/RESIZE -> SAVE` persiste localmente somente IDs, ordem, tamanho e preset. A preferência é revalidada antes de renderizar e nunca amplia acesso. Falha de um widget não cancela os demais; `401` retorna ao fluxo de sessão expirada e `403` elimina o conteúdo negado sem detalhe protegido.
+
+Todos os dados de demonstração continuam sintéticos. Os destinos operacionais ainda não implementados aparecem desabilitados, sem simular funcionalidade.
+
 ## Atualização — Phase 04
 
 O fluxo real agora parte de `app/index.html`: `BOOTING -> UNAUTHENTICATED -> OIDC` quando a integração for homologada, ou uma demonstração sintética explicitamente não autenticada. Após sessão válida, o shell carrega usuário, contexto e permissões antes de exibir conteúdo. `401 -> SESSION_EXPIRED -> LOGIN`; `403 -> FORBIDDEN`; `LOGOUT -> CLEAR SAFE STATE -> LOGIN`. Os contratos e gates estão em `AUTH_FRONTEND_INTEGRATION.md`. Os fluxos abaixo permanecem referência do protótipo da Phase 02.

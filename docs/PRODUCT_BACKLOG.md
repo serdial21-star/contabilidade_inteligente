@@ -35,8 +35,8 @@ STATUS: DONE (entrega desta fase), PLANNED (não iniciado), BLOCKED (depende de 
 | PB-004 | EPIC-001 | Prototipar estados de automação, revisão humana, bloqueio e erro com texto além de cor | P1 | PB-003 | PLANNED | PHASE 02 |
 | PB-005 | EPIC-002 | Integrar UX de sessão OIDC real, expiração/logout e falhas sem conceder acesso | P0 | PB-003; backend identity; IdP homologado | PLANNED | PHASE 04 |
 | PB-006 | EPIC-002 | Implementar shell/seleção de empresa com CompanyAccess e testes negativos | P0 | PB-005; AuthorizationService | PLANNED | PHASE 04 |
-| PB-007 | EPIC-003 | Entregar Minha Visão com ações prioritárias e agregados autorizados completos | P1 | PB-006; levantamento de contratos de agregação | PLANNED | PHASE 05 |
-| PB-008 | EPIC-003 | Adicionar/remover/mover/redimensionar widgets e salvar visão; revalidar permissões ao carregar | P2 | PB-007; contrato de preferências a definir | PLANNED | PHASE 05 |
+| PB-007 | EPIC-003 | Entregar Minha Visão com ações prioritárias e agregados autorizados completos | P1 | PB-006; levantamento de contratos de agregação | DONE_SYNTHETIC | PHASE 05 |
+| PB-008 | EPIC-003 | Adicionar/remover/mover/redimensionar widgets e salvar visão; revalidar permissões ao carregar | P2 | PB-007; persistência local sem dados operacionais | DONE_LOCAL_ONLY | PHASE 05 |
 | PB-009 | EPIC-004 | Expor empresas autorizadas reutilizando a fronteira de acesso existente | P1 | PB-006 | PLANNED | PHASE 06 |
 | PB-010 | EPIC-005 | Integrar upload por bytes, duplicidade, quarentena e consulta de evidência conforme contratos | P1 | PB-009; intake/API | PLANNED | PHASE 06 |
 | PB-011 | EPIC-006 | Expor processamento NF-e 55 e exceções com rastreabilidade | P1 | PB-010; parser/importador existentes | PLANNED | PHASE 07 |

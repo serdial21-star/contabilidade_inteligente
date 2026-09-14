@@ -8,6 +8,10 @@
   let companyId = null;
   let drawerOpen = false;
   let userMenuOpen = false;
+  let dashboardLayout = null;
+  let dashboardModel = null;
+  let dashboardEditing = false;
+  let dashboardRequest = 0;
 
   const apiClient = root.S21ApiClient.createApiClient({
     baseUrl: config.apiBaseUrl,
@@ -15,6 +19,11 @@
     onAuthenticationFailure: () => { session.expire(); renderLogin(); },
   });
   const oidcClient = root.S21OidcClient.createOidcClient({config, getAccessToken: session.token});
+  const dashboardService = root.S21Dashboard.createDashboardService({
+    dataMode: config.dataMode,
+    apiClient,
+    syntheticProvider: root.S21SyntheticProvider,
+  });
 
   const navigation = Object.freeze([
     {group: 'Principal', id: 'overview', label: 'Minha Visão', permissions: ['company.read']},
@@ -34,8 +43,16 @@
   const setAnnouncement = (message) => { announcer.textContent = ''; root.setTimeout(() => { announcer.textContent = message; }, 0); };
 
   function currentPermissions(profile) {
+    const tenantPermissions = profile.permissions || [];
+    if (companyId === dashboardService.allAuthorizedId) {
+      const companySets = profile.companies.map((company) => new Set(company.permissions || []));
+      const shared = companySets.length
+        ? [...companySets[0]].filter((permission) => companySets.every((set) => set.has(permission)))
+        : [];
+      return [...new Set([...tenantPermissions, ...shared])];
+    }
     const company = profile.companies.find((item) => item.id === companyId);
-    return [...new Set([...(profile.permissions || []), ...(company?.permissions || [])])];
+    return [...new Set([...tenantPermissions, ...(company?.permissions || [])])];
   }
 
   function normalizeCurrentApplication(current) {
@@ -97,9 +114,93 @@
     }).join('');
   }
 
-  function overviewMarkup() {
-    const data = root.S21SyntheticProvider.loadDashboard();
-    return `<div class="page-heading"><div><span class="eyebrow">Sua operação</span><h1>Minha Visão</h1><p>Acompanhe o que precisa de atenção. Indicadores demonstrativos, sem dados reais.</p></div><span class="badge intelligent">Base sintética</span></div><section class="placeholder-grid" aria-label="Indicadores sintéticos">${data.metrics.map((metric) => `<article class="card placeholder-card"><span class="widget-title">${escapeHtml(metric.label)}</span><strong>${escapeHtml(metric.value)}</strong><small>${escapeHtml(metric.note)}</small></article>`).join('')}</section><div class="two-col"><section class="card"><header class="card-head"><div><h2>Fila Inteligente</h2><p>Itens fictícios que aguardam atenção.</p></div></header><div class="pad"><ul class="queue-list">${data.queue.map((item) => `<li><strong>${escapeHtml(item.id)}</strong><span>${escapeHtml(item.type)} · ${escapeHtml(item.reason)}</span><span class="badge ${item.priority === 'Alta' ? 'warning' : 'neutral'}">${escapeHtml(item.priority)}</span></li>`).join('')}</ul></div></section><aside class="card pad stack"><h2>Fundação pronta</h2><p>Os agregados reais pertencem à Phase 05.</p><div class="alert info"><div><strong>Backend continua soberano</strong><p>Visibilidade na interface não substitui autorização na API.</p></div></div></aside></div>`;
+  function dashboardContext(profile) {
+    const companyIds = companyId === dashboardService.allAuthorizedId
+      ? profile.companies.map((company) => company.id)
+      : profile.companies.filter((company) => company.id === companyId).map((company) => company.id);
+    return Object.freeze({companyIds: Object.freeze(companyIds), permissions: Object.freeze(currentPermissions(profile))});
+  }
+
+  function ensureDashboardLayout(profile) {
+    const permissions = currentPermissions(profile);
+    dashboardLayout = dashboardService.sanitizePreferences(
+      dashboardLayout || dashboardService.loadPreferences(permissions), permissions,
+    );
+    return dashboardLayout;
+  }
+
+  function formatUpdatedAt(value) {
+    if (!value) return '';
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return '';
+    return `Atualizado às ${new Intl.DateTimeFormat('pt-BR', {hour: '2-digit', minute: '2-digit'}).format(date)}`;
+  }
+
+  function widgetItems(items, timeline = false) {
+    if (!items?.length) return '';
+    const tag = timeline ? 'ol' : 'ul';
+    return `<${tag} class="dashboard-list ${timeline ? 'activity-list' : ''}">${items.map((item) => `<li><span><strong>${escapeHtml(item.title)}</strong><small>${escapeHtml(item.detail || '')}</small></span><time>${escapeHtml(item.meta || '')}</time></li>`).join('')}</${tag}>`;
+  }
+
+  function widgetControls(widgetId, layout) {
+    if (!dashboardEditing) return '';
+    const index = layout.widgets.indexOf(widgetId);
+    return `<div class="widget-controls" aria-label="Organizar ${widgetId}">
+      <button class="btn ghost small" data-action="dashboard-move" data-direction="up" data-widget-id="${widgetId}" ${index === 0 ? 'disabled' : ''}>Mover antes</button>
+      <button class="btn ghost small" data-action="dashboard-move" data-direction="down" data-widget-id="${widgetId}" ${index === layout.widgets.length - 1 ? 'disabled' : ''}>Mover depois</button>
+      <button class="btn ghost small" data-action="dashboard-resize" data-widget-id="${widgetId}">${layout.wide.includes(widgetId) ? 'Tamanho normal' : 'Ampliar'}</button>
+      <button class="btn ghost small" data-action="dashboard-remove" data-widget-id="${widgetId}">Remover</button>
+    </div>`;
+  }
+
+  function widgetMarkup(widget, state, layout) {
+    if (state?.state === 'FORBIDDEN') return '';
+    const wide = layout.wide.includes(widget.id) || ['LIST', 'TIMELINE', 'TABLE_PREVIEW'].includes(widget.kind);
+    const classes = `card dashboard-widget ${wide ? 'wide' : ''} ${state?.state === 'ERROR' ? 'widget-error' : ''}`;
+    const heading = `<header class="widget-heading"><div><span class="widget-code">${widget.id}</span><h2 id="heading-${widget.id}">${escapeHtml(widget.label)}</h2></div>${config.dataMode === 'synthetic' ? '<span class="badge intelligent">Sintético</span>' : ''}</header>`;
+    let body = '<div class="widget-loading" role="status"><span>Carregando indicador…</span><div class="skeleton metric" aria-hidden="true"></div></div>';
+    if (state?.state === 'ERROR') body = `<div class="widget-state" role="alert"><strong>Indicador indisponível</strong><p>${escapeHtml(state.note)}</p><button class="btn secondary small" data-action="dashboard-refresh">Tentar novamente</button></div>`;
+    else if (state?.state === 'UNAVAILABLE') body = `<div class="widget-state"><strong>Fonte ainda não integrada</strong><p>${escapeHtml(state.note)}</p></div>`;
+    else if (state?.state === 'EMPTY') body = `<div class="widget-state"><strong>${escapeHtml(state.note)}</strong><p>Nenhuma ação é necessária neste contexto.</p></div>`;
+    else if (state?.state === 'READY') {
+      const value = state.value === '' ? '' : `<strong class="dashboard-value">${escapeHtml(state.value)}</strong>`;
+      body = `${value}<p class="widget-note">${escapeHtml(state.note)}</p>${widgetItems(state.items, widget.kind === 'TIMELINE')}<footer class="widget-footer"><small>${escapeHtml(formatUpdatedAt(state.updatedAt))}</small><button class="btn ghost small" type="button" disabled title="Destino operacional ainda não integrado">${escapeHtml(widget.action)}</button></footer>`;
+    }
+    return `<article class="${classes}" data-dashboard-widget="${widget.id}" aria-labelledby="heading-${widget.id}">${heading}<div class="widget-body">${body}</div>${widgetControls(widget.id, layout)}</article>`;
+  }
+
+  function customizationMarkup(profile, layout) {
+    const allowed = dashboardService.authorizedCatalog(currentPermissions(profile));
+    return `<dialog id="dashboard-customizer" aria-labelledby="customizer-title"><div class="dialog-heading"><div><span class="eyebrow">Preferência local</span><h2 id="customizer-title">Personalizar Minha Visão</h2></div><button class="btn ghost" data-action="close-customizer" aria-label="Fechar personalização">×</button></div><p>Escolha e organize apenas widgets autorizados. A preferência não amplia seu acesso.</p><div class="customizer-list">${allowed.map((widget) => {
+      const active = layout.widgets.includes(widget.id);
+      return `<div class="customizer-item"><label class="check"><input type="checkbox" data-action="dashboard-toggle" data-widget-id="${widget.id}" ${active ? 'checked' : ''}> <span><strong>${widget.id} · ${escapeHtml(widget.label)}</strong><small>${escapeHtml(widget.kind)}</small></span></label></div>`;
+    }).join('')}</div><div class="actions"><button class="btn" data-action="save-dashboard">Salvar visão</button><button class="btn secondary" data-action="reset-dashboard">Restaurar padrão</button></div><small>Armazenado neste navegador: IDs, ordem, tamanho e preset. Nenhum dado contábil, documento, token ou permissão é persistido.</small></dialog>`;
+  }
+
+  function overviewMarkup(profile) {
+    const layout = ensureDashboardLayout(profile);
+    const allowedById = new Map(dashboardService.authorizedCatalog(currentPermissions(profile)).map((widget) => [widget.id, widget]));
+    const visible = layout.widgets.filter((id) => allowedById.has(id));
+    const firstName = profile.user.displayName.split(/\s+/)[0];
+    const contextLabel = companyId === dashboardService.allAuthorizedId
+      ? 'Todas as empresas autorizadas'
+      : profile.companies.find((company) => company.id === companyId)?.name || 'Sem empresa autorizada';
+    const results = dashboardModel?.results || {};
+    const widgets = visible.map((id) => widgetMarkup(allowedById.get(id), results[id], layout)).join('');
+    return `<section class="dashboard-intro"><div><span class="eyebrow">${escapeHtml(profile.tenant.name)}</span><h1>Olá, ${escapeHtml(firstName)}. Esta é a sua visão.</h1><p>Prioridades do contexto <strong>${escapeHtml(contextLabel)}</strong>. Veja o que aconteceu e o que precisa de atenção agora.</p></div><div class="dashboard-actions"><button class="btn secondary" data-action="dashboard-refresh">Atualizar</button><button class="btn" data-action="open-customizer">Personalizar</button></div></section><div class="preset-bar dashboard-toolbar"><label>Visão<select id="dashboard-preset">${Object.keys(dashboardService.presets).map((preset) => `<option ${preset === layout.preset ? 'selected' : ''}>${escapeHtml(preset)}</option>`).join('')}</select></label><div><span class="badge intelligent">${config.dataMode === 'synthetic' ? 'BASE SINTÉTICA' : 'FONTE AUTORIZADA'}</span><small>${dashboardModel?.updatedAt ? ` ${escapeHtml(formatUpdatedAt(dashboardModel.updatedAt))}` : ' Atualização sob demanda'}</small></div></div>${dashboardEditing ? '<div class="alert info dashboard-editing" role="status"><div><strong>Modo de organização ativo</strong><p>Use os botões de cada widget ou abra Personalizar. Não é necessário arrastar.</p></div></div>' : ''}<section class="dashboard-grid" aria-label="Widgets da Minha Visão" aria-busy="${dashboardModel?.loading ? 'true' : 'false'}">${widgets || '<div class="card empty dashboard-empty"><h2>Sua visão está vazia</h2><p>Adicione um widget autorizado para acompanhar sua operação.</p><button class="btn" data-action="open-customizer">Adicionar widget</button></div>'}</section>${customizationMarkup(profile, layout)}`;
+  }
+
+  async function refreshDashboard(profile) {
+    const requestId = ++dashboardRequest;
+    const layout = ensureDashboardLayout(profile);
+    const context = dashboardContext(profile);
+    dashboardModel = {loading: true, results: {}, updatedAt: null};
+    renderShell(false);
+    const results = await dashboardService.loadSummary(layout.widgets, context);
+    if (requestId !== dashboardRequest || session.snapshot().state !== STATES.AUTHENTICATED) return;
+    dashboardModel = {loading: false, results, updatedAt: new Date().toISOString()};
+    renderShell(false);
+    setAnnouncement('Minha Visão atualizada.');
   }
 
   function placeholderMarkup(item, profile) {
@@ -107,17 +208,24 @@
     return `<div class="page-heading"><div><span class="eyebrow">Aplicativo Serdial21</span><h1>${escapeHtml(item.label)}</h1><p>Esta área será integrada em uma etapa futura.</p></div></div><section class="card empty"><h2>Disponível em próxima etapa</h2><p>Nenhuma funcionalidade operacional fictícia foi criada.</p><a class="btn secondary" href="#overview">Voltar</a></section>`;
   }
 
-  function renderShell() {
+  function renderShell(loadDashboard = true) {
     const {profile, mode} = session.snapshot();
     if (!profile || session.snapshot().state !== STATES.AUTHENTICATED) { renderLogin(); return; }
     companyId = companyId || profile.companies[0]?.id || null;
     const target = navigation.find((item) => item.id === route());
     const content = route() === 'overview' && hasPermission(currentPermissions(profile), ['company.read'])
-      ? overviewMarkup() : placeholderMarkup(target, profile);
+      ? overviewMarkup(profile) : placeholderMarkup(target, profile);
     if (!content) { session.forbid(); renderState(STATES.FORBIDDEN); return; }
     const currentCompany = profile.companies.find((company) => company.id === companyId);
-    app.innerHTML = `<div class="app-shell auth-shell"><aside class="sidebar ${drawerOpen ? 'open' : ''}" aria-label="Navegação lateral"><a class="brand-link" href="#overview"><img class="brand-image shell-logo" src="../ui/assets/brand/S21%20assinatura%20principal.png" alt="Serdial21 Contabilidade Inteligente"></a><div class="office">${escapeHtml(profile.tenant.name)}<small>${mode === 'synthetic' ? 'Contexto fictício' : 'Contexto autorizado'}</small></div><nav class="nav" aria-label="Navegação principal">${navMarkup(profile)}</nav><div class="sidebar-foot"><span>${escapeHtml(profile.user.displayName)}</span><small>${escapeHtml(profile.user.roleLabel || '')}</small><button class="btn ghost drawer-close" data-action="close-drawer">Fechar menu</button></div></aside><button class="drawer-backdrop ${drawerOpen ? 'open' : ''}" data-action="close-drawer" aria-label="Fechar navegação"></button><div class="workspace"><header class="topbar"><div class="context"><button class="btn ghost mobile-menu" data-action="open-drawer" aria-label="Abrir navegação">☰</button><div class="context-copy"><strong>${escapeHtml(currentCompany?.name || 'Sem empresa autorizada')}</strong><small>${escapeHtml(profile.tenant.name)}</small></div><label>Empresa<select id="company-context" ${profile.companies.length < 2 ? 'disabled' : ''}>${profile.companies.map((company) => `<option value="${escapeHtml(company.id)}" ${company.id === companyId ? 'selected' : ''}>${escapeHtml(company.name)}</option>`).join('')}</select></label></div><div class="topbar-actions"><span class="environment-banner">${escapeHtml(config.environmentLabel)}</span><div class="profile-menu"><button class="btn ghost profile-trigger" data-action="toggle-user-menu" aria-expanded="${userMenuOpen}" aria-controls="user-popover"><span class="avatar">${escapeHtml(initials(profile.user.displayName))}</span><span class="profile-label">${escapeHtml(profile.user.displayName)}</span></button><div class="profile-popover" id="user-popover" ${userMenuOpen ? '' : 'hidden'}><strong>${escapeHtml(profile.user.displayName)}</strong><p>${escapeHtml(profile.tenant.name)}</p><button class="btn secondary" data-action="logout">Sair do aplicativo</button></div></div></div></header><div class="mode-banner">${mode === 'synthetic' ? 'DEMONSTRAÇÃO LOCAL · identidade, empresas e conteúdo sintéticos · sem acesso à API' : `SESSÃO OIDC · ${config.dataMode === 'synthetic' ? 'conteúdo de negócio sintético' : 'contexto autorizado'}`}</div><main id="main" tabindex="-1">${content}<p class="footer-note">Serdial21 Contabilidade Inteligente · A automação prepara. O profissional decide.</p></main></div></div>`;
+    const contextName = companyId === dashboardService.allAuthorizedId
+      ? 'Todas as empresas autorizadas'
+      : currentCompany?.name || 'Sem empresa autorizada';
+    const allOption = profile.companies.length > 1
+      ? `<option value="${dashboardService.allAuthorizedId}" ${companyId === dashboardService.allAuthorizedId ? 'selected' : ''}>Todas as empresas autorizadas</option>`
+      : '';
+    app.innerHTML = `<div class="app-shell auth-shell"><aside class="sidebar ${drawerOpen ? 'open' : ''}" aria-label="Navegação lateral"><a class="brand-link" href="#overview"><img class="brand-image shell-logo" src="../ui/assets/brand/S21%20assinatura%20principal.png" alt="Serdial21 Contabilidade Inteligente"></a><div class="office">${escapeHtml(profile.tenant.name)}<small>${mode === 'synthetic' ? 'Contexto fictício' : 'Contexto autorizado'}</small></div><nav class="nav" aria-label="Navegação principal">${navMarkup(profile)}</nav><div class="sidebar-foot"><span>${escapeHtml(profile.user.displayName)}</span><small>${escapeHtml(profile.user.roleLabel || '')}</small><button class="btn ghost drawer-close" data-action="close-drawer">Fechar menu</button></div></aside><button class="drawer-backdrop ${drawerOpen ? 'open' : ''}" data-action="close-drawer" aria-label="Fechar navegação"></button><div class="workspace"><header class="topbar"><div class="context"><button class="btn ghost mobile-menu" data-action="open-drawer" aria-label="Abrir navegação">☰</button><div class="context-copy"><strong>${escapeHtml(contextName)}</strong><small>${escapeHtml(profile.tenant.name)}</small></div><label>Empresa<select id="company-context" ${profile.companies.length < 2 ? 'disabled' : ''}>${allOption}${profile.companies.map((company) => `<option value="${escapeHtml(company.id)}" ${company.id === companyId ? 'selected' : ''}>${escapeHtml(company.name)}</option>`).join('')}</select></label></div><div class="topbar-actions"><span class="environment-banner">${escapeHtml(config.environmentLabel)}</span><div class="profile-menu"><button class="btn ghost profile-trigger" data-action="toggle-user-menu" aria-expanded="${userMenuOpen}" aria-controls="user-popover"><span class="avatar">${escapeHtml(initials(profile.user.displayName))}</span><span class="profile-label">${escapeHtml(profile.user.displayName)}</span></button><div class="profile-popover" id="user-popover" ${userMenuOpen ? '' : 'hidden'}><strong>${escapeHtml(profile.user.displayName)}</strong><p>${escapeHtml(profile.tenant.name)}</p><button class="btn secondary" data-action="logout">Sair do aplicativo</button></div></div></div></header><div class="mode-banner">${mode === 'synthetic' ? 'DEMONSTRAÇÃO LOCAL · identidade, empresas e conteúdo sintéticos · sem acesso à API' : `SESSÃO OIDC · ${config.dataMode === 'synthetic' ? 'conteúdo de negócio sintético' : 'contexto autorizado'}`}</div><main id="main" tabindex="-1">${content}<p class="footer-note">Serdial21 Contabilidade Inteligente · A automação prepara. O profissional decide.</p></main></div></div>`;
     app.setAttribute('aria-busy', 'false');
+    if (loadDashboard && route() === 'overview') refreshDashboard(profile);
   }
 
   async function bootstrapAuthenticated(accessToken, returnTo = '#overview') {
@@ -151,8 +259,70 @@
 
   app.addEventListener('click', async (event) => {
     const action = event.target.closest('[data-action]')?.dataset.action;
+    const actionElement = event.target.closest('[data-action]');
+    const widgetId = actionElement?.dataset.widgetId;
     const routeLink = event.target.closest('[data-route]');
     if (routeLink?.getAttribute('aria-disabled') === 'true') { event.preventDefault(); setAnnouncement('Disponível em próxima etapa.'); return; }
+    if (action === 'open-customizer') {
+      dashboardEditing = true;
+      renderShell(false);
+      document.querySelector('#dashboard-customizer')?.showModal();
+      return;
+    }
+    if (action === 'close-customizer') {
+      document.querySelector('#dashboard-customizer')?.close();
+      return;
+    }
+    if (action === 'dashboard-refresh') {
+      const profile = session.snapshot().profile;
+      if (profile) refreshDashboard(profile);
+      return;
+    }
+    if (action === 'dashboard-toggle' && widgetId) {
+      const widgets = [...dashboardLayout.widgets];
+      if (actionElement.checked && !widgets.includes(widgetId)) widgets.push(widgetId);
+      if (!actionElement.checked && widgets.includes(widgetId)) widgets.splice(widgets.indexOf(widgetId), 1);
+      dashboardLayout = dashboardService.sanitizePreferences({...dashboardLayout, widgets}, currentPermissions(session.snapshot().profile));
+      return;
+    }
+    if (action === 'dashboard-move' && widgetId) {
+      const widgets = [...dashboardLayout.widgets];
+      const index = widgets.indexOf(widgetId);
+      const target = index + (actionElement.dataset.direction === 'up' ? -1 : 1);
+      if (index >= 0 && target >= 0 && target < widgets.length) [widgets[index], widgets[target]] = [widgets[target], widgets[index]];
+      dashboardLayout = dashboardService.sanitizePreferences({...dashboardLayout, widgets}, currentPermissions(session.snapshot().profile));
+      renderShell(false);
+      return;
+    }
+    if (action === 'dashboard-resize' && widgetId) {
+      const wide = new Set(dashboardLayout.wide);
+      wide.has(widgetId) ? wide.delete(widgetId) : wide.add(widgetId);
+      dashboardLayout = dashboardService.sanitizePreferences({...dashboardLayout, wide: [...wide]}, currentPermissions(session.snapshot().profile));
+      renderShell(false);
+      return;
+    }
+    if (action === 'dashboard-remove' && widgetId) {
+      dashboardLayout = dashboardService.sanitizePreferences({...dashboardLayout, widgets: dashboardLayout.widgets.filter((id) => id !== widgetId)}, currentPermissions(session.snapshot().profile));
+      renderShell(false);
+      return;
+    }
+    if (action === 'save-dashboard') {
+      dashboardLayout = dashboardService.savePreferences(dashboardLayout, currentPermissions(session.snapshot().profile));
+      dashboardEditing = false;
+      document.querySelector('#dashboard-customizer')?.close();
+      refreshDashboard(session.snapshot().profile);
+      setAnnouncement('Preferência da Minha Visão salva neste navegador.');
+      return;
+    }
+    if (action === 'reset-dashboard') {
+      dashboardService.clearPreferences();
+      dashboardLayout = dashboardService.defaultLayout(currentPermissions(session.snapshot().profile));
+      dashboardEditing = false;
+      document.querySelector('#dashboard-customizer')?.close();
+      refreshDashboard(session.snapshot().profile);
+      setAnnouncement('Minha Visão restaurada ao padrão autorizado.');
+      return;
+    }
     if (action === 'begin-login') {
       session.authenticating(); renderLogin();
       try { await oidcClient.beginLogin(`#${route()}`); }
@@ -161,7 +331,7 @@
       session.startSyntheticWorkspace(root.S21SyntheticProvider.loadProfile()); companyId = null; location.hash = 'overview'; renderShell();
     } else if (action === 'logout') {
       const wasOidc = session.snapshot().mode === 'oidc';
-      session.logout(); userMenuOpen = false; companyId = null;
+      session.logout(); userMenuOpen = false; companyId = null; dashboardLayout = null; dashboardModel = null; dashboardRequest += 1;
       history.replaceState(null, '', location.pathname);
       if (wasOidc) await oidcClient.logout();
       renderLogin('A sessão do aplicativo foi encerrada.');
@@ -175,7 +345,17 @@
   });
 
   app.addEventListener('change', (event) => {
-    if (event.target.id === 'company-context') { companyId = event.target.value; location.hash = 'overview'; renderShell(); setAnnouncement('Contexto de empresa alterado.'); }
+    if (event.target.id === 'company-context') {
+      dashboardRequest += 1; dashboardModel = null; dashboardLayout = null;
+      companyId = event.target.value; location.hash = 'overview'; renderShell();
+      setAnnouncement('Contexto de empresa alterado. Dados anteriores descartados.');
+    }
+    if (event.target.id === 'dashboard-preset') {
+      dashboardLayout = dashboardService.defaultLayout(currentPermissions(session.snapshot().profile), event.target.value);
+      dashboardLayout = dashboardService.savePreferences(dashboardLayout, currentPermissions(session.snapshot().profile));
+      refreshDashboard(session.snapshot().profile);
+      setAnnouncement(`${event.target.value} aplicada.`);
+    }
   });
 
   async function boot() {

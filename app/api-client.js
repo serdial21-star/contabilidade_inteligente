@@ -29,6 +29,9 @@
       request,
       currentApplication: () => request('/identity/me'),
       identityContext: (companyId) => request(`/identity/context?company_id=${encodeURIComponent(companyId)}`),
+      dashboardReviews: (companyId) => request(`/operations/companies/${encodeURIComponent(companyId)}/reviews?limit=50`),
+      dashboardExceptions: (companyId) => request(`/operations/companies/${encodeURIComponent(companyId)}/exceptions?limit=50`),
+      dashboardActivity: (companyId) => request(`/operations/companies/${encodeURIComponent(companyId)}/audit-events?limit=10`),
     });
   }
   root.S21ApiClient = Object.freeze({ApiError, createApiClient});

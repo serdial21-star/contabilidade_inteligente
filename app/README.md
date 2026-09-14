@@ -1,14 +1,17 @@
 # Aplicativo web
 
-A entrada atual é [index.html](index.html), fundação fechada na Phase 04B para o shell autenticado. Abra-a diretamente ou por servidor estático local. A configuração versionada habilita explicitamente o modo sintético; não autentica nem chama a API. O cliente OIDC Authorization Code + PKCE e o bootstrap por `/api/v1/identity/me` estão implementados, mas o provedor e seus valores públicos permanecem pendentes de homologação. Consulte [AUTH_FRONTEND_INTEGRATION](../docs/AUTH_FRONTEND_INTEGRATION.md) e [OIDC_CONFIGURATION](../docs/OIDC_CONFIGURATION.md).
+A entrada atual é [index.html](index.html), com o shell autenticado da Phase 04B e a Minha Visão funcional da Phase 05. Abra-a por servidor estático local. A configuração versionada habilita explicitamente o modo sintético; não autentica nem chama a API. O cliente OIDC Authorization Code + PKCE e o bootstrap por `/api/v1/identity/me` estão implementados, mas o provedor e seus valores públicos permanecem pendentes de homologação. Consulte [MY_VIEW_SPEC](../docs/MY_VIEW_SPEC.md), [AUTH_FRONTEND_INTEGRATION](../docs/AUTH_FRONTEND_INTEGRATION.md) e [OIDC_CONFIGURATION](../docs/OIDC_CONFIGURATION.md).
 
-Arquitetura nativa: `config.js` (configuração pública), `core.js` (sessão), `oidc-client.js` (OIDC/PKCE), `api-client.js` (rede centralizada), `mock-provider.js` (fonte sintética) e `app.js` (bootstrap/shell). Nenhuma senha é recebida. O access token permanece somente em memória; `sessionStorage` guarda apenas state/verifier PKCE efêmeros e os remove no callback.
+Arquitetura nativa: `config.js` (configuração pública), `core.js` (sessão), `oidc-client.js` (OIDC/PKCE), `api-client.js` (rede centralizada), `mock-provider.js` (fonte sintética), `dashboard-service.js` (catálogo, providers e preferências seguras) e `app.js` (bootstrap/shell). Nenhuma senha é recebida. O access token permanece somente em memória; `sessionStorage` guarda apenas state/verifier PKCE efêmeros e os remove no callback. `localStorage` contém somente preset, IDs, ordem e tamanho de widgets, sempre revalidados contra a permissão atual.
 
 Testes focados:
 
 ```text
 node --test app/tests/shell-smoke.cjs
+node --test app/tests/dashboard-smoke.cjs
 ```
+
+No modo sintético, use **Abrir demonstração sintética**. A Minha Visão permite alternar entre as empresas fictícias autorizadas, selecionar `Todas as empresas autorizadas`, aplicar cinco presets, atualizar sob demanda e personalizar widgets. Destinos de módulos ainda não integrados permanecem desabilitados.
 
 ## Protótipo preservado da Phase 02
 

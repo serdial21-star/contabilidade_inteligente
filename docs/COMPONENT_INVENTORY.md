@@ -1,5 +1,18 @@
 # Component Inventory
 
+## Entrega da Phase 05
+
+| COMPONENT | PURPOSE | VARIANTS | STATUS | USED_IN | ACCESSIBILITY NOTES |
+| --- | --- | --- | --- | --- | --- |
+| DashboardService | Centralizar catálogo, providers, estados e preferências | Synthetic / future API | READY | Minha Visão | Autoriza antes de consultar; falha isolada |
+| MetricWidget | Resumir volume com significado explícito | Loading/ready/empty/error/unavailable | READY | W001/W002/W003/W005 | Heading próprio, valor e contexto textual |
+| ListWidget | Mostrar até cinco prioridades | Lista / timeline / table preview | READY | W004/W007/W008/W009/W010 | Lista semântica, texto além de cor |
+| StatusWidget | Mostrar atenção ou ausência contextual | Ready/empty/error | READY | W006 | Linguagem oficial e permissão de aprovação |
+| DashboardCustomizer | Adicionar, remover, mover, ampliar e restaurar | Dialog + controles por widget | READY | Minha Visão | Teclado; nenhuma dependência de drag |
+| CompanyDashboardContext | Alternar empresa ou todas autorizadas | Individual / interseção autorizada | READY | Topbar + dashboard | Sem entrada arbitrária de ID; estado anterior descartado |
+
+Os componentes históricos abaixo permanecem como inventário da foundation da Phase 02.
+
 READY = fundação de apresentação implementada; PROTOTYPE = comportamento local demonstrativo; PLANNED = contrato/integração futura. Não significa prontidão de produção. Implementação central em `app/foundation.js`, CSS em `ui/foundation.css`, tokens em `ui/tokens.css`; mocks em `app/mocks.js`.
 
 | COMPONENT | PURPOSE | VARIANTS | STATUS | USED_IN | ACCESSIBILITY NOTES |

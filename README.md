@@ -16,6 +16,7 @@ Esta primeira fatia executável contém:
   versões DRAFT/REVIEW/PUBLISHED;
 
 - aplicação FastAPI com fábrica de aplicação;
+- Minha Visão operacional no shell web, com dez widgets permission-aware, cinco presets, contexto de empresas autorizadas e preferências locais seguras;
 - configurações tipadas por variáveis de ambiente;
 - endpoint de vivacidade;
 - endpoint de prontidão do banco sem exposição de credenciais;
@@ -85,6 +86,8 @@ DATABASE_URL no arquivo .env antes de executar:
 - [Baseline de productização — Phase 01, inventário, arquitetura, roadmap e gates](docs/PRODUCT_RELEASE_BASELINE.md)
 - [Site comercial — Phase 03, especificação e gates de pré-publicação](docs/MARKETING_SITE_SPEC.md)
 - [Shell do aplicativo — Phase 04, autenticação, sessão e navegação](docs/APP_SHELL_SPEC.md)
+- [Minha Visão — Phase 05, catálogo, estados, personalização e segurança](docs/MY_VIEW_SPEC.md)
+- [Mapa de fontes dos widgets](docs/DASHBOARD_DATA_MAP.md)
 - [Configuração OIDC do cliente web — contrato público sem segredos](docs/OIDC_CONFIGURATION.md)
 - [Instruções permanentes](AGENTS.md)
 - [Baseline técnico](docs/TECHNICAL_BASELINE.md)
