@@ -43,6 +43,7 @@ class IdentityFixture:
     tenant_a: UUID
     tenant_b: UUID
     company_a: UUID
+    company_unassigned: UUID
     company_b: UUID
     actor_id: UUID
     actor_membership_id: UUID
@@ -98,7 +99,9 @@ def identity() -> IdentityFixture:
     assert app.state.database.session_factory is not None
     Base.metadata.create_all(app.state.database.engine)
 
-    tenant_a, tenant_b, company_a, company_b = (uuid4() for _ in range(4))
+    tenant_a, tenant_b, company_a, company_unassigned, company_b = (
+        uuid4() for _ in range(5)
+    )
     actor_id, actor_membership_id = uuid4(), uuid4()
     admin_role_id, target_role_id = uuid4(), uuid4()
     identity_permission_id, read_permission_id = uuid4(), uuid4()
@@ -118,6 +121,7 @@ def identity() -> IdentityFixture:
             session.add_all([
                 TenantMembershipModel(id=actor_membership_id, tenant_id=tenant_a, user_id=actor_id, status='active', relationship_type='employee', valid_from=NOW - timedelta(days=1), revision=1),
                 CompanyModel(id=company_a, tenant_id=tenant_a, legal_name='Company A', tax_identifier='10000000000001', timezone='America/Sao_Paulo', currency_code='BRL', status='active', valid_from=NOW - timedelta(days=1)),
+                CompanyModel(id=company_unassigned, tenant_id=tenant_a, legal_name='Company Without Access', tax_identifier='10000000000002', timezone='America/Sao_Paulo', currency_code='BRL', status='active', valid_from=NOW - timedelta(days=1)),
                 CompanyModel(id=company_b, tenant_id=tenant_b, legal_name='Company B', tax_identifier='20000000000001', timezone='America/Sao_Paulo', currency_code='BRL', status='active', valid_from=NOW - timedelta(days=1)),
                 RoleModel(id=admin_role_id, tenant_id=tenant_a, name='identity-admin', is_active=True),
                 RoleModel(id=target_role_id, tenant_id=tenant_a, name='company-reader', is_active=True),
@@ -131,7 +135,7 @@ def identity() -> IdentityFixture:
             session.flush()
 
     fixture = IdentityFixture(
-        app, tenant_a, tenant_b, company_a, company_b, actor_id,
+        app, tenant_a, tenant_b, company_a, company_unassigned, company_b, actor_id,
         actor_membership_id, target_role_id, private_key,
     )
     try:
@@ -211,6 +215,88 @@ def test_invalid_and_expired_tokens_have_same_safe_response(identity: IdentityFi
     untrusted_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
     invalid = client.get('/api/v1/identity/context', headers=_headers(identity.token(signing_key=untrusted_key)), params={'company_id': str(identity.company_a)})
     expired = client.get('/api/v1/identity/context', headers=_headers(identity.token(expired=True)), params={'company_id': str(identity.company_a)})
+    assert invalid.status_code == expired.status_code == 401
+    assert invalid.json() == expired.json() == {'detail': 'authentication failed'}
+
+
+def test_current_application_is_derived_from_authenticated_principal(
+    identity: IdentityFixture,
+) -> None:
+    client = TestClient(identity.app)
+    target_user_id, target_token = _onboard(client, identity)
+
+    response = client.get('/api/v1/identity/me', headers=_headers(target_token))
+
+    assert response.status_code == 200
+    assert response.json() == {
+        'user': {'id': str(target_user_id), 'display_name': 'Target User'},
+        'tenant': {'id': str(identity.tenant_a), 'display_name': 'Tenant A'},
+        'companies': [{
+            'id': str(identity.company_a),
+            'display_name': 'Company A',
+            'permissions': ['company.read'],
+        }],
+        'permissions': [],
+    }
+
+
+def test_current_application_ignores_untrusted_scope_and_filters_companies(
+    identity: IdentityFixture,
+) -> None:
+    client = TestClient(identity.app)
+    _, target_token = _onboard(client, identity)
+
+    response = client.get(
+        '/api/v1/identity/me',
+        headers=_headers(target_token),
+        params={
+            'tenant_id': str(identity.tenant_b),
+            'company_id': str(identity.company_unassigned),
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.json()['tenant']['id'] == str(identity.tenant_a)
+    assert [company['id'] for company in response.json()['companies']] == [
+        str(identity.company_a),
+    ]
+
+
+def test_current_application_denies_wrong_tenant_and_disabled_user(
+    identity: IdentityFixture,
+) -> None:
+    client = TestClient(identity.app)
+    target_user_id, target_token = _onboard(client, identity)
+    wrong_tenant = client.get(
+        '/api/v1/identity/me',
+        headers=_headers(identity.token(subject='target-subject', tenant_id=identity.tenant_b)),
+    )
+    assert wrong_tenant.status_code == 403
+    assert wrong_tenant.json() == {'detail': 'access denied'}
+
+    assert identity.app.state.database.session_factory is not None
+    with session_scope(identity.app.state.database.session_factory) as session:
+        with audit_scope(session, AuditContext(
+            correlation_id=uuid4(), origin=AuditOrigin.AUTOMATION,
+            actor_id=identity.actor_id, reason='disable current user test',
+        )):
+            user = session.get(UserModel, target_user_id)
+            assert user is not None
+            user.is_active = False
+            session.flush()
+    disabled = client.get('/api/v1/identity/me', headers=_headers(target_token))
+    assert disabled.status_code == 403
+    assert disabled.json() == {'detail': 'access denied'}
+
+
+def test_current_application_rejects_invalid_and_expired_tokens(
+    identity: IdentityFixture,
+) -> None:
+    client = TestClient(identity.app)
+    invalid = client.get('/api/v1/identity/me', headers=_headers('not-a-jwt'))
+    expired = client.get(
+        '/api/v1/identity/me', headers=_headers(identity.token(expired=True)),
+    )
     assert invalid.status_code == expired.status_code == 401
     assert invalid.json() == expired.json() == {'detail': 'authentication failed'}
 

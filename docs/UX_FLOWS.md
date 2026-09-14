@@ -1,5 +1,13 @@
 # UX Flows
 
+## Atualização — Phase 04
+
+O fluxo real agora parte de `app/index.html`: `BOOTING -> UNAUTHENTICATED -> OIDC` quando a integração for homologada, ou uma demonstração sintética explicitamente não autenticada. Após sessão válida, o shell carrega usuário, contexto e permissões antes de exibir conteúdo. `401 -> SESSION_EXPIRED -> LOGIN`; `403 -> FORBIDDEN`; `LOGOUT -> CLEAR SAFE STATE -> LOGIN`. Os contratos e gates estão em `AUTH_FRONTEND_INTEGRATION.md`. Os fluxos abaixo permanecem referência do protótipo da Phase 02.
+
+## Fechamento — Phase 04B
+
+`AUTH_MODE=OIDC` executa discovery, Authorization Code + PKCE S256, valida state/idade da transação, remove os parâmetros do callback, troca o código e chama `/api/v1/identity/me` antes de renderizar conteúdo. Configuração ausente falha fechada. `AUTH_MODE=SYNTHETIC` precisa estar declarado e exibe ambiente/dados sintéticos. A troca de empresa usa apenas a lista e as permissões retornadas pelo backend. Renovação exige novo login; logout remoto e revogação global dependem do IdP homologado.
+
 Protótipo local da Phase 02; nenhuma alteração de backend. Rotas hash são páginas de apresentação, não endpoints. Mocks centralizados em `app/mocks.js`; nenhuma credencial, documento real ou ID fiscal é coletado. FRONTEND_PERMISSION_MODEL = DISPLAY_ONLY; SECURITY_AUTHORITY = BACKEND.
 
 ## Fluxos navegáveis

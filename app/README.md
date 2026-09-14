@@ -1,6 +1,18 @@
-# Protótipos da Phase 02
+# Aplicativo web
 
-Abra [prototype.html](prototype.html) diretamente no navegador. Não requer build, servidor, instalação, credenciais ou dados reais. A entrada anterior `index.html` e seu `dashboard.js` foram preservados como prévia histórica.
+A entrada atual é [index.html](index.html), fundação fechada na Phase 04B para o shell autenticado. Abra-a diretamente ou por servidor estático local. A configuração versionada habilita explicitamente o modo sintético; não autentica nem chama a API. O cliente OIDC Authorization Code + PKCE e o bootstrap por `/api/v1/identity/me` estão implementados, mas o provedor e seus valores públicos permanecem pendentes de homologação. Consulte [AUTH_FRONTEND_INTEGRATION](../docs/AUTH_FRONTEND_INTEGRATION.md) e [OIDC_CONFIGURATION](../docs/OIDC_CONFIGURATION.md).
+
+Arquitetura nativa: `config.js` (configuração pública), `core.js` (sessão), `oidc-client.js` (OIDC/PKCE), `api-client.js` (rede centralizada), `mock-provider.js` (fonte sintética) e `app.js` (bootstrap/shell). Nenhuma senha é recebida. O access token permanece somente em memória; `sessionStorage` guarda apenas state/verifier PKCE efêmeros e os remove no callback.
+
+Testes focados:
+
+```text
+node --test app/tests/shell-smoke.cjs
+```
+
+## Protótipo preservado da Phase 02
+
+Abra [prototype.html](prototype.html) diretamente no navegador. Não requer build, servidor, instalação, credenciais ou dados reais. O arquivo `dashboard.js` permanece como parte da prévia histórica anterior.
 
 | Tela | Endereço local |
 | --- | --- |

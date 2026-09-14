@@ -38,6 +38,23 @@ class AuthorizedContext:
     authorized_at: datetime
 
 
+@dataclass(frozen=True, slots=True)
+class AuthorizedCompanyProjection:
+    company_id: UUID
+    display_name: str
+    permissions: tuple[PermissionCode, ...]
+
+
+@dataclass(frozen=True, slots=True)
+class ApplicationAccessProjection:
+    tenant_id: UUID
+    user_id: UUID
+    membership_id: UUID
+    tenant_permissions: tuple[PermissionCode, ...]
+    companies: tuple[AuthorizedCompanyProjection, ...]
+    authorized_at: datetime
+
+
 class AuthorizationService:
     '''Revalida identidade, membership, empresa, acesso e permissão.'''
 
@@ -51,20 +68,10 @@ class AuthorizationService:
         at: datetime | None = None,
         role_name: str | None = None,
     ) -> AuthorizedContext:
-        checked_at = at or datetime.now(UTC)
-        if checked_at.tzinfo is None or checked_at.utcoffset() is None:
-            raise ValueError('instante de autorização deve possuir timezone')
-
-        if not self._repository.is_user_active(request.user_id):
-            self._deny('inactive_user')
-
-        membership_id = self._repository.find_active_membership(
-            request.tenant_id,
-            request.user_id,
-            checked_at,
+        checked_at = self._checked_at(at)
+        membership_id = self._require_membership(
+            request.tenant_id, request.user_id, checked_at,
         )
-        if membership_id is None:
-            self._deny('membership_unavailable')
 
         if request.company_id is not None:
             if not self._repository.company_belongs_to_tenant(
@@ -103,6 +110,65 @@ class AuthorizationService:
             permission=request.permission,
             authorized_at=checked_at,
         )
+
+    def project_application_access(
+        self,
+        tenant_id: UUID,
+        user_id: UUID,
+        *,
+        at: datetime | None = None,
+    ) -> ApplicationAccessProjection:
+        '''Projeta somente acessos vigentes do principal autenticado.'''
+
+        checked_at = self._checked_at(at)
+        membership_id = self._require_membership(tenant_id, user_id, checked_at)
+        tenant_permissions = tuple(
+            PermissionCode(code) for code in self._repository.list_permissions(
+                tenant_id, membership_id, None, checked_at,
+            )
+        )
+        companies = tuple(
+            AuthorizedCompanyProjection(
+                company_id=company_id,
+                display_name=display_name,
+                permissions=tuple(
+                    PermissionCode(code) for code in self._repository.list_permissions(
+                        tenant_id, membership_id, company_id, checked_at,
+                    )
+                ),
+            )
+            for company_id, display_name in self._repository.list_active_companies(
+                tenant_id, membership_id, checked_at,
+            )
+        )
+        return ApplicationAccessProjection(
+            tenant_id=tenant_id,
+            user_id=user_id,
+            membership_id=membership_id,
+            tenant_permissions=tenant_permissions,
+            companies=companies,
+            authorized_at=checked_at,
+        )
+
+    @staticmethod
+    def _checked_at(at: datetime | None) -> datetime:
+        checked_at = at or datetime.now(UTC)
+        if checked_at.tzinfo is None or checked_at.utcoffset() is None:
+            raise ValueError('instante de autorização deve possuir timezone')
+        return checked_at
+
+    def _require_membership(
+        self, tenant_id: UUID, user_id: UUID, checked_at: datetime,
+    ) -> UUID:
+        if not self._repository.is_user_active(user_id):
+            self._deny('inactive_user')
+        membership_id = self._repository.find_active_membership(
+            tenant_id, user_id, checked_at,
+        )
+        if membership_id is None:
+            self._deny('membership_unavailable')
+        assert membership_id is not None
+        return membership_id
 
     @staticmethod
     def _deny(reason: str) -> None:

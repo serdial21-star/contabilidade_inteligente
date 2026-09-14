@@ -11,6 +11,7 @@ from serdial21.modules.access_control.adapters.outbound.persistence.models impor
     CompanyModel,
     RoleBindingModel,
     RoleModel,
+    TenantModel,
     TenantMembershipModel,
     UserModel,
 )
@@ -26,6 +27,22 @@ class SqlAlchemyIdentityDirectory:
             select(UserModel.id).where(
                 UserModel.provider_issuer == issuer,
                 UserModel.provider_subject == subject,
+            ).limit(1)
+        )
+
+    def find_user_display_name(self, user_id: UUID) -> str | None:
+        return self._session.scalar(
+            select(UserModel.display_name).where(
+                UserModel.id == user_id,
+                UserModel.is_active.is_(True),
+            ).limit(1)
+        )
+
+    def find_active_tenant_name(self, tenant_id: UUID) -> str | None:
+        return self._session.scalar(
+            select(TenantModel.name).where(
+                TenantModel.id == tenant_id,
+                TenantModel.status == 'active',
             ).limit(1)
         )
 

@@ -26,7 +26,10 @@ from serdial21.modules.identity.adapters.outbound.persistence.repositories impor
     SqlAlchemyIdentityDirectory,
     SqlAlchemyIdentityLifecycleRepository,
 )
-from serdial21.modules.identity.application.services.authentication import IdentityContextService
+from serdial21.modules.identity.application.services.authentication import (
+    CurrentApplicationContextService,
+    IdentityContextService,
+)
 from serdial21.modules.identity.application.services.lifecycle import (
     IdentityLifecycleConflictError,
     IdentityLifecycleDeniedError,
@@ -45,6 +48,29 @@ class IdentityContextResponse(BaseModel):
     membership_id: UUID
     company_id: UUID
     permission: str
+
+
+class CurrentUserResponse(BaseModel):
+    id: UUID
+    display_name: str
+
+
+class CurrentTenantResponse(BaseModel):
+    id: UUID
+    display_name: str
+
+
+class CurrentCompanyResponse(BaseModel):
+    id: UUID
+    display_name: str
+    permissions: list[str]
+
+
+class CurrentApplicationResponse(BaseModel):
+    user: CurrentUserResponse
+    tenant: CurrentTenantResponse
+    companies: list[CurrentCompanyResponse]
+    permissions: list[str]
 
 
 class OnboardingRequest(BaseModel):
@@ -80,6 +106,39 @@ class OffboardingResponse(BaseModel):
 
 SessionDependency = Annotated[Session, Depends(get_db_session)]
 PrincipalDependency = Annotated[AuthenticatedPrincipal, Depends(get_authenticated_principal)]
+
+
+@router.get('/me', response_model=CurrentApplicationResponse)
+def current_application(
+    principal: PrincipalDependency,
+    session: SessionDependency,
+) -> CurrentApplicationResponse:
+    try:
+        current = CurrentApplicationContextService(
+            SqlAlchemyIdentityDirectory(session),
+            AuthorizationService(SqlAlchemyAuthorizationRepository(session)),
+        ).current(principal)
+    except AccessDeniedError:
+        _access_denied()
+    return CurrentApplicationResponse(
+        user=CurrentUserResponse(
+            id=current.user.id,
+            display_name=current.user.display_name,
+        ),
+        tenant=CurrentTenantResponse(
+            id=current.tenant.id,
+            display_name=current.tenant.display_name,
+        ),
+        companies=[
+            CurrentCompanyResponse(
+                id=company.id,
+                display_name=company.display_name,
+                permissions=list(company.permissions),
+            )
+            for company in current.companies
+        ],
+        permissions=list(current.permissions),
+    )
 
 
 @router.get('/context', response_model=IdentityContextResponse)

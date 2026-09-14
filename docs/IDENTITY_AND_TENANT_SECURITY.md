@@ -78,6 +78,13 @@ cross-tenant, cross-company, usuário ou vínculo revogado e permissão
 insuficiente retornam o mesmo `403 access denied`. A resposta não revela se o
 recurso, usuário, tenant ou empresa existe.
 
+`GET /api/v1/identity/me` fornece o bootstrap mínimo do aplicativo. A rota não
+aceita seletores de tenant, usuário, papel ou permissão: deriva o tenant do
+token validado, exige usuário e Membership ativos e retorna somente empresas
+com CompanyAccess vigente. Permissões tenant-wide e por empresa são resolvidas
+de RoleBinding/Permission ativos e preservam seus códigos exatos. A resposta
+expõe apenas IDs opacos e nomes de exibição necessários ao shell.
+
 ## Onboarding e offboarding
 
 As mutações exigem a nova permissão tenant-wide `identity.manage`.
@@ -125,4 +132,3 @@ CompanyAccess. A suíte de autorização preexistente continua ativa e a migrati
 - aplicar a revision 0010 no MariaDB somente após backup e ensaio no Lab;
 - definir tempos de sessão, revogação no IdP e monitoramento de falhas JWKS;
 - realizar UAT com as alçadas reais do escritório.
-

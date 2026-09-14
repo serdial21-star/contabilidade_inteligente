@@ -183,3 +183,73 @@ class SqlAlchemyAuthorizationRepository:
                 scope, RoleModel.name == role_name, RoleModel.is_active.is_(True),
             ).limit(1)
         ) is not None
+
+    def list_active_companies(
+        self, tenant_id: UUID, membership_id: UUID, at: datetime,
+    ) -> tuple[tuple[UUID, str], ...]:
+        statement = (
+            select(CompanyModel.id, CompanyModel.trade_name, CompanyModel.legal_name)
+            .distinct()
+            .join(
+                CompanyAccessModel,
+                (CompanyAccessModel.tenant_id == CompanyModel.tenant_id)
+                & (CompanyAccessModel.company_id == CompanyModel.id),
+            )
+            .where(
+                CompanyModel.tenant_id == tenant_id,
+                CompanyModel.status == ACTIVE_STATUS,
+                CompanyModel.valid_from <= at,
+                or_(CompanyModel.valid_until.is_(None), CompanyModel.valid_until > at),
+                CompanyAccessModel.tenant_id == tenant_id,
+                CompanyAccessModel.membership_id == membership_id,
+                CompanyAccessModel.status == ACTIVE_STATUS,
+                CompanyAccessModel.valid_from <= at,
+                or_(
+                    CompanyAccessModel.valid_until.is_(None),
+                    CompanyAccessModel.valid_until > at,
+                ),
+            )
+            .order_by(CompanyModel.legal_name, CompanyModel.id)
+        )
+        return tuple(
+            (company_id, trade_name or legal_name)
+            for company_id, trade_name, legal_name in self._session.execute(statement)
+        )
+
+    def list_permissions(
+        self, tenant_id: UUID, membership_id: UUID,
+        company_id: UUID | None, at: datetime,
+    ) -> tuple[str, ...]:
+        scope = RoleBindingModel.company_id.is_(None)
+        if company_id is not None:
+            scope = or_(scope, RoleBindingModel.company_id == company_id)
+        statement = (
+            select(PermissionModel.code)
+            .select_from(RoleBindingModel)
+            .join(
+                RoleModel,
+                (RoleModel.tenant_id == RoleBindingModel.tenant_id)
+                & (RoleModel.id == RoleBindingModel.role_id),
+            )
+            .join(
+                RolePermissionModel,
+                (RolePermissionModel.tenant_id == RoleModel.tenant_id)
+                & (RolePermissionModel.role_id == RoleModel.id),
+            )
+            .join(PermissionModel, PermissionModel.id == RolePermissionModel.permission_id)
+            .where(
+                RoleBindingModel.tenant_id == tenant_id,
+                RoleBindingModel.membership_id == membership_id,
+                RoleBindingModel.status == ACTIVE_STATUS,
+                RoleBindingModel.valid_from <= at,
+                or_(RoleBindingModel.valid_until.is_(None), RoleBindingModel.valid_until > at),
+                scope,
+                RoleModel.tenant_id == tenant_id,
+                RoleModel.is_active.is_(True),
+                RolePermissionModel.tenant_id == tenant_id,
+                PermissionModel.is_active.is_(True),
+            )
+            .distinct()
+            .order_by(PermissionModel.code)
+        )
+        return tuple(self._session.scalars(statement))

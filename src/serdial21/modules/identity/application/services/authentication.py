@@ -1,5 +1,6 @@
 '''Integra identidade verificada à autorização tenant-aware existente.'''
 
+from dataclasses import dataclass
 from datetime import datetime
 from uuid import UUID
 
@@ -10,7 +11,10 @@ from serdial21.modules.access_control.application.services.authorization import 
     AuthorizedContext,
 )
 from serdial21.modules.access_control.domain.permissions import PermissionCode
-from serdial21.modules.identity.application.ports.authentication import IdentityDirectory
+from serdial21.modules.identity.application.ports.authentication import (
+    ApplicationIdentityDirectory,
+    IdentityDirectory,
+)
 from serdial21.modules.identity.domain.entities import AuthenticatedPrincipal, VerifiedIdentity
 
 
@@ -51,4 +55,68 @@ class IdentityContextService:
             ),
             role_name=role_name,
             at=at,
+        )
+
+
+@dataclass(frozen=True, slots=True)
+class CurrentUser:
+    id: UUID
+    display_name: str
+
+
+@dataclass(frozen=True, slots=True)
+class CurrentTenant:
+    id: UUID
+    display_name: str
+
+
+@dataclass(frozen=True, slots=True)
+class CurrentCompany:
+    id: UUID
+    display_name: str
+    permissions: tuple[str, ...]
+
+
+@dataclass(frozen=True, slots=True)
+class CurrentApplicationContext:
+    user: CurrentUser
+    tenant: CurrentTenant
+    companies: tuple[CurrentCompany, ...]
+    permissions: tuple[str, ...]
+
+
+class CurrentApplicationContextService:
+    '''Projeção mínima derivada exclusivamente do principal autenticado.'''
+
+    def __init__(
+        self,
+        directory: ApplicationIdentityDirectory,
+        authorization: AuthorizationService,
+    ) -> None:
+        self._directory = directory
+        self._authorization = authorization
+
+    def current(self, principal: AuthenticatedPrincipal) -> CurrentApplicationContext:
+        access = self._authorization.project_application_access(
+            principal.identity.tenant_id,
+            principal.user_id,
+        )
+        display_name = self._directory.find_user_display_name(principal.user_id)
+        tenant_name = self._directory.find_active_tenant_name(access.tenant_id)
+        if display_name is None or tenant_name is None:
+            raise IdentityNotLinkedError()
+        return CurrentApplicationContext(
+            user=CurrentUser(principal.user_id, display_name),
+            tenant=CurrentTenant(access.tenant_id, tenant_name),
+            companies=tuple(
+                CurrentCompany(
+                    company.company_id,
+                    company.display_name,
+                    tuple(permission.value for permission in company.permissions),
+                )
+                for company in access.companies
+            ),
+            permissions=tuple(
+                permission.value for permission in access.tenant_permissions
+            ),
         )

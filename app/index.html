@@ -1,5 +1,32 @@
 <!doctype html>
-<html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Visão geral · Serdial21</title><link rel="stylesheet" href="../ui/design-system.css"><script src="dashboard.js" defer></script></head><body><a class="skip" href="#conteudo">Pular para o conteúdo</a><div class="shell"><aside class="sidebar"><a class="brand" href="../site/index.html"><span class="brand-mark" aria-hidden="true">S</span><span>Contabilidade<br>Inteligente<small>BY SERDIAL21</small></span></a><div><p class="nav-label">ESPAÇO DE TRABALHO</p><nav aria-label="Módulos"><button data-module="overview" aria-current="page"><span aria-hidden="true">◫</span>Visão geral</button><button data-module="portal"><span aria-hidden="true">↥</span>Portal do Cliente</button><button data-module="fiscal"><span aria-hidden="true">▤</span>Inteligência Fiscal</button><button data-module="financial"><span aria-hidden="true">⇄</span>Inteligência Financeira</button><button data-module="accounting"><span aria-hidden="true">≡</span>Inteligência Contábil</button><button data-module="governance"><span aria-hidden="true">◎</span>Governança e Segurança</button></nav></div><div class="sidebar-bottom">AMBIENTE DEMONSTRATIVO<br>Dados sintéticos. Sem sessão real.<br><a href="../site/index.html">← Voltar ao site</a></div></aside>
-<div class="workspace"><header class="topbar"><label><span class="eyebrow">Escritório Modelo / </span><select aria-label="Empresa de demonstração"><option>Empresa Exemplo · Matriz</option></select></label><div class="profile"><span class="demo-label">Setembro · 2026</span><span class="avatar" aria-hidden="true">PE</span><div>Profissional exemplo<br><small>Perfil ilustrativo · Contador</small></div></div></header><main class="dashboard" id="conteudo"><div class="page-heading"><div><span class="eyebrow">Sua operação, sob controle</span><h1 id="page-title">Visão geral</h1><p>Veja o que avançou e concentre sua atenção nas próximas decisões.</p></div><button class="button" id="receive">+ Receber documentos</button></div><p id="module-description" role="status"></p><section class="metrics" aria-label="Indicadores da demonstração"></section><section class="critical" aria-label="Pendência crítica"><div><strong>◷ Uma pendência exige sua atenção</strong><p>Uma proposta está em período bloqueado. Revise o contexto antes de qualquer decisão.</p></div><button id="show-lock">Consultar bloqueio →</button></section><div class="work-grid"><section class="card"><header class="panel-heading"><div><h2>Fila de revisão</h2><p>Da origem ao responsável. Cada decisão tem um caminho.</p></div><span class="badge amber">Controle humano</span></header><div class="filters"><input id="search" type="search" placeholder="Buscar documento ou responsável" aria-label="Buscar na fila"><select id="status" aria-label="Filtrar status"><option value="all">Todos os status</option><option value="review">Revisão humana</option><option value="approved">Aprovado</option><option value="blocked">Bloqueado</option><option value="processing">Processando</option></select></div><div class="table-wrap"><table><thead><tr><th scope="col">ORIGEM / DOCUMENTO</th><th scope="col">REGRA / PROPOSTA</th><th scope="col">SITUAÇÃO</th><th scope="col">RESPONSÁVEL</th><th scope="col">AÇÃO</th></tr></thead><tbody id="rows"></tbody></table></div><div class="table-footer" id="result-count" role="status"></div></section><aside class="card side-panel"><h2>Histórico recente</h2><div><div class="activity"><strong>Revisão concluída</strong><p>OFX-004 · Profissional exemplo</p><span class="badge green">✓ Aprovação humana</span></div><div class="activity"><strong>Propostas preparadas</strong><p>NF-e-001, NF-e-002 e OFX-003</p><span class="badge blue">◇ Sugestão automática</span></div><div class="activity"><strong>Período bloqueado</strong><p>NF-e-005 · Aprovação impedida</p><span class="badge red">⊘ Bloqueio ativo</span></div></div><div class="legend"><strong>Duas etapas. Papéis distintos.</strong><span class="badge blue">◇ Preparado automaticamente</span><p>A sugestão ainda precisa de conferência.</p><span class="badge green">✓ Aprovado por profissional</span><p>A decisão humana fica vinculada à revisão.</p></div></aside></div><p class="dashboard-note">Demonstração visual local · 6 registros fictícios · Nenhum arquivo é enviado e nenhuma decisão é persistida.</p></main></div></div>
-<dialog id="detail" aria-labelledby="detail-title"><button class="close" aria-label="Fechar detalhes">✕</button><span class="eyebrow">Histórico completo e rastreável</span><h2 id="detail-title"></h2><div id="detail-content"></div><div class="dialog-footer"><button class="button secondary close-detail">Voltar à fila</button><button class="button" disabled title="Disponível somente após integração autenticada">Aprovação indisponível na demonstração</button></div></dialog>
-<dialog id="upload" aria-labelledby="upload-title"><button class="close" aria-label="Fechar recebimento">✕</button><span class="eyebrow">Recebimento de documentos</span><h2 id="upload-title">Uma entrada segura para sua operação.</h2><p>Na integração, NF-e e OFX serão enviados à API autenticada, com validação de arquivo, empresa e permissão.</p><div class="human-note">Esta prévia usa somente documentos sintéticos. Uploads estão desabilitados até a integração e a configuração do acesso.</div><div class="dialog-footer"><button class="button secondary close-detail">Entendido</button></div></dialog></body></html>
+<html lang="pt-BR" class="foundation">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="color-scheme" content="light">
+  <meta name="robots" content="noindex,nofollow">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self'; font-src 'self'; connect-src 'self'; form-action 'none'; base-uri 'none'; object-src 'none'; frame-ancestors 'none'">
+  <title>Aplicativo · Serdial21 Contabilidade Inteligente</title>
+  <link rel="icon" href="../ui/assets/brand/S21%20logo%20simplificada.png">
+  <link rel="stylesheet" href="../ui/tokens.css">
+  <link rel="stylesheet" href="../ui/foundation.css">
+  <link rel="stylesheet" href="app-shell.css">
+  <script src="config.js" defer></script>
+  <script src="core.js" defer></script>
+  <script src="api-client.js" defer></script>
+  <script src="oidc-client.js" defer></script>
+  <script src="mock-provider.js" defer></script>
+  <script src="app.js" defer></script>
+</head>
+<body>
+  <a class="skip" href="#main">Pular para o conteúdo</a>
+  <div id="app" aria-busy="true">
+    <main id="main" class="boot-screen" tabindex="-1">
+      <img src="../ui/assets/brand/S21%20logo%20simplificada.png" alt="Serdial21">
+      <div class="loading" role="status" aria-live="polite"><span class="spinner" aria-hidden="true"></span>Inicializando ambiente seguro…</div>
+    </main>
+  </div>
+  <div id="announcer" class="sr-only" role="status" aria-live="polite"></div>
+  <noscript>Ative JavaScript para usar o aplicativo. Nenhuma credencial é processada por esta página estática.</noscript>
+</body>
+</html>

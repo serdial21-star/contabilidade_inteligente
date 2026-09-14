@@ -43,3 +43,12 @@ class AuthorizationRepository(Protocol):
         self, tenant_id: UUID, membership_id: UUID, company_id: UUID | None,
         role_name: str, at: datetime,
     ) -> bool: ...
+
+    def list_active_companies(
+        self, tenant_id: UUID, membership_id: UUID, at: datetime,
+    ) -> tuple[tuple[UUID, str], ...]: ...
+
+    def list_permissions(
+        self, tenant_id: UUID, membership_id: UUID,
+        company_id: UUID | None, at: datetime,
+    ) -> tuple[str, ...]: ...
