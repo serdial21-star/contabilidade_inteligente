@@ -66,6 +66,14 @@ Plano de evolução após as Execuções 27–36 encerradas. Somente PHASE 01 é
 - GATE: hash/revisão, segregação, alçada, imutabilidade, locks e idempotência comprovados na interface/API.
 - OUT_OF_SCOPE: novas regras padrão, IA decisora e escrituração oficial.
 
+## PHASE 09A — Integration Readiness
+
+- OBJECTIVE: definir a integração entre o Serdial21 Operacional e o Contabilidade Inteligente sem implementar conexão.
+- DEPENDENCIES: Phase 08, dossiês do Sistema A e baseline verificável do Sistema B.
+- DELIVERABLES: ownership, camada anticorrupção, contratos/eventos propostos, segurança M2M, homologação, riscos, backlog P0 e ondas.
+- GATE: `INTEGRATION: CONDITIONAL_GO`; nenhuma alteração de código, banco, workflow, credencial ou deploy.
+- OUT_OF_SCOPE: implementar Connect Hub, conectar ambientes ou usar dados reais.
+
 ## PHASE 09 — Linha da Decisão
 
 - OBJECTIVE: tornar a origem e a decisão rastreáveis visualmente.
@@ -74,13 +82,21 @@ Plano de evolução após as Execuções 27–36 encerradas. Somente PHASE 01 é
 - GATE: fidelidade aos eventos/snapshots, versões exatas, dados mínimos e testes de permissão.
 - OUT_OF_SCOPE: histórico inventado, reescrita de auditoria e inferir leitura profissional por abrir tela.
 
-## PHASE 10 — Portal do Cliente
+## PHASE 10 — Portal & Operations Integration
 
-- OBJECTIVE: canal externo simples e restrito ao cliente autorizado.
-- DEPENDENCIES: Phases 04/06; modelo de autorização do portal aprovado; Phases 11/13 antes de acesso externo.
-- DELIVERABLES: UX simplificada e contratos de envio/consulta/relacionamento no escopo autorizado.
-- GATE: isolamento e permissões próprias validados; revisão de privacidade e external exposure.
-- OUT_OF_SCOPE: replicar poderes internos ou conceder aprovação contábil ao cliente por conveniência.
+- OBJECTIVE: reutilizar o Portal/Operações do Sistema A e congelar como capacidades do Sistema B serão expostas sem criar um segundo portal.
+- DEPENDENCIES: Phases 09A/09; estabilização runtime do Sistema A e contratos dedicados propostos.
+- DELIVERABLES: journeys integradas, deep links, projeções operacionais e contratos aprovados para cliente, documento, tarefa e decisão.
+- GATE: ownership preservado, ausência de poder contábil no portal, contratos v1 e P0 de Wave 0 resolvidos.
+- OUT_OF_SCOPE: conexão de produção, duplicar portal, usar API admin/browser como M2M ou conceder aprovação contábil ao cliente.
+
+## PHASE 10A — Connect Hub MVP
+
+- OBJECTIVE: implementar, em solicitação futura própria, Waves 1–5 do Hub e conector Serdial21 em homologação.
+- DEPENDENCIES: Phase 10; contract freeze; identidade M2M; referências externas; topologia HOM isolada.
+- DELIVERABLES: client sync, document intake, processing result, task required e decision visibility, com inbox/outbox, idempotência, retry/DLQ e observabilidade.
+- GATE: E2E integralmente sintético, testes de falha e segurança, sem cross-system write e sem dados reais.
+- OUT_OF_SCOPE: produção, publicação/obrigações Wave 6, Domínio e outros conectores.
 
 ## PHASE 11 — Security Infrastructure
 

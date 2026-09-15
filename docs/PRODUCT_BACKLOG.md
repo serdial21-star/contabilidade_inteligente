@@ -45,13 +45,14 @@ STATUS: DONE (entrega desta fase), PLANNED (não iniciado), BLOCKED (depende de 
 | EPIC-007 | Financial Intelligence | OFX/CSV existentes; conciliação operacional parcial. |
 | EPIC-008 | Accounting Intelligence | Catálogo/regras/propostas/workflow existentes. |
 | EPIC-009 | Decision Line | AuditEvent/checkpoints; mapa de gaps no fluxo. |
-| EPIC-010 | Client Portal | Modelo de acesso externo ainda precisa de definição. |
+| EPIC-010 | Portal & Operations Integration | Reutiliza o portal do Sistema A; não criar segundo portal no B. |
 | EPIC-011 | Security Infrastructure | Controles locais e gates externos. |
 | EPIC-012 | Observability | Métricas locais/runbooks/ensaio de restore. |
 | EPIC-013 | Privacy & Legal | Controles internos; aprovações pendentes. |
 | EPIC-014 | Commercial Website | Prévia site/ revisável; brief comercial. |
 | EPIC-015 | Onboarding | Lifecycle de identidade existente; UX/operação comercial pendentes. |
 | EPIC-016 | Billing & SaaS Operations | Sem billing implementado; definição comercial futura. |
+| EPIC-017 | Serdial21 Connect Hub | Port canônico + conector Serdial21; sem acoplamento do core a n8n/Drive/APIs admin. |
 
 ## Stories
 
@@ -72,7 +73,7 @@ STATUS: DONE (entrega desta fase), PLANNED (não iniciado), BLOCKED (depende de 
 | PB-013 | EPIC-008 | Integrar catálogo/regras/propostas sem recriar o motor determinístico | P1 | PB-011; catálogo publicado | PLANNED | PHASE 08 |
 | PB-014 | EPIC-008 | Validar revisão/aprovação/rejeição ponta a ponta com hash, versão, alçada, segregação, locks e idempotência | P0 | PB-013; workflow/API | PLANNED | PHASE 08 |
 | PB-015 | EPIC-009 | Projetar Linha da Decisão a partir dos dados existentes, resolver gaps de DTO e preservar minimização | P1 | PB-014; PRODUCT_FLOW | PLANNED | PHASE 09 |
-| PB-016 | EPIC-010 | Definir acesso do cliente e UX simplificada de envio/consulta; implementar só o escopo aprovado | P1 | PB-006; PB-010; gates externos/jurídicos | PLANNED | PHASE 10 |
+| PB-016 | EPIC-010 | Definir jornadas e contratos para reutilizar Portal/Operações A sem conceder aprovação contábil | P1 | PB-006; PB-010; Phase 09A; gates externos/jurídicos | PLANNED | PHASE 10 |
 | PB-017 | EPIC-011 | Homologar CORS_ALLOWLIST, HTTPS_REVERSE_PROXY e HSTS | P0 | Infraestrutura autorizada; ENVIRONMENT_STRATEGY | BLOCKED | PHASE 11 |
 | PB-018 | EPIC-011 | Homologar DISTRIBUTED_RATE_LIMIT e IDP_SESSION_REVOCATION | P0 | PB-017; IdP/provedor | BLOCKED | PHASE 11 |
 | PB-019 | EPIC-012 | Entregar CENTRAL_METRICS e ALERT_TRANSPORT com ensaio de entrega | P0 | PB-017; observabilidade local | BLOCKED | PHASE 12 |
@@ -89,3 +90,21 @@ STATUS: DONE (entrega desta fase), PLANNED (não iniciado), BLOCKED (depende de 
 | PB-030 | EPIC-016 | Consolidar launch readiness e decisão formal comercial | P1 | PB-002; PB-025; PB-027–028; gates | BLOCKED | PHASE 16 |
 
 Os itens P0 não aprovam gates: exigem evidência e responsável. Dados reais e exposição externa continuam NO_GO. Domínio permanece BLOCKED_FOR_HOMOLOGATION; especificação oficial, golden files e homologação são dependências externas a levantar na janela de integrações, sem história de export fictício. Billing, IA assistente, mobile e novas regras não são implementados nesta fase.
+
+Fase 09 concluída para o piloto sintético: projeção read-only e entry points suportados. Antes de exposição, medir planos MySQL e decidir índice composto de auditoria; ação de revisão, motivo de rejeição, causalidade de locks e links W010 permanecem backlog explícito.
+
+## Atualização Phase 09A — Integration Readiness
+
+| ID | EPIC | STORY | PRIORITY | DEPENDENCY | STATUS | TARGET_PHASE |
+| --- | --- | --- | --- | --- | --- | --- |
+| PB-040 | EPIC-017 | Verificar runtime do Sistema A e congelar `/api/integrations/v1/*`, schemas e legados | P0 | acesso HOM e owner A | PLANNED | PHASE 10 / WAVE 0 |
+| PB-041 | EPIC-017 | Projetar/implementar identidade M2M, HMAC, rotação, scopes e proteção de replay | P0 | secret store; owners Security | PLANNED | PHASE 10A / WAVE 1 |
+| PB-042 | EPIC-017 | Implementar referência externa tenant-aware com correlação CNPJ e revisão de ambiguidade | P0 | contract freeze | PLANNED | PHASE 10A / WAVE 2 |
+| PB-043 | EPIC-017 | Implementar outbox/inbox, idempotência por hash, retry, DLQ e reconciliação | P0 | PB-041 | PLANNED | PHASE 10A / WAVE 1 |
+| PB-044 | EPIC-017 | Contratar e validar pull documental por URL curta, quarentena e evidência imutável | P0 | PB-041–043; storage HOM | PLANNED | PHASE 10A / WAVE 3 |
+| PB-045 | EPIC-017 | Corrigir persistência do Kanban A e integrar `TASK_REQUIRED` sem autoridade contábil | P0 | owner A; PB-043–044 | PLANNED | PHASE 10A / WAVE 4 |
+| PB-046 | EPIC-017 | Entregar callbacks minimizados de decisão e E2E sintético A HOM↔Hub HOM↔B HOM | P0 | PB-040–045 | PLANNED | PHASE 10A / WAVE 5 |
+| PB-047 | EPIC-017 | Definir workflow cross-system de privacidade, retenção, legal hold e DSR | P0 | Privacy/Legal | BLOCKED | PHASE 13, antes de real data |
+| PB-048 | EPIC-017 | Criar publicação documental/obrigações após upload admin→cliente seguro no A | P1 | PB-046; privacy/legal | PLANNED | FUTURE / WAVE 6 |
+
+`EPIC-017 — Serdial21 Connect Hub` é um conector desacoplado do core. Phase 10 passa a **Portal & Operations Integration**; Phase 10A é a implementação futura do Hub em homologação. Nenhuma história foi iniciada pela Phase 09A.
