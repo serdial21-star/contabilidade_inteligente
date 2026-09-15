@@ -125,10 +125,335 @@ class AuditResponse(BaseModel):
     integrity_valid: bool
 
 
+class CompanyResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: UUID
+    legal_name: str
+    trade_name: str | None
+    tax_identifier: str
+    status: str
+    timezone: str
+    currency_code: str
+
+
+class DocumentResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: UUID
+    company_id: UUID
+    batch_id: UUID
+    filename: str
+    media_type: str
+    size_bytes: int
+    source: str
+    channel: str
+    receipt_result: str
+    processing_status: str
+    error_code: str | None
+    received_at: datetime
+
+
+class DocumentPageResponse(BaseModel):
+    items: list[DocumentResponse]
+    total: int
+    offset: int
+    limit: int
+
+
+class DocumentDetailResponse(BaseModel):
+    document: DocumentResponse
+    issues: list[ExceptionResponse]
+    fiscal_document_id: UUID | None
+    bank_statement_id: UUID | None
+
+
+class DocumentSummaryResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    received: int
+    processed: int
+    attention_required: int
+
+
+class FiscalDocumentResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: UUID
+    company_id: UUID
+    access_key: str
+    model: str
+    schema_version: str
+    series: str | None
+    document_number: str | None
+    operation_nature: str | None
+    issuer_tax_id: str | None
+    issuer_name: str | None
+    recipient_tax_id: str | None
+    recipient_name: str | None
+    issued_at: datetime | None
+    movement_at: datetime | None
+    products_total: Decimal | None
+    freight_total: Decimal | None
+    insurance_total: Decimal | None
+    discount_total: Decimal | None
+    other_total: Decimal | None
+    tax_total: Decimal | None
+    invoice_total: Decimal | None
+    observed_status: str
+    protocol_status_code: str | None
+    protocol_status_reason: str | None
+    created_at: datetime
+    document_receipt_id: UUID | None
+
+
+class FiscalItemResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: UUID
+    sequence: int
+    product_code: str | None
+    description: str | None
+    ncm: str | None
+    cfop: str | None
+    commercial_unit: str | None
+    quantity: Decimal | None
+    unit_value: Decimal | None
+    gross_total: Decimal | None
+    discount_total: Decimal | None
+    other_total: Decimal | None
+    included_in_total: bool | None
+
+
+class FiscalPageResponse(BaseModel):
+    items: list[FiscalDocumentResponse]
+    total: int
+    offset: int
+    limit: int
+
+
+class TaxTotalResponse(BaseModel):
+    tax_type: str
+    amount: Decimal
+
+
+class FiscalDetailResponse(BaseModel):
+    document: FiscalDocumentResponse
+    items: list[FiscalItemResponse]
+    item_count: int
+    tax_totals: list[TaxTotalResponse]
+
+
+class BankStatementResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: UUID
+    company_id: UUID
+    bank_id: str | None
+    branch_masked: str | None
+    account_masked: str
+    account_type: str | None
+    start_date: date | None
+    end_date: date | None
+    opening_balance: Decimal | None
+    closing_balance: Decimal | None
+    currency_code: str | None
+    sign_policy: str
+    imported_at: datetime
+    document_receipt_id: UUID | None
+
+
+class BankStatementPageResponse(BaseModel):
+    items: list[BankStatementResponse]
+    total: int
+    offset: int
+    limit: int
+
+
+class BankTransactionResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: UUID
+    bank_statement_id: UUID
+    transaction_date: date | None
+    posted_date: date | None
+    amount: Decimal
+    direction: str
+    description: str | None
+    document_number: str | None
+    identity_kind: str
+
+
+class BankTransactionPageResponse(BaseModel):
+    items: list[BankTransactionResponse]
+    total: int
+    offset: int
+    limit: int
+
+
+class BankStatementDetailResponse(BaseModel):
+    statement: BankStatementResponse
+    transactions: BankTransactionPageResponse
+
+
 SessionDependency = Annotated[Session, Depends(get_db_session)]
 PrincipalDependency = Annotated[AuthenticatedPrincipal, Depends(get_authenticated_principal)]
 IdempotencyKey = Annotated[str, Header(alias='Idempotency-Key', min_length=1, max_length=128)]
 Filename = Annotated[str, Header(alias='X-Filename', min_length=1, max_length=255)]
+
+
+@router.get('', response_model=CompanyResponse)
+def company_detail(
+    company_id: UUID, request: Request, principal: PrincipalDependency,
+    session: SessionDependency,
+) -> CompanyResponse:
+    try:
+        item = create_operational_runtime(session, request.app.state.settings).company(
+            principal.identity.tenant_id, company_id, principal.user_id,
+        )
+    except Exception as error:
+        _map_error(session, error)
+    return CompanyResponse.model_validate(item)
+
+
+@router.get('/documents', response_model=DocumentPageResponse)
+def documents(
+    company_id: UUID, request: Request, principal: PrincipalDependency,
+    session: SessionDependency, offset: Annotated[int, Query(ge=0)] = 0,
+    limit: Annotated[int, Query(ge=1, le=100)] = 25,
+    search: Annotated[str | None, Query(min_length=1, max_length=100)] = None,
+    document_status: Annotated[str | None, Query(alias='status', min_length=1, max_length=32)] = None,
+    source: Annotated[str | None, Query(min_length=1, max_length=100)] = None,
+    received_from: date | None = None, received_to: date | None = None,
+) -> DocumentPageResponse:
+    try:
+        page = create_operational_runtime(session, request.app.state.settings).documents(
+            principal.identity.tenant_id, company_id, principal.user_id,
+            offset=offset, limit=limit, search=search, status=document_status,
+            source=source, received_from=received_from, received_to=received_to,
+        )
+    except Exception as error:
+        _map_error(session, error)
+    return DocumentPageResponse(
+        items=[DocumentResponse.model_validate(item) for item in page.items],
+        total=page.total, offset=page.offset, limit=page.limit,
+    )
+
+
+@router.get('/documents/summary', response_model=DocumentSummaryResponse)
+def document_summary(
+    company_id: UUID, request: Request, principal: PrincipalDependency,
+    session: SessionDependency,
+) -> DocumentSummaryResponse:
+    try:
+        item = create_operational_runtime(session, request.app.state.settings).document_summary(
+            principal.identity.tenant_id, company_id, principal.user_id,
+        )
+    except Exception as error:
+        _map_error(session, error)
+    return DocumentSummaryResponse.model_validate(item)
+
+
+@router.get('/documents/{document_id}', response_model=DocumentDetailResponse)
+def document_detail(
+    company_id: UUID, document_id: UUID, request: Request,
+    principal: PrincipalDependency, session: SessionDependency,
+) -> DocumentDetailResponse:
+    try:
+        item = create_operational_runtime(session, request.app.state.settings).document(
+            principal.identity.tenant_id, company_id, principal.user_id, document_id,
+        )
+    except Exception as error:
+        _map_error(session, error)
+    return DocumentDetailResponse(
+        document=DocumentResponse.model_validate(item.document),
+        issues=[ExceptionResponse.model_validate(issue) for issue in item.issues],
+        fiscal_document_id=item.fiscal_document_id,
+        bank_statement_id=item.bank_statement_id,
+    )
+
+
+@router.get('/fiscal-documents', response_model=FiscalPageResponse)
+def fiscal_documents(
+    company_id: UUID, request: Request, principal: PrincipalDependency,
+    session: SessionDependency, offset: Annotated[int, Query(ge=0)] = 0,
+    limit: Annotated[int, Query(ge=1, le=100)] = 25,
+    search: Annotated[str | None, Query(min_length=1, max_length=100)] = None,
+    fiscal_status: Annotated[str | None, Query(alias='status', min_length=1, max_length=32)] = None,
+    issued_from: date | None = None, issued_to: date | None = None,
+) -> FiscalPageResponse:
+    try:
+        page = create_operational_runtime(session, request.app.state.settings).fiscal_documents(
+            principal.identity.tenant_id, company_id, principal.user_id,
+            offset=offset, limit=limit, search=search, status=fiscal_status,
+            issued_from=issued_from, issued_to=issued_to,
+        )
+    except Exception as error:
+        _map_error(session, error)
+    return FiscalPageResponse(
+        items=[FiscalDocumentResponse.model_validate(item) for item in page.items],
+        total=page.total, offset=page.offset, limit=page.limit,
+    )
+
+
+@router.get('/fiscal-documents/{fiscal_document_id}', response_model=FiscalDetailResponse)
+def fiscal_document_detail(
+    company_id: UUID, fiscal_document_id: UUID, request: Request,
+    principal: PrincipalDependency, session: SessionDependency,
+) -> FiscalDetailResponse:
+    try:
+        item = create_operational_runtime(session, request.app.state.settings).fiscal_document(
+            principal.identity.tenant_id, company_id, principal.user_id,
+            fiscal_document_id,
+        )
+    except Exception as error:
+        _map_error(session, error)
+    return FiscalDetailResponse(
+        document=FiscalDocumentResponse.model_validate(item.document),
+        items=[FiscalItemResponse.model_validate(row) for row in item.items],
+        item_count=item.item_count,
+        tax_totals=[TaxTotalResponse(tax_type=tax_type, amount=amount) for tax_type, amount in item.tax_totals],
+    )
+
+
+@router.get('/bank-statements', response_model=BankStatementPageResponse)
+def bank_statements(
+    company_id: UUID, request: Request, principal: PrincipalDependency,
+    session: SessionDependency, offset: Annotated[int, Query(ge=0)] = 0,
+    limit: Annotated[int, Query(ge=1, le=100)] = 25,
+) -> BankStatementPageResponse:
+    try:
+        page = create_operational_runtime(session, request.app.state.settings).bank_statements(
+            principal.identity.tenant_id, company_id, principal.user_id,
+            offset=offset, limit=limit,
+        )
+    except Exception as error:
+        _map_error(session, error)
+    return BankStatementPageResponse(
+        items=[BankStatementResponse.model_validate(item) for item in page.items],
+        total=page.total, offset=page.offset, limit=page.limit,
+    )
+
+
+@router.get('/bank-statements/{statement_id}', response_model=BankStatementDetailResponse)
+def bank_statement_detail(
+    company_id: UUID, statement_id: UUID, request: Request,
+    principal: PrincipalDependency, session: SessionDependency,
+    offset: Annotated[int, Query(ge=0)] = 0,
+    limit: Annotated[int, Query(ge=1, le=100)] = 25,
+    search: Annotated[str | None, Query(min_length=1, max_length=100)] = None,
+    direction: Literal['CREDIT', 'DEBIT'] | None = None,
+    posted_from: date | None = None, posted_to: date | None = None,
+) -> BankStatementDetailResponse:
+    try:
+        item = create_operational_runtime(session, request.app.state.settings).bank_statement(
+            principal.identity.tenant_id, company_id, principal.user_id,
+            statement_id, offset=offset, limit=limit, search=search,
+            direction=direction, posted_from=posted_from, posted_to=posted_to,
+        )
+    except Exception as error:
+        _map_error(session, error)
+    return BankStatementDetailResponse(
+        statement=BankStatementResponse.model_validate(item.statement),
+        transactions=BankTransactionPageResponse(
+            items=[BankTransactionResponse.model_validate(row) for row in item.transactions.items],
+            total=item.transactions.total, offset=item.transactions.offset,
+            limit=item.transactions.limit,
+        ),
+    )
 
 
 @router.post('/imports/nfe', response_model=ImportResponse, status_code=202)

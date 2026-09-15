@@ -1,5 +1,29 @@
 # API operacional MVP
 
+## Projeções Fiscal e Financeira (Phase 07)
+
+| Método | Rota relativa a `/operations/companies/{company_id}` | Permissão |
+|---|---|---|
+| GET | `/fiscal-documents` | `company.read` |
+| GET | `/fiscal-documents/{fiscal_document_id}` | `company.read` |
+| GET | `/bank-statements` | `company.read` |
+| GET | `/bank-statements/{statement_id}` | `company.read` |
+
+A lista fiscal aceita `offset`, `limit`, `search`, `status`, `issued_from` e `issued_to`. O detalhe fiscal inclui até 200 itens e totais tributários já persistidos. O detalhe do extrato aceita paginação de transações, `search`, `direction`, `posted_from` e `posted_to`. Identificadores bancários saem mascarados e ambos os detalhes usam `document_receipt_id` como vínculo seguro.
+
+## Projeções de empresas e documentos (Phase 06)
+
+| Operação | Método e rota | Permissão |
+|---|---|---|
+| Detalhar empresa | `GET /operations/companies/{company_id}` | `company.read` |
+| Listar documentos | `GET .../{company_id}/documents` | `company.read` |
+| Resumir documentos | `GET .../{company_id}/documents/summary` | `company.read` |
+| Detalhar documento | `GET .../{company_id}/documents/{document_id}` | `company.read` |
+
+A lista aceita `offset`, `limit` (1–100), `search`, `status`, `source`,
+`received_from` e `received_to`. A resposta traz `items`, `total`, `offset` e
+`limit`. Lista/detalhe não expõem hash, artifact ID, storage key ou bytes.
+
 Esta é a borda HTTP mínima para o escritório piloto importar documentos,
 acompanhar o processamento, revisar propostas e registrar decisão humana. Ela
 não efetiva escrituração oficial nem exporta para o sistema contábil externo.

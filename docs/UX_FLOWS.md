@@ -1,5 +1,29 @@
 # UX Flows
 
+## Fluxos Phase 07
+
+**NF-e:** selecionar empresa autorizada → abrir Fiscal · NF-e → informar arquivo XML e os quatro campos obrigatórios do contrato → receber estado de importação, duplicidade ou atenção → filtrar lista → abrir cabeçalho, tributos persistidos e itens → voltar ao receipt na Central. O fluxo termina antes da revisão/aprovação contábil.
+
+**OFX:** selecionar empresa autorizada → abrir Financeiro · OFX → escolher arquivo → receber feedback → abrir extrato com conta mascarada → filtrar transações → ler Crédito + ou Débito − com o sinal original → voltar à Central. Conciliação, sugestão e match manual aparecem como adiados, sem botão operacional.
+
+Ambos possuem loading, empty, error e forbidden herdados do shell. O feedback de upload usa região viva textual e não depende de cor. Troca de empresa e logout descartam respostas anteriores.
+
+## Fluxos operacionais Phase 06
+
+EMPRESAS → DETALHE → DOCUMENTOS: a lista nasce apenas de `/identity/me`; cada
+detalhe revalida CompanyAccess. Abrir documentos seleciona a empresa e descarta
+o estado anterior.
+
+CAIXA DE ENTRADA → DOCUMENTO: mostra recebimentos recentes que exigem atenção.
+CENTRAL DE DOCUMENTOS → FILTROS → DETALHE: consulta paginada por empresa, com
+erro localizado, vazio e retry. O detalhe não mostra bytes ou storage.
+
+TROCA DE EMPRESA invalida requisições/modelos antes da nova carga. Respostas
+atrasadas são ignoradas. “Todas as empresas” exige seleção na Central.
+
+UPLOAD informa o gap: nenhum sucesso é simulado e upload nunca é confundido
+com processamento, aprovação ou escrituração.
+
 ## Atualização — Phase 05
 
 `Minha Visão` agora é a home funcional do shell autenticado: `IDENTITY/ME -> CONTEXTO AUTORIZADO -> CATÁLOGO POR PERMISSÃO -> LOADING POR WIDGET -> READY/EMPTY/ERROR`. A troca de empresa invalida a geração corrente, descarta o estado anterior e recarrega apenas empresas presentes na projeção autenticada. `Todas as empresas autorizadas` usa a interseção conservadora de capacidades empresariais.

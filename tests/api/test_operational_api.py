@@ -415,7 +415,189 @@ def test_ofx_idempotency_exception_query_and_file_validation(
     assert too_large.status_code == 413
 
 
+def test_company_and_document_read_projections_are_scoped_and_minimized(
+    operational: OperationalFixture,
+) -> None:
+    upload = operational.client.post(
+        f'/api/v1/operations/companies/{operational.company}/imports/ofx',
+        content=OFX, headers=operational.headers(
+            'proposer', content_type='application/x-ofx',
+            filename='<img onerror=alert(1)>.ofx', key='document-projection',
+        ),
+    )
+    assert upload.status_code == 202, upload.text
+
+    company = operational.client.get(
+        f'/api/v1/operations/companies/{operational.company}',
+        headers=operational.headers('proposer'),
+    )
+    assert company.status_code == 200
+    assert company.json()['legal_name'] == 'Pilot company'
+    assert 'tenant_id' not in company.json()
+
+    page = operational.client.get(
+        f'/api/v1/operations/companies/{operational.company}/documents',
+        params={'search': '<img', 'source': 'OFX_OPERATIONAL', 'status': 'COMPLETED', 'limit': 10},
+        headers=operational.headers('proposer'),
+    )
+    assert page.status_code == 200, page.text
+    assert page.json()['total'] == 1
+    assert page.json()['items'][0]['filename'] == '<img onerror=alert(1)>.ofx'
+    assert 'artifact_id' not in page.json()['items'][0]
+    assert 'storage_key' not in page.json()['items'][0]
+    document_id = page.json()['items'][0]['id']
+
+    detail = operational.client.get(
+        f'/api/v1/operations/companies/{operational.company}/documents/{document_id}',
+        headers=operational.headers('proposer'),
+    )
+    assert detail.status_code == 200
+    assert detail.json()['document']['processing_status'] == 'COMPLETED'
+    assert detail.json()['issues'] == []
+
+    summary = operational.client.get(
+        f'/api/v1/operations/companies/{operational.company}/documents/summary',
+        headers=operational.headers('proposer'),
+    )
+    assert summary.status_code == 200
+    assert summary.json() == {'received': 1, 'processed': 1, 'attention_required': 0}
+
+
+def test_document_idor_and_invalid_filters_are_safe(
+    operational: OperationalFixture,
+) -> None:
+    own = f'/api/v1/operations/companies/{operational.company}/documents/{uuid4()}'
+    cross = f'/api/v1/operations/companies/{operational.other_company}/documents/{uuid4()}'
+    missing = operational.client.get(own, headers=operational.headers('proposer'))
+    cross_tenant = operational.client.get(cross, headers=operational.headers('proposer'))
+    invalid_range = operational.client.get(
+        f'/api/v1/operations/companies/{operational.company}/documents',
+        params={'received_from': '2026-09-10', 'received_to': '2026-09-01'},
+        headers=operational.headers('proposer'),
+    )
+    assert missing.status_code == 404
+    assert missing.json() == {'detail': 'resource unavailable'}
+    assert cross_tenant.status_code == 403
+    assert cross_tenant.json() == {'detail': 'access denied'}
+    assert invalid_range.status_code == 422
+    assert invalid_range.json() == {'detail': 'invalid operation'}
+
+
+def test_fiscal_projection_lists_structured_nfe_items_and_document_link(
+    operational: OperationalFixture,
+) -> None:
+    imported = operational.client.post(
+        f'/api/v1/operations/companies/{operational.company}/imports/nfe',
+        params=_nfe_params(), content=NFE.read_bytes(), headers=operational.headers(
+            'proposer', content_type='application/xml', filename='fiscal-phase07.xml',
+            key='fiscal-phase07',
+        ),
+    )
+    assert imported.status_code == 202, imported.text
+    listing = operational.client.get(
+        f'/api/v1/operations/companies/{operational.company}/fiscal-documents',
+        params={'search': 'Emitente', 'status': 'REPORTED_AUTHORIZED', 'limit': 10},
+        headers=operational.headers('proposer'),
+    )
+    assert listing.status_code == 200, listing.text
+    assert listing.json()['total'] == 1
+    summary = listing.json()['items'][0]
+    assert summary['model'] == '55'
+    assert summary['document_receipt_id'] is not None
+    assert 'artifact_id' not in summary and 'source_hash' not in summary
+
+    detail = operational.client.get(
+        f"/api/v1/operations/companies/{operational.company}/fiscal-documents/{summary['id']}",
+        headers=operational.headers('proposer'),
+    )
+    assert detail.status_code == 200
+    assert detail.json()['item_count'] == len(detail.json()['items']) == 1
+    assert detail.json()['items'][0]['cfop'] == '5102'
+    assert {item['tax_type'] for item in detail.json()['tax_totals']} >= {'ICMS', 'PIS', 'COFINS'}
+    document = operational.client.get(
+        f"/api/v1/operations/companies/{operational.company}/documents/{summary['document_receipt_id']}",
+        headers=operational.headers('proposer'),
+    )
+    assert document.status_code == 200
+    assert document.json()['fiscal_document_id'] == summary['id']
+    assert document.json()['bank_statement_id'] is None
+
+
+def test_financial_projection_masks_account_and_preserves_credit_debit(
+    operational: OperationalFixture,
+) -> None:
+    credit = b'<STMTTRN><DTPOSTED>20260902</DTPOSTED><TRNAMT>15.00</TRNAMT><FITID>op-credit</FITID><MEMO>Credito sintetico</MEMO></STMTTRN>'
+    content = OFX.replace(b'</BANKTRANLIST>', credit + b'</BANKTRANLIST>')
+    imported = operational.client.post(
+        f'/api/v1/operations/companies/{operational.company}/imports/ofx',
+        content=content, headers=operational.headers(
+            'proposer', content_type='application/x-ofx', filename='financial-phase07.ofx',
+            key='financial-phase07',
+        ),
+    )
+    assert imported.status_code == 202, imported.text
+    listing = operational.client.get(
+        f'/api/v1/operations/companies/{operational.company}/bank-statements',
+        headers=operational.headers('proposer'),
+    )
+    assert listing.status_code == 200
+    statement = listing.json()['items'][0]
+    assert statement['account_masked'].startswith('••••')
+    assert statement['account_masked'] != '0001'
+    assert 'account_number' not in statement and 'artifact_id' not in statement
+
+    detail = operational.client.get(
+        f"/api/v1/operations/companies/{operational.company}/bank-statements/{statement['id']}",
+        headers=operational.headers('proposer'),
+    )
+    assert detail.status_code == 200
+    transactions = detail.json()['transactions']['items']
+    assert {(item['direction'], Decimal(item['amount'])) for item in transactions} == {
+        ('DEBIT', Decimal('-10.00')), ('CREDIT', Decimal('15.00')),
+    }
+    credits = operational.client.get(
+        f"/api/v1/operations/companies/{operational.company}/bank-statements/{statement['id']}",
+        params={'direction': 'CREDIT', 'search': 'sintetico'},
+        headers=operational.headers('proposer'),
+    )
+    assert credits.status_code == 200
+    assert credits.json()['transactions']['total'] == 1
+    document = operational.client.get(
+        f"/api/v1/operations/companies/{operational.company}/documents/{statement['document_receipt_id']}",
+        headers=operational.headers('proposer'),
+    )
+    assert document.status_code == 200
+    assert document.json()['bank_statement_id'] == statement['id']
+    assert document.json()['fiscal_document_id'] is None
+
+
+@pytest.mark.parametrize('resource', ['fiscal-documents', 'bank-statements'])
+def test_fiscal_and_financial_idor_are_uniform(
+    operational: OperationalFixture, resource: str,
+) -> None:
+    own_missing = operational.client.get(
+        f'/api/v1/operations/companies/{operational.company}/{resource}/{uuid4()}',
+        headers=operational.headers('proposer'),
+    )
+    cross_tenant = operational.client.get(
+        f'/api/v1/operations/companies/{operational.other_company}/{resource}/{uuid4()}',
+        headers=operational.headers('proposer'),
+    )
+    assert own_missing.status_code == 404
+    assert own_missing.json() == {'detail': 'resource unavailable'}
+    assert cross_tenant.status_code == 403
+    assert cross_tenant.json() == {'detail': 'access denied'}
+
+
 @pytest.mark.parametrize('path', [
+    '',
+    'documents',
+    'documents/summary',
+    'documents/00000000-0000-0000-0000-000000000001',
+    'fiscal-documents',
+    'fiscal-documents/00000000-0000-0000-0000-000000000001',
+    'bank-statements',
+    'bank-statements/00000000-0000-0000-0000-000000000001',
     'processing/00000000-0000-0000-0000-000000000001',
     'reviews',
     'reviews/00000000-0000-0000-0000-000000000001',
@@ -514,3 +696,24 @@ def test_import_endpoints_require_authentication_permission_and_company_scope(
     assert insufficient.json() == cross_tenant.json() == unknown.json() == {
         'detail': 'access denied',
     }
+
+
+def test_nfe_import_rejects_cross_tenant_and_unknown_company_uniformly(
+    operational: OperationalFixture,
+) -> None:
+    cross_tenant = operational.client.post(
+        f'/api/v1/operations/companies/{operational.other_company}/imports/nfe',
+        params=_nfe_params(), content=NFE.read_bytes(), headers=operational.headers(
+            'proposer', content_type='application/xml', filename='isolated.xml',
+            key='nfe-company-isolation',
+        ),
+    )
+    unknown = operational.client.post(
+        f'/api/v1/operations/companies/{uuid4()}/imports/nfe',
+        params=_nfe_params(), content=NFE.read_bytes(), headers=operational.headers(
+            'proposer', content_type='application/xml', filename='isolated.xml',
+            key='nfe-company-isolation',
+        ),
+    )
+    assert cross_tenant.status_code == unknown.status_code == 403
+    assert cross_tenant.json() == unknown.json() == {'detail': 'access denied'}

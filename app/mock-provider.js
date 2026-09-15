@@ -7,7 +7,7 @@
     companies: Object.freeze([
       Object.freeze({
         id: 'synthetic-company-a', name: 'Empresa Horizonte · Matriz',
-        permissions: Object.freeze(['company.read', 'journal.read', 'journal.approve', 'reconciliation.manage', 'audit.read']),
+        permissions: Object.freeze(['company.read', 'journal.read', 'journal.propose', 'journal.approve', 'reconciliation.manage', 'audit.read']),
       }),
       Object.freeze({
         id: 'synthetic-company-b', name: 'Comercial Aurora · Matriz',
@@ -46,6 +46,93 @@
     }),
   });
 
+  const companyDetails = Object.freeze({
+    'synthetic-company-a': Object.freeze({id: 'synthetic-company-a', legal_name: 'Empresa Horizonte Demonstração Ltda.', trade_name: 'Horizonte', tax_identifier: '00.000.000/0000-00', status: 'active', timezone: 'America/Sao_Paulo', currency_code: 'BRL'}),
+    'synthetic-company-b': Object.freeze({id: 'synthetic-company-b', legal_name: 'Comercial Aurora Fictícia Ltda.', trade_name: 'Aurora', tax_identifier: '11.111.111/1111-11', status: 'active', timezone: 'America/Sao_Paulo', currency_code: 'BRL'}),
+  });
+  const documents = Object.freeze([
+    Object.freeze({id: 'synthetic-document-1', company_id: 'synthetic-company-a', batch_id: 'synthetic-batch-1', filename: 'nfe-demonstracao-001.xml', media_type: 'application/xml', size_bytes: 2840, source: 'NFE55', channel: 'UPLOAD', receipt_result: 'ACCEPTED', processing_status: 'COMPLETED', error_code: null, received_at: '2026-09-14T12:10:00Z'}),
+    Object.freeze({id: 'synthetic-document-2', company_id: 'synthetic-company-a', batch_id: 'synthetic-batch-2', filename: '<documento-ficticio>.ofx', media_type: 'application/x-ofx', size_bytes: 940, source: 'OFX_OPERATIONAL', channel: 'UPLOAD', receipt_result: 'DUPLICATE', processing_status: 'COMPLETED', error_code: null, received_at: '2026-09-14T11:32:00Z'}),
+    Object.freeze({id: 'synthetic-document-3', company_id: 'synthetic-company-a', batch_id: 'synthetic-batch-3', filename: 'nfe-com-regra-pendente.xml', media_type: 'application/xml', size_bytes: 3012, source: 'NFE55', channel: 'UPLOAD', receipt_result: 'ACCEPTED', processing_status: 'FAILED', error_code: 'SYNTHETIC_VALIDATION', received_at: '2026-09-14T10:15:00Z'}),
+    Object.freeze({id: 'synthetic-document-4', company_id: 'synthetic-company-b', batch_id: 'synthetic-batch-4', filename: 'nfe-aurora-001.xml', media_type: 'application/xml', size_bytes: 2501, source: 'NFE55', channel: 'UPLOAD', receipt_result: 'ACCEPTED', processing_status: 'COMPLETED', error_code: null, received_at: '2026-09-13T17:40:00Z'}),
+    Object.freeze({id: 'synthetic-document-5', company_id: 'synthetic-company-b', batch_id: 'synthetic-batch-5', filename: 'arquivo-divergente.xml', media_type: 'application/xml', size_bytes: 2700, source: 'NFE55', channel: 'UPLOAD', receipt_result: 'ACCEPTED', processing_status: 'QUARANTINED', error_code: 'SYNTHETIC_DIVERGENCE', received_at: '2026-09-13T16:20:00Z'}),
+  ]);
+
+  async function loadCompany(id) { return companyDetails[id] || null; }
+  async function listDocuments(companyId, filters = {}) {
+    const offset = Number(filters.offset || 0);
+    const limit = Number(filters.limit || 25);
+    const search = String(filters.search || '').toLocaleLowerCase('pt-BR');
+    let rows = documents.filter((item) => item.company_id === companyId);
+    if (search) rows = rows.filter((item) => item.filename.toLocaleLowerCase('pt-BR').includes(search));
+    if (filters.status) rows = rows.filter((item) => item.processing_status === filters.status || item.receipt_result === filters.status);
+    if (filters.source) rows = rows.filter((item) => item.source === filters.source);
+    if (filters.received_from) rows = rows.filter((item) => item.received_at.slice(0, 10) >= filters.received_from);
+    if (filters.received_to) rows = rows.filter((item) => item.received_at.slice(0, 10) <= filters.received_to);
+    return Object.freeze({items: Object.freeze(rows.slice(offset, offset + limit)), total: rows.length, offset, limit});
+  }
+  async function loadDocument(companyId, documentId) {
+    const document = documents.find((item) => item.company_id === companyId && item.id === documentId);
+    if (!document) throw Object.assign(new Error('REQUEST_FAILED'), {code: 'REQUEST_FAILED'});
+    const issues = document.error_code ? [Object.freeze({id: 'synthetic-issue', code: document.error_code, severity: 'WARNING', resolution_status: 'QUARANTINED', created_at: document.received_at})] : [];
+    return Object.freeze({
+      document, issues: Object.freeze(issues),
+      fiscal_document_id: fiscal.find((item) => item.company_id === companyId && item.document_receipt_id === documentId)?.id || null,
+      bank_statement_id: statements.find((item) => item.company_id === companyId && item.document_receipt_id === documentId)?.id || null,
+    });
+  }
+  async function loadSummary(companyId) {
+    const rows = documents.filter((item) => item.company_id === companyId);
+    return Object.freeze({received: rows.length, processed: rows.filter((item) => item.processing_status === 'COMPLETED').length, attention_required: rows.filter((item) => ['FAILED', 'QUARANTINED'].includes(item.processing_status)).length});
+  }
+  const fiscal = Object.freeze([
+    Object.freeze({id: 'synthetic-fiscal-1', company_id: 'synthetic-company-a', access_key: '00000000000000000000000000000000000000000000', model: '55', schema_version: '4.00', series: '1', document_number: '1001', operation_nature: 'Venda fictícia', issuer_tax_id: '00.000.000/0000-00', issuer_name: 'Emitente Sintético', recipient_tax_id: '11.111.111/1111-11', recipient_name: 'Empresa Horizonte Demonstração', issued_at: '2026-09-14T12:00:00Z', movement_at: '2026-09-14T12:00:00Z', products_total: '100.00', freight_total: '0.00', insurance_total: '0.00', discount_total: '0.00', other_total: '0.00', tax_total: '18.00', invoice_total: '100.00', observed_status: 'REPORTED_AUTHORIZED', protocol_status_code: '100', protocol_status_reason: 'Autorização sintética', created_at: '2026-09-14T12:10:00Z', document_receipt_id: 'synthetic-document-1'}),
+    Object.freeze({id: 'synthetic-fiscal-2', company_id: 'synthetic-company-b', access_key: '11111111111111111111111111111111111111111111', model: '55', schema_version: '4.00', series: '1', document_number: '2001', operation_nature: 'Operação fictícia', issuer_tax_id: '22.222.222/2222-22', issuer_name: 'Fornecedor Demonstração', recipient_tax_id: '11.111.111/1111-11', recipient_name: 'Comercial Aurora Fictícia', issued_at: '2026-09-13T17:00:00Z', movement_at: null, products_total: '75.00', freight_total: null, insurance_total: null, discount_total: null, other_total: null, tax_total: null, invoice_total: '75.00', observed_status: 'UNVERIFIED', protocol_status_code: null, protocol_status_reason: null, created_at: '2026-09-13T17:40:00Z', document_receipt_id: 'synthetic-document-4'}),
+  ]);
+  const fiscalItems = Object.freeze({
+    'synthetic-fiscal-1': Object.freeze([{id: 'synthetic-fiscal-item-1', sequence: 1, product_code: 'DEMO-1', description: 'Produto exclusivamente fictício', ncm: '00000000', cfop: '5102', commercial_unit: 'UN', quantity: '1.000000', unit_value: '100.0000000000', gross_total: '100.00', discount_total: null, other_total: null, included_in_total: true}]),
+    'synthetic-fiscal-2': Object.freeze([]),
+  });
+  const statements = Object.freeze([
+    Object.freeze({id: 'synthetic-statement-1', company_id: 'synthetic-company-a', bank_id: '000', branch_masked: '••••01', account_masked: '••••01', account_type: 'CHECKING', start_date: '2026-09-01', end_date: '2026-09-14', opening_balance: '100.00', closing_balance: '135.00', currency_code: 'BRL', sign_policy: 'OFX_TRNAMT_SIGN_PRESERVED_V1', imported_at: '2026-09-14T11:32:00Z', document_receipt_id: 'synthetic-document-2'}),
+  ]);
+  const transactions = Object.freeze({'synthetic-statement-1': Object.freeze([
+    Object.freeze({id: 'synthetic-transaction-1', bank_statement_id: 'synthetic-statement-1', transaction_date: '2026-09-12', posted_date: '2026-09-12', amount: '-15.00', direction: 'DEBIT', description: 'Débito fictício', document_number: null, identity_kind: 'FITID'}),
+    Object.freeze({id: 'synthetic-transaction-2', bank_statement_id: 'synthetic-statement-1', transaction_date: '2026-09-13', posted_date: '2026-09-13', amount: '50.00', direction: 'CREDIT', description: 'Crédito fictício', document_number: null, identity_kind: 'FITID'}),
+  ])});
+  async function listFiscal(companyId, filters = {}) {
+    let rows = fiscal.filter((item) => item.company_id === companyId);
+    const search = String(filters.search || '').toLocaleLowerCase('pt-BR');
+    if (search) rows = rows.filter((item) => [item.access_key, item.document_number, item.issuer_name].some((value) => String(value || '').toLocaleLowerCase('pt-BR').includes(search)));
+    if (filters.status) rows = rows.filter((item) => item.observed_status === filters.status);
+    const offset = Number(filters.offset || 0), limit = Number(filters.limit || 10);
+    return {items: rows.slice(offset, offset + limit), total: rows.length, offset, limit};
+  }
+  async function fiscalDetail(companyId, id) {
+    const document = fiscal.find((item) => item.company_id === companyId && item.id === id);
+    if (!document) throw Object.assign(new Error('REQUEST_FAILED'), {code: 'REQUEST_FAILED'});
+    const items = fiscalItems[id] || [];
+    return {document, items, item_count: items.length, tax_totals: [{tax_type: 'ICMS', amount: '18.00'}]};
+  }
+  async function listStatements(companyId, filters = {}) {
+    const rows = statements.filter((item) => item.company_id === companyId);
+    const offset = Number(filters.offset || 0), limit = Number(filters.limit || 10);
+    return {items: rows.slice(offset, offset + limit), total: rows.length, offset, limit};
+  }
+  async function statementDetail(companyId, id, filters = {}) {
+    const statement = statements.find((item) => item.company_id === companyId && item.id === id);
+    if (!statement) throw Object.assign(new Error('REQUEST_FAILED'), {code: 'REQUEST_FAILED'});
+    let rows = [...(transactions[id] || [])];
+    if (filters.direction) rows = rows.filter((item) => item.direction === filters.direction);
+    if (filters.search) rows = rows.filter((item) => String(item.description || '').toLocaleLowerCase('pt-BR').includes(String(filters.search).toLocaleLowerCase('pt-BR')));
+    const offset = Number(filters.offset || 0), limit = Number(filters.limit || 25);
+    return {statement, transactions: {items: rows.slice(offset, offset + limit), total: rows.length, offset, limit}};
+  }
+  async function syntheticImport(file, kind) {
+    const name = String(file?.name || '').toLocaleLowerCase('pt-BR');
+    return {resource_id: `synthetic-${kind}-result`, resource_kind: kind === 'nfe' ? 'JOURNEY' : 'BATCH', status: name.includes('duplic') ? 'IDEMPOTENT_REDELIVERY' : name.includes('inval') ? 'QUARANTINED' : 'IMPORTED', duplicate_items: name.includes('duplic') ? 1 : 0, synthetic: true};
+  }
+
   const sum = (rows, field) => rows.reduce((total, row) => total + row[field], 0);
   const collect = (rows, field) => rows.flatMap((row) => row[field]);
   const result = (value, note, items = []) => Object.freeze({
@@ -77,5 +164,12 @@
     return Object.freeze({state: 'UNAVAILABLE', value: '', note: 'Indicador indisponível.', items: Object.freeze([])});
   }
 
-  root.S21SyntheticProvider = Object.freeze({loadProfile: () => profile, loadWidget});
+  root.S21SyntheticProvider = Object.freeze({
+    loadProfile: () => profile, loadWidget, company: loadCompany,
+    documents: listDocuments, document: loadDocument, summary: loadSummary,
+    fiscalDocuments: listFiscal, fiscalDocument: fiscalDetail,
+    bankStatements: listStatements, bankStatement: statementDetail,
+    importNfe: (companyId, file) => syntheticImport(file, 'nfe'),
+    importOfx: (companyId, file) => syntheticImport(file, 'ofx'),
+  });
 }(globalThis));

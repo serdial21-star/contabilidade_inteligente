@@ -1,5 +1,31 @@
 # Lacunas de dados do frontend
 
+## Reclassificação Phase 07
+
+| Gap | Classificação | Resultado / destino |
+|---|---|---|
+| NF-e import/list/detail/items | RESOLVED_PHASE07 | Contratos reais especializados e projeções tenant/company-aware. |
+| OFX import/statement/transactions | RESOLVED_PHASE07 | Contratos reais, máscara de conta e sinal preservado. |
+| Exceção fiscal no próprio detalhe | REAL_BACKEND_GAP | Disponível na Central/W004, ainda não agregada no detalhe fiscal. |
+| Matching, sugestão e conciliação persistente | REAL_BACKEND_GAP | Sem caso de uso/repositório; permanece DEFERRED. |
+| Revisão/edição/aprovação contábil | DEFERRED_PHASE08 | Nenhuma ação exposta nesta fase. |
+| Linha da Decisão completa | DEFERRED_PHASE09 | Receipt/documento disponível; cadeia integral ainda parcial. |
+| Upload fiscal/financeiro em lote | REAL_BACKEND_GAP | Endpoints atuais recebem um arquivo por requisição. |
+| Malware scanning | INFRASTRUCTURE_GAP | Nenhum scanner fictício foi criado. |
+
+## Reclassificação Phase 06
+
+| Gap | Status após Phase 06 |
+|---|---|
+| Empresas autorizadas e detalhe seguro | RESOLVED_PHASE06 |
+| Inbox/lista/filtros/paginação/detalhe documental | RESOLVED_PHASE06 |
+| W001/W002/W007 em modo API | RESOLVED_PHASE06 |
+| Upload documental genérico | REAL_BACKEND_GAP |
+| Imports especializados NF-e/OFX na UI | DEFERRED_PHASE07 |
+| Download original e histórico por documento | DEFERRED_LATER |
+| Malware scanning | INFRASTRUCTURE_GAP |
+| Preferências de dashboard server-side | DEFERRED_LATER |
+
 Reclassificação após a Phase 05.
 
 | ID | Necessidade | Classificação | Estado |

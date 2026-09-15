@@ -21,7 +21,7 @@ test('application entry provides branded boot state and defensive metadata', () 
   assert.match(html, /noindex,nofollow/);
   assert.match(html, /connect-src 'self'/);
   assert.match(html, /form-action 'none'/);
-  for (const asset of ['config.js', 'core.js', 'api-client.js', 'oidc-client.js', 'mock-provider.js', 'app.js', 'app-shell.css']) {
+  for (const asset of ['config.js', 'core.js', 'api-client.js', 'oidc-client.js', 'mock-provider.js', 'operational-service.js', 'intelligence-service.js', 'app.js', 'app-shell.css']) {
     assert.ok(fs.existsSync(path.join(appDir, asset)), asset);
     assert.ok(html.includes(asset), asset);
   }

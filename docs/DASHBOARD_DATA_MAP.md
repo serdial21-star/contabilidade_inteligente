@@ -1,5 +1,27 @@
 # Mapa de dados da Minha Visão
 
+## Atualização Phase 07
+
+| Widget | Estado em API | Evidência / decisão |
+|---|---|---|
+| W003 | REAL | Continua usando `GET .../reviews`; imports NF-e podem alimentar o workflow já existente, sem nova classificação artificial. |
+| W004 | REAL | Continua usando `GET .../exceptions`; issues fiscais/financeiras existentes entram pela projeção documental segura. |
+| W009 | DEFERRED | O domínio de reconciliação ainda não possui consulta persistente/autorizada; nenhum indicador foi inventado. |
+| W010 | REAL | Continua usando `GET .../audit-events`, sem payload bruto; imports preservam a auditoria existente. |
+
+W001 e W002 continuam reais pela Central de Documentos. Esta fase não promove fonte por aparência: em modo API não há fallback sintético para W003, W004 ou W010; W009 permanece indisponível.
+
+## Atualização Phase 06
+
+| Widget | Antes | Depois em modo API | Observação |
+|---|---|---|---|
+| W001 Documentos recebidos | DERIVABLE | REAL | `artifact_receipts` por tenant+empresa autorizada. |
+| W002 Processados | DERIVABLE | REAL | Artefatos com transformação `COMPLETED`; não implica aprovação. |
+| W007 Empresas com pendências | SYNTHETIC | REAL | Empresas autorizadas com issues documentais não resolvidas. |
+
+Em `DATA_MODE=SYNTHETIC`, os widgets continuam rotulados e alimentados apenas
+por fixtures. A promoção descreve a fonte disponível em modo API, não uso real.
+
 Inventário da Phase 05. `CURRENT AVAILABILITY` descreve o backend existente; `STATUS` descreve a entrega no modo atual. Todos os contratos reais partem do principal autenticado e revalidam tenant, `CompanyAccess` e permissão no serviço de aplicação.
 
 | ID | Display name | Purpose | Required permission | Source module | Source contract | Tenant filter | Company filter | Aggregation | Current availability | Status |

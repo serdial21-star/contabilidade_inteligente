@@ -1,5 +1,29 @@
 # Component Inventory
 
+## Componentes Phase 07
+
+| COMPONENT | PURPOSE | STATUS | ACCESSIBILITY / SECURITY |
+|---|---|---|---|
+| FiscalDocumentTable | Lista NF-e paginada e filtrada | READY | Headings semânticos; status textual; metadados escapados. |
+| NFeImportPanel | Reusar import especializado NF-e | READY | File picker por teclado; campos rotulados; feedback `aria-live`. |
+| FiscalDocumentDetail | Cabeçalho, tributos persistidos e itens | READY | XML não renderizado; receipt público; lista limitada. |
+| BankStatementTable | Lista de extratos com conta minimizada | READY | Agência/conta mascaradas; valores legíveis. |
+| OfxImportPanel | Reusar import especializado OFX | READY | Tipo restrito e feedback textual. |
+| TransactionTable | Créditos/débitos e filtros | READY | Rótulo e sinal além de cor; valores tabulares. |
+| IntelligenceService | Selecionar provider API ou sintético | READY | Sem fallback sintético em API; rede centralizada. |
+
+## Componentes Phase 06
+
+| COMPONENT | PURPOSE | STATUS | ACCESSIBILITY / SECURITY |
+|---|---|---|---|
+| CompanyTable | Empresas autorizadas, busca e detalhe | READY | Tabela semântica; fonte autorizada. |
+| CompanyDetail | Resumo e navegação contextual | READY | `dl` rotulada; acesso revalidado. |
+| DocumentInbox | Atenção inicial sem duplicar Fila | READY | Estado vazio textual. |
+| DocumentTable | Metadados, status e paginação | READY | Região rolável; botões nomeados. |
+| DocumentFilterBar | Nome, status, origem e datas | READY | Labels e submit deliberado. |
+| DocumentDetail | Metadados/issues minimizados | READY | Filename escapado; sem storage. |
+| OperationalState | Loading, empty, error, forbidden | READY | `aria-busy`, alert e retry. |
+
 ## Entrega da Phase 05
 
 | COMPONENT | PURPOSE | VARIANTS | STATUS | USED_IN | ACCESSIBILITY NOTES |

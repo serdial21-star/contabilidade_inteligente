@@ -1,5 +1,21 @@
 # Product Backlog
 
+## Atualização Phase 07
+
+| ID | EPIC | STORY | PRIORITY | STATUS | TARGET_PHASE |
+|---|---|---|---|---|---|
+| PB-035 | EPIC-007 | Persistir/projetar matching e conciliação com autorização e auditoria | P1 | PLANNED | FUTURE_APPROVED_SCOPE |
+| PB-036 | EPIC-005 | Agregar issues documentais ao detalhe fiscal sem duplicar exceção | P2 | PLANNED | PHASE 09+ |
+
+## Atualização Phase 06
+
+| ID | EPIC | STORY | PRIORITY | STATUS | TARGET_PHASE |
+|---|---|---|---|---|---|
+| PB-031 | EPIC-004 | Lista/detalhe de empresas autorizadas sem novo domínio | P1 | DONE | PHASE 06 |
+| PB-032 | EPIC-005 | Inbox, filtros, paginação e detalhe documental seguro | P1 | DONE | PHASE 06 |
+| PB-033 | EPIC-005 | Definir upload documental genérico | P1 | PLANNED | PHASE 07+ |
+| PB-034 | EPIC-005 | Download e histórico por documento minimizados | P2 | PLANNED | PHASE 09+ |
+
 Backlog inicial de productização, 14/09/2026. Somente a baseline documental está concluída. P0 = condição necessária para funcionamento seguro ou liberação de um escopo com segurança; P1 = jornada principal; P2 = melhoria/complemento; P3 = exploração futura. Não são prazos nem autorização para iniciar fases.
 
 STATUS: DONE (entrega desta fase), PLANNED (não iniciado), BLOCKED (depende de gate externo/humano). “Reutilizar” reconhece implementação existente e evita recriar o backend. TARGET_PHASE referencia o [roadmap](PRODUCTIZATION_ROADMAP.md).
@@ -39,8 +55,8 @@ STATUS: DONE (entrega desta fase), PLANNED (não iniciado), BLOCKED (depende de 
 | PB-008 | EPIC-003 | Adicionar/remover/mover/redimensionar widgets e salvar visão; revalidar permissões ao carregar | P2 | PB-007; persistência local sem dados operacionais | DONE_LOCAL_ONLY | PHASE 05 |
 | PB-009 | EPIC-004 | Expor empresas autorizadas reutilizando a fronteira de acesso existente | P1 | PB-006 | PLANNED | PHASE 06 |
 | PB-010 | EPIC-005 | Integrar upload por bytes, duplicidade, quarentena e consulta de evidência conforme contratos | P1 | PB-009; intake/API | PLANNED | PHASE 06 |
-| PB-011 | EPIC-006 | Expor processamento NF-e 55 e exceções com rastreabilidade | P1 | PB-010; parser/importador existentes | PLANNED | PHASE 07 |
-| PB-012 | EPIC-007 | Expor OFX, sinal e duplicidade; especificar gaps de conciliação antes de estender serviços | P1 | PB-010; banking/reconciliation | PLANNED | PHASE 07 |
+| PB-011 | EPIC-006 | Expor processamento NF-e 55 e exceções com rastreabilidade | P1 | PB-010; parser/importador existentes | DONE | PHASE 07 |
+| PB-012 | EPIC-007 | Expor OFX, sinal e duplicidade; especificar gaps de conciliação antes de estender serviços | P1 | PB-010; banking/reconciliation | DONE_PARTIAL_RECONCILIATION_DEFERRED | PHASE 07 |
 | PB-013 | EPIC-008 | Integrar catálogo/regras/propostas sem recriar o motor determinístico | P1 | PB-011; catálogo publicado | PLANNED | PHASE 08 |
 | PB-014 | EPIC-008 | Validar revisão/aprovação/rejeição ponta a ponta com hash, versão, alçada, segregação, locks e idempotência | P0 | PB-013; workflow/API | PLANNED | PHASE 08 |
 | PB-015 | EPIC-009 | Projetar Linha da Decisão a partir dos dados existentes, resolver gaps de DTO e preservar minimização | P1 | PB-014; PRODUCT_FLOW | PLANNED | PHASE 09 |

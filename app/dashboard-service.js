@@ -88,6 +88,22 @@
     }
     return Object.freeze({
       async loadWidget(widgetId, context) {
+        if (widgetId === 'W001' || widgetId === 'W002' || widgetId === 'W007') {
+          const summaries = await Promise.all(context.companyIds.map(async (id) => ({id, summary: await apiClient.documentSummary(id)})));
+          if (widgetId === 'W001') {
+            const value = summaries.reduce((total, item) => total + item.summary.received, 0);
+            return available(value ? 'READY' : 'EMPTY', {value: String(value), note: value ? 'Recebimentos documentais autorizados' : 'Nenhum documento recebido.', items: []});
+          }
+          if (widgetId === 'W002') {
+            const value = summaries.reduce((total, item) => total + item.summary.processed, 0);
+            return available(value ? 'READY' : 'EMPTY', {value: String(value), note: value ? 'Transformações concluídas; não significa aprovação' : 'Nenhum processamento concluído.', items: []});
+          }
+          const pending = summaries.filter((item) => item.summary.attention_required > 0);
+          return available(pending.length ? 'READY' : 'EMPTY', {
+            value: String(pending.length), note: pending.length ? 'Somente empresas autorizadas com exceções documentais' : 'Nenhuma empresa com exceção documental.',
+            items: pending.slice(0, 5).map((item) => ({title: context.companyNames?.[item.id] || 'Empresa autorizada', detail: `${item.summary.attention_required} item(ns) requerem atenção`, meta: 'Contexto autorizado'})),
+          });
+        }
         if (widgetId === 'W003' || widgetId === 'W005' || widgetId === 'W006') {
           const reviews = await forCompanies(context, (id) => apiClient.dashboardReviews(id));
           const pending = reviews.filter((item) => item.status === 'PENDING_APPROVAL');

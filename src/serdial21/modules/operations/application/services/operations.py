@@ -130,6 +130,172 @@ class AuditView:
     integrity_valid: bool
 
 
+@dataclass(frozen=True, slots=True)
+class CompanyView:
+    id: UUID
+    legal_name: str
+    trade_name: str | None
+    tax_identifier: str
+    status: str
+    timezone: str
+    currency_code: str
+
+
+@dataclass(frozen=True, slots=True)
+class DocumentView:
+    id: UUID
+    company_id: UUID
+    batch_id: UUID
+    filename: str
+    media_type: str
+    size_bytes: int
+    source: str
+    channel: str
+    receipt_result: str
+    processing_status: str
+    error_code: str | None
+    received_at: datetime
+
+
+@dataclass(frozen=True, slots=True)
+class DocumentPage:
+    items: tuple[DocumentView, ...]
+    total: int
+    offset: int
+    limit: int
+
+
+@dataclass(frozen=True, slots=True)
+class DocumentDetail:
+    document: DocumentView
+    issues: tuple[ExceptionView, ...]
+    fiscal_document_id: UUID | None
+    bank_statement_id: UUID | None
+
+
+@dataclass(frozen=True, slots=True)
+class DocumentSummary:
+    received: int
+    processed: int
+    attention_required: int
+
+
+@dataclass(frozen=True, slots=True)
+class FiscalDocumentView:
+    id: UUID
+    company_id: UUID
+    access_key: str
+    model: str
+    schema_version: str
+    series: str | None
+    document_number: str | None
+    operation_nature: str | None
+    issuer_tax_id: str | None
+    issuer_name: str | None
+    recipient_tax_id: str | None
+    recipient_name: str | None
+    issued_at: datetime | None
+    movement_at: datetime | None
+    products_total: Decimal | None
+    freight_total: Decimal | None
+    insurance_total: Decimal | None
+    discount_total: Decimal | None
+    other_total: Decimal | None
+    tax_total: Decimal | None
+    invoice_total: Decimal | None
+    observed_status: str
+    protocol_status_code: str | None
+    protocol_status_reason: str | None
+    created_at: datetime
+    document_receipt_id: UUID | None
+
+
+@dataclass(frozen=True, slots=True)
+class FiscalItemView:
+    id: UUID
+    sequence: int
+    product_code: str | None
+    description: str | None
+    ncm: str | None
+    cfop: str | None
+    commercial_unit: str | None
+    quantity: Decimal | None
+    unit_value: Decimal | None
+    gross_total: Decimal | None
+    discount_total: Decimal | None
+    other_total: Decimal | None
+    included_in_total: bool | None
+
+
+@dataclass(frozen=True, slots=True)
+class FiscalPage:
+    items: tuple[FiscalDocumentView, ...]
+    total: int
+    offset: int
+    limit: int
+
+
+@dataclass(frozen=True, slots=True)
+class FiscalDetail:
+    document: FiscalDocumentView
+    items: tuple[FiscalItemView, ...]
+    item_count: int
+    tax_totals: tuple[tuple[str, Decimal], ...]
+
+
+@dataclass(frozen=True, slots=True)
+class BankStatementView:
+    id: UUID
+    company_id: UUID
+    bank_id: str | None
+    branch_masked: str | None
+    account_masked: str
+    account_type: str | None
+    start_date: date | None
+    end_date: date | None
+    opening_balance: Decimal | None
+    closing_balance: Decimal | None
+    currency_code: str | None
+    sign_policy: str
+    imported_at: datetime
+    document_receipt_id: UUID | None
+
+
+@dataclass(frozen=True, slots=True)
+class BankStatementPage:
+    items: tuple[BankStatementView, ...]
+    total: int
+    offset: int
+    limit: int
+
+
+@dataclass(frozen=True, slots=True)
+class BankTransactionView:
+    id: UUID
+    bank_statement_id: UUID
+    transaction_date: date | None
+    posted_date: date | None
+    amount: Decimal
+    direction: str
+    description: str | None
+    document_number: str | None
+    identity_kind: str
+
+
+@dataclass(frozen=True, slots=True)
+class BankTransactionPage:
+    items: tuple[BankTransactionView, ...]
+    total: int
+    offset: int
+    limit: int
+
+
+@dataclass(frozen=True, slots=True)
+class BankStatementDetail:
+    statement: BankStatementView
+    transactions: BankTransactionPage
+
+
 class OperationalService:
     def __init__(
         self, repository: OperationalQueryRepository,
@@ -142,6 +308,133 @@ class OperationalService:
         self._nfe = nfe
         self._ofx = ofx
         self._audit = audit
+
+    def company(
+        self, tenant_id: UUID, company_id: UUID, actor_id: UUID,
+    ) -> CompanyView:
+        self._require(tenant_id, company_id, actor_id, 'company.read')
+        row = self._repository.get_company(tenant_id, company_id)
+        if row is None:
+            raise OperationalUnavailableError()
+        return CompanyView(
+            row.id, row.legal_name, row.trade_name, row.tax_identifier,
+            row.status, row.timezone, row.currency_code,
+        )
+
+    def documents(
+        self, tenant_id: UUID, company_id: UUID, actor_id: UUID, *,
+        offset: int, limit: int, search: str | None = None,
+        status: str | None = None, source: str | None = None,
+        received_from: date | None = None, received_to: date | None = None,
+    ) -> DocumentPage:
+        self._require(tenant_id, company_id, actor_id, 'company.read')
+        if received_from is not None and received_to is not None and received_from > received_to:
+            raise ValueError('invalid date range')
+        rows, total = self._repository.list_documents(
+            tenant_id, company_id, offset=offset, limit=limit,
+            search=search, status=status, source=source,
+            received_from=received_from, received_to=received_to,
+        )
+        return DocumentPage(
+            tuple(_document_view(row) for row in rows), total, offset, limit,
+        )
+
+    def document(
+        self, tenant_id: UUID, company_id: UUID, actor_id: UUID, document_id: UUID,
+    ) -> DocumentDetail:
+        self._require(tenant_id, company_id, actor_id, 'company.read')
+        row = self._repository.get_document(tenant_id, company_id, document_id)
+        if row is None:
+            raise OperationalUnavailableError()
+        issues = self._repository.list_document_issues(
+            tenant_id, company_id, row.artifact_id,
+        )
+        return DocumentDetail(_document_view(row), tuple(ExceptionView(
+            item.id, item.transformation_run_id, item.code, item.severity,
+            item.field_path, item.rule_reference, item.resolution_status,
+            item.created_at,
+        ) for item in issues), self._repository.linked_fiscal_document_id(
+            tenant_id, company_id, row.artifact_id,
+        ), self._repository.linked_bank_statement_id(
+            tenant_id, company_id, row.artifact_id,
+        ))
+
+    def document_summary(
+        self, tenant_id: UUID, company_id: UUID, actor_id: UUID,
+    ) -> DocumentSummary:
+        self._require(tenant_id, company_id, actor_id, 'company.read')
+        return DocumentSummary(*self._repository.document_counts(tenant_id, company_id))
+
+    def fiscal_documents(
+        self, tenant_id: UUID, company_id: UUID, actor_id: UUID, *,
+        offset: int, limit: int, search: str | None = None,
+        status: str | None = None, issued_from: date | None = None,
+        issued_to: date | None = None,
+    ) -> FiscalPage:
+        self._require(tenant_id, company_id, actor_id, 'company.read')
+        if issued_from is not None and issued_to is not None and issued_from > issued_to:
+            raise ValueError('invalid date range')
+        rows, total = self._repository.list_fiscal_documents(
+            tenant_id, company_id, offset=offset, limit=limit, search=search,
+            status=status, issued_from=issued_from, issued_to=issued_to,
+        )
+        return FiscalPage(tuple(_fiscal_view(row) for row in rows), total, offset, limit)
+
+    def fiscal_document(
+        self, tenant_id: UUID, company_id: UUID, actor_id: UUID,
+        fiscal_document_id: UUID, *, item_limit: int = 200,
+    ) -> FiscalDetail:
+        self._require(tenant_id, company_id, actor_id, 'company.read')
+        row = self._repository.get_fiscal_document(tenant_id, company_id, fiscal_document_id)
+        if row is None:
+            raise OperationalUnavailableError()
+        items, total = self._repository.list_fiscal_items(
+            tenant_id, company_id, fiscal_document_id, limit=item_limit,
+        )
+        return FiscalDetail(
+            _fiscal_view(row), tuple(FiscalItemView(
+                item.id, item.sequence, item.product_code, item.description,
+                item.ncm, item.cfop, item.commercial_unit, item.quantity,
+                item.unit_value, item.gross_total, item.discount_total,
+                item.other_total, item.included_in_total,
+            ) for item in items), total,
+            self._repository.fiscal_tax_totals(tenant_id, company_id, fiscal_document_id),
+        )
+
+    def bank_statements(
+        self, tenant_id: UUID, company_id: UUID, actor_id: UUID, *,
+        offset: int, limit: int,
+    ) -> BankStatementPage:
+        self._require(tenant_id, company_id, actor_id, 'company.read')
+        rows, total = self._repository.list_bank_statements(
+            tenant_id, company_id, offset=offset, limit=limit,
+        )
+        return BankStatementPage(tuple(_statement_view(row) for row in rows), total, offset, limit)
+
+    def bank_statement(
+        self, tenant_id: UUID, company_id: UUID, actor_id: UUID,
+        statement_id: UUID, *, offset: int, limit: int, search: str | None = None,
+        direction: str | None = None, posted_from: date | None = None,
+        posted_to: date | None = None,
+    ) -> BankStatementDetail:
+        self._require(tenant_id, company_id, actor_id, 'company.read')
+        if posted_from is not None and posted_to is not None and posted_from > posted_to:
+            raise ValueError('invalid date range')
+        statement = self._repository.get_bank_statement(tenant_id, company_id, statement_id)
+        if statement is None:
+            raise OperationalUnavailableError()
+        rows, total = self._repository.list_bank_transactions(
+            tenant_id, company_id, statement_id, offset=offset, limit=limit,
+            search=search, direction=direction, posted_from=posted_from,
+            posted_to=posted_to,
+        )
+        return BankStatementDetail(_statement_view(statement), BankTransactionPage(
+            tuple(BankTransactionView(
+                item.id, item.bank_statement_id, item.transaction_date,
+                item.posted_date, item.amount, item.direction,
+                item.description, item.document_number, item.identity_kind,
+            ) for item in rows), total, offset, limit,
+        ))
 
     def import_nfe(self, command: NFeImportCommand) -> Journey:
         return self._nfe.prepare(JourneyCommand(
@@ -282,3 +575,41 @@ def _review_summary(journey: Journey) -> ReviewSummary | None:
         journey.request.id if journey.request else None,
         journey.request.expires_at if journey.request else None,
     )
+
+
+def _document_view(row: object) -> DocumentView:
+    return DocumentView(
+        row.id, row.company_id, row.batch_id, row.filename, row.media_type,
+        row.size_bytes, row.source, row.channel, row.receipt_result,
+        row.processing_status, row.error_code, row.received_at,
+    )
+
+
+def _fiscal_view(row: object) -> FiscalDocumentView:
+    return FiscalDocumentView(
+        row.id, row.company_id, row.access_key, row.model, row.schema_version,
+        row.series, row.document_number, row.operation_nature,
+        row.issuer_tax_id, row.issuer_name, row.recipient_tax_id,
+        row.recipient_name, row.issued_at, row.movement_at,
+        row.products_total, row.freight_total, row.insurance_total,
+        row.discount_total, row.other_total, row.tax_total, row.invoice_total,
+        row.observed_status, row.protocol_status_code,
+        row.protocol_status_reason, row.created_at, row.receipt_id,
+    )
+
+
+def _statement_view(row: object) -> BankStatementView:
+    return BankStatementView(
+        row.id, row.company_id, row.bank_id, _masked(row.branch_id, visible=2),
+        _masked(row.account_number, visible=4) or '••••', row.account_type,
+        row.start_date, row.end_date, row.opening_balance, row.closing_balance,
+        row.currency_code, row.sign_policy, row.created_at, row.receipt_id,
+    )
+
+
+def _masked(value: str | None, *, visible: int) -> str | None:
+    if value is None:
+        return None
+    visible_count = min(visible, max(1, len(value) // 2))
+    suffix = value[-visible_count:]
+    return f'••••{suffix}'

@@ -43,7 +43,7 @@ def test_session_model_declares_all_required_states() -> None:
 def test_sidebar_uses_exact_segmented_backend_permissions() -> None:
     app = source('app.js')
     for permission in (
-        'company.read', 'reconciliation.manage', 'journal.read', 'audit.read',
+        'company.read', 'journal.read', 'audit.read',
         'lock.manage', 'identity.manage', 'catalog.manage',
     ):
         assert permission in app

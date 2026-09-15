@@ -32,7 +32,34 @@
       dashboardReviews: (companyId) => request(`/operations/companies/${encodeURIComponent(companyId)}/reviews?limit=50`),
       dashboardExceptions: (companyId) => request(`/operations/companies/${encodeURIComponent(companyId)}/exceptions?limit=50`),
       dashboardActivity: (companyId) => request(`/operations/companies/${encodeURIComponent(companyId)}/audit-events?limit=10`),
+      company: (companyId) => request(`/operations/companies/${encodeURIComponent(companyId)}`),
+      documents: (companyId, filters = {}) => {
+        const query = new URLSearchParams();
+        Object.entries(filters).forEach(([key, value]) => {
+          if (value !== '' && value !== null && value !== undefined) query.set(key, String(value));
+        });
+        return request(`/operations/companies/${encodeURIComponent(companyId)}/documents?${query}`);
+      },
+      document: (companyId, documentId) => request(`/operations/companies/${encodeURIComponent(companyId)}/documents/${encodeURIComponent(documentId)}`),
+      documentSummary: (companyId) => request(`/operations/companies/${encodeURIComponent(companyId)}/documents/summary`),
+      fiscalDocuments: (companyId, filters = {}) => request(`/operations/companies/${encodeURIComponent(companyId)}/fiscal-documents?${queryString(filters)}`),
+      fiscalDocument: (companyId, id) => request(`/operations/companies/${encodeURIComponent(companyId)}/fiscal-documents/${encodeURIComponent(id)}`),
+      importNfe: (companyId, file, fields) => request(`/operations/companies/${encodeURIComponent(companyId)}/imports/nfe?${queryString(fields)}`, {
+        method: 'POST', body: file, headers: {'Content-Type': file.type || 'application/xml', 'X-Filename': file.name, 'Idempotency-Key': root.crypto.randomUUID()},
+      }),
+      bankStatements: (companyId, filters = {}) => request(`/operations/companies/${encodeURIComponent(companyId)}/bank-statements?${queryString(filters)}`),
+      bankStatement: (companyId, id, filters = {}) => request(`/operations/companies/${encodeURIComponent(companyId)}/bank-statements/${encodeURIComponent(id)}?${queryString(filters)}`),
+      importOfx: (companyId, file) => request(`/operations/companies/${encodeURIComponent(companyId)}/imports/ofx`, {
+        method: 'POST', body: file, headers: {'Content-Type': file.type || 'application/x-ofx', 'X-Filename': file.name, 'Idempotency-Key': root.crypto.randomUUID()},
+      }),
     });
+  }
+  function queryString(filters) {
+    const query = new URLSearchParams();
+    Object.entries(filters || {}).forEach(([key, value]) => {
+      if (value !== '' && value !== null && value !== undefined) query.set(key, String(value));
+    });
+    return query.toString();
   }
   root.S21ApiClient = Object.freeze({ApiError, createApiClient});
 }(globalThis));
