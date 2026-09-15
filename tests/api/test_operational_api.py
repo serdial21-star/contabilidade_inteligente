@@ -919,6 +919,20 @@ def test_read_endpoints_require_authentication_and_hide_cross_tenant_company(
     assert cross_tenant.json() == unknown.json() == {'detail': 'access denied'}
 
 
+@pytest.mark.parametrize('resource', [
+    'documents', 'fiscal-documents', 'bank-statements', 'accounting-proposals',
+    'reviews', 'exceptions', 'audit-events',
+])
+def test_operational_pagination_rejects_unbounded_limits(
+    operational: OperationalFixture, resource: str,
+) -> None:
+    response = operational.client.get(
+        f'/api/v1/operations/companies/{operational.company}/{resource}',
+        params={'limit': 1_000_000}, headers=operational.headers('accountant'),
+    )
+    assert response.status_code == 422
+
+
 def test_insufficient_role_cannot_decide_and_reject_is_available(
     operational: OperationalFixture,
 ) -> None:

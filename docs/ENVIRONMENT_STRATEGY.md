@@ -1,5 +1,16 @@
 # Environment Strategy
 
+## Modelo explícito da Phase 11
+
+| Ambiente de produto | Literal técnico | Política |
+|---|---|---|
+| LOCAL | `development` | defaults seguros, sem exposição; configuração externa opcional e completa |
+| TEST | `test` | fixtures sintéticas, SQLite permitido, serviços determinísticos |
+| HOMOLOGATION | `homologation` | isolado e production-like; exige banco, OIDC HTTPS, origem, hosts, HTTPS e rate limit distribuído |
+| PRODUCTION | `production` | mesmas exigências fail-closed, HSTS, debug/docs desativados por padrão e gates operacionais |
+
+Esta tabela substitui a correspondência histórica que tratava STAGING apenas como ambiente lógico. `homologation` agora é um perfil validado; nenhum ambiente herda silenciosamente comportamento de produção.
+
 Estratégia conceitual de 14/09/2026. Não provisiona cloud, banco, IdP ou deploy. [Gates oficiais desta baseline](PRODUCT_RELEASE_BASELINE.md) permanecem vigentes. PRODUCTION_REAL_DATA = NOT_AUTHORIZED.
 
 | Aspecto | DEVELOPMENT | STAGING | PRODUCTION |
@@ -16,7 +27,7 @@ Estratégia conceitual de 14/09/2026. Não provisiona cloud, banco, IdP ou deplo
 
 ## Correspondência com configuração existente
 
-`src/serdial21/bootstrap/settings.py` aceita `development`, `test`, `production`; **não aceita `staging`**. STAGING é um ambiente lógico planejado. Antes de provisioná-lo, definir configuração validada: poderá usar perfil técnico `production` para aplicar validações de HTTPS/OIDC/debug, mantendo recursos e segredos exclusivos de homologação. Isso não concede autorização para dados reais. Acrescentar literal `staging` exigiria mudança de código/testes em fase própria; nada foi alterado aqui.
+`src/serdial21/bootstrap/settings.py` aceita `development`, `test`, `homologation` e `production`. O termo histórico STAGING corresponde agora a HOMOLOGATION; não existe literal `staging`. Homologação não concede autorização para dados reais.
 
 `DATABASE_URL` usa `mysql+pymysql`; `sqlite+pysqlite` só em `test`. O perfil `production` exige banco, OIDC HTTPS e debug desativado. Variáveis relevantes incluem `SERDIAL21_ENVIRONMENT`, `OIDC_ISSUER`, `OIDC_AUDIENCE`, `OIDC_JWKS_URL`, `OBJECT_STORAGE_PATH` e limites de upload. Valores de segredos, URLs privadas e conteúdo de `.env` não fazem parte desta documentação.
 

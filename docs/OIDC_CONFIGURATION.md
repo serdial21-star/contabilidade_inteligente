@@ -1,5 +1,11 @@
 # Configuração OIDC do aplicativo web
 
+## Contrato de produção da Phase 11
+
+Homologação/produção exigem issuer e JWKS HTTPS, audience exclusiva, URL pública HTTPS, redirect e post-logout redirect same-origin no frontend, host/origin explícitos e debug desativado. O backend fixa RS256, valida `iss`, `aud`, `exp`, `iat`, `sub` e `tenant_id`, mantém cache JWKS limitado e nega acesso quando a chave não pode ser obtida ou validada.
+
+Logout local está pronto. Logout remoto está `READY_FOR_CONFIGURATION`: depende de `end_session_endpoint` publicado pelo IdP e `postLogoutRedirectUri` autorizado. Revogação global permanece `PROVIDER_DEPENDENT`; use access tokens curtos, revogação de sessão no IdP, rotação de chave e revalidação interna de membership/CompanyAccess em cada request. Nenhum client secret é necessário ou permitido no frontend.
+
 O Serdial21 usa arquitetura independente de fornecedor. Nenhum IdP está configurado no repositório. O cliente público usa Authorization Code + PKCE S256 e não possui client secret.
 
 ## Configuração pública obrigatória

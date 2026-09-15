@@ -17,6 +17,11 @@ def test_defaults_are_safe_for_local_development() -> None:
     assert settings.document_max_upload_bytes == 10 * 1024 * 1024
     assert settings.nfe_max_xml_bytes == 5 * 1024 * 1024
     assert settings.nfe_max_xml_elements == 100_000
+    assert settings.general_request_max_bytes == 1024 * 1024
+    assert settings.ofx_max_upload_bytes == 10 * 1024 * 1024
+    assert settings.rate_limit_backend == 'memory'
+    assert settings.resolved_cors_allowed_origins == ()
+    assert settings.resolved_trusted_hosts == ()
     assert settings.resolved_database_pool_size == 5
     assert settings.resolved_database_max_overflow == 5
 
@@ -103,6 +108,12 @@ def test_environment_profiles_have_distinct_pool_defaults() -> None:
         oidc_issuer='https://id.example.test',
         oidc_audience='serdial21-api',
         oidc_jwks_url='https://id.example.test/jwks.json',
+        public_frontend_url='https://app.example.test',
+        cors_allowed_origins='https://app.example.test',
+        trusted_hosts='api.example.test',
+        external_https=True,
+        rate_limit_backend='distributed',
+        rate_limit_backend_url='rediss://rate-limit.example.test/0',
     )
 
     assert test_settings.resolved_database_pool_size == 1

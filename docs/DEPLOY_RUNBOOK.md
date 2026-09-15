@@ -1,5 +1,9 @@
 # Deploy, abort e rollback operacional
 
+## Gate adicional da Phase 11
+
+Antes de qualquer exposição, validar o checklist em [PRODUCTION_SECURITY_CHECKLIST.md](PRODUCTION_SECURITY_CHECKLIST.md), a matriz em [SECURITY_CONFIGURATION_MATRIX.md](SECURITY_CONFIGURATION_MATRIX.md) e o contrato do proxy em [PRODUCTION_REVERSE_PROXY_SECURITY.md](PRODUCTION_REVERSE_PROXY_SECURITY.md). A composição deve fornecer backend distribuído de rate limit; selecionar `distributed` sem adapter falha no startup. Certificado/TLS, IdP real, segredos, migration 0012, observabilidade/recuperação, privacidade e UAT continuam gates externos.
+
 ## Pre-deploy
 
 O Incident Commander e o Technical Lead confirmam, sem expor valores de segredo:

@@ -768,7 +768,7 @@ async def import_ofx(
     _validate_file(filename, '.ofx')
     _validate_media(request, {'application/x-ofx', 'application/ofx', 'text/plain'})
     settings: AppSettings = request.app.state.settings
-    content = await _read_limited(request, settings.document_max_upload_bytes)
+    content = await _read_limited(request, settings.ofx_max_upload_bytes)
     try:
         service = create_operational_runtime(session, settings)
         result = service.import_ofx(OfxImportCommand(

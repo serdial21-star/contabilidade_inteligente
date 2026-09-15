@@ -28,7 +28,7 @@ def create_operational_runtime(
         create_nfe_to_dominio_runtime(session, settings),
         OfxImportService(
             nfe_runtime.intake,
-            SafeOfxParser(max_ofx_bytes=settings.document_max_upload_bytes),
+            SafeOfxParser(max_ofx_bytes=settings.ofx_max_upload_bytes),
             SqlAlchemyBankingRepository(session), audit,
         ),
         audit,

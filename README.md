@@ -1,5 +1,11 @@
 # Serdial21 Contabilidade Inteligente
 
+## Phase 11 — Security Infrastructure
+
+A aplicação agora possui contrato fail-closed para homologação/produção, CORS e hosts explícitos, HSTS condicionado a HTTPS, respostas sensíveis `no-store`, limites independentes de corpo/NF-e/OFX e rate limiting por classes com porta para backend distribuído. Consulte [SECURITY_INFRASTRUCTURE_SPEC.md](docs/SECURITY_INFRASTRUCTURE_SPEC.md), [PRODUCTION_REVERSE_PROXY_SECURITY.md](docs/PRODUCTION_REVERSE_PROXY_SECURITY.md), [PRODUCTION_SECURITY_CHECKLIST.md](docs/PRODUCTION_SECURITY_CHECKLIST.md), [SECURITY_CONFIGURATION_MATRIX.md](docs/SECURITY_CONFIGURATION_MATRIX.md) e [THREAT_MODEL.md](docs/THREAT_MODEL.md).
+
+Isso não configura IdP, TLS, rate limit distribuído ou segredos reais, não executa migrations e não autoriza exposição externa ou dados reais.
+
 ## Phase 09 — Linha da Decisão
 
 A rastreabilidade operacional agora projeta uma linha cronológica segura sobre auditoria e estado canônico existentes para documentos, NF-e, extratos, propostas e revisões. O contrato é somente leitura, tenant/company-aware, exige acesso ao recurso e `audit.read`, minimiza atores e não expõe payload bruto. Consulte [DECISION_LINE_SPEC.md](docs/DECISION_LINE_SPEC.md), [DECISION_LINE_SECURITY.md](docs/DECISION_LINE_SECURITY.md) e [DECISION_LINE_DATA_GAPS.md](docs/DECISION_LINE_DATA_GAPS.md).

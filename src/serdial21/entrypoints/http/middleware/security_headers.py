@@ -25,8 +25,17 @@ SECURITY_HEADERS: tuple[tuple[bytes, bytes], ...] = (
 class SecurityHeadersMiddleware:
     '''Evita que respostas da API sejam interpretadas ou embutidas indevidamente.'''
 
-    def __init__(self, app: ASGIApp) -> None:
+    def __init__(
+        self, app: ASGIApp, *, hsts_enabled: bool = False,
+        hsts_max_age_seconds: int = 31_536_000,
+    ) -> None:
         self.app = app
+        self._headers = SECURITY_HEADERS
+        if hsts_enabled:
+            self._headers += ((
+                b'strict-transport-security',
+                f'max-age={hsts_max_age_seconds}; includeSubDomains'.encode(),
+            ),)
 
     async def __call__(
         self,
@@ -44,7 +53,7 @@ class SecurityHeadersMiddleware:
                 existing = {name.lower() for name, _ in headers}
                 headers.extend(
                     (name, value)
-                    for name, value in SECURITY_HEADERS
+                    for name, value in self._headers
                     if name not in existing
                 )
                 message['headers'] = headers

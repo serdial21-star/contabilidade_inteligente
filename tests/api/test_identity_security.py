@@ -57,14 +57,16 @@ class IdentityFixture:
         tenant_id: UUID | None = None,
         expired: bool = False,
         signing_key: rsa.RSAPrivateKey | None = None,
+        issuer: str = ISSUER,
+        audience: str = AUDIENCE,
     ) -> str:
         issued = NOW - timedelta(minutes=2)
         expires = NOW - timedelta(minutes=1) if expired else NOW + timedelta(minutes=10)
         return jwt.encode(
             {
-                'iss': ISSUER,
+                'iss': issuer,
                 'sub': subject,
-                'aud': AUDIENCE,
+                'aud': audience,
                 'iat': int(issued.timestamp()),
                 'exp': int(expires.timestamp()),
                 'tenant_id': str(tenant_id or self.tenant_a),
@@ -217,6 +219,35 @@ def test_invalid_and_expired_tokens_have_same_safe_response(identity: IdentityFi
     expired = client.get('/api/v1/identity/context', headers=_headers(identity.token(expired=True)), params={'company_id': str(identity.company_a)})
     assert invalid.status_code == expired.status_code == 401
     assert invalid.json() == expired.json() == {'detail': 'authentication failed'}
+
+
+def test_wrong_issuer_audience_and_none_algorithm_are_rejected(identity: IdentityFixture) -> None:
+    client = TestClient(identity.app)
+    wrong_issuer = client.get(
+        '/api/v1/identity/context',
+        headers=_headers(identity.token(issuer='https://wrong.example.test')),
+        params={'company_id': str(identity.company_a)},
+    )
+    wrong_audience = client.get(
+        '/api/v1/identity/context',
+        headers=_headers(identity.token(audience='wrong-api')),
+        params={'company_id': str(identity.company_a)},
+    )
+    issued = NOW - timedelta(minutes=1)
+    unsigned = jwt.encode({
+        'iss': ISSUER, 'sub': 'actor-subject', 'aud': AUDIENCE,
+        'iat': int(issued.timestamp()), 'exp': int((NOW + timedelta(minutes=5)).timestamp()),
+        'tenant_id': str(identity.tenant_a),
+    }, key='', algorithm='none')
+    none_algorithm = client.get(
+        '/api/v1/identity/context', headers=_headers(unsigned),
+        params={'company_id': str(identity.company_a)},
+    )
+    assert {wrong_issuer.status_code, wrong_audience.status_code, none_algorithm.status_code} == {401}
+    assert all(
+        response.json() == {'detail': 'authentication failed'}
+        for response in (wrong_issuer, wrong_audience, none_algorithm)
+    )
 
 
 def test_current_application_is_derived_from_authenticated_principal(
