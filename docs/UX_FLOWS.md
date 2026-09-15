@@ -1,5 +1,11 @@
 # UX Flows
 
+## Fluxo Phase 08
+
+CONTÁBIL → PROPOSTAS (paginadas/filtradas) → REVISÃO prioriza status, origem, regra/por quê, linhas compostas, totais do backend e evidências → confirmação explícita → APROVAÇÃO INTERNA ou REJEIÇÃO. A tela envia versão, revisão e hash; sucesso declara que não houve posting/export. Lock, falta de alçada, SOD, revisão alterada e decisão concorrente resultam em estados seguros.
+
+USUÁRIO COM `catalog.review` → CATÁLOGO PUBLICADO → REGRA DETALHADA / CONTAS / MAPEAMENTOS, todos read-only. Edição e Linha da Decisão completa permanecem adiadas.
+
 ## Fluxos Phase 07
 
 **NF-e:** selecionar empresa autorizada → abrir Fiscal · NF-e → informar arquivo XML e os quatro campos obrigatórios do contrato → receber estado de importação, duplicidade ou atenção → filtrar lista → abrir cabeçalho, tributos persistidos e itens → voltar ao receipt na Central. O fluxo termina antes da revisão/aprovação contábil.

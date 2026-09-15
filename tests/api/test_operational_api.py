@@ -571,6 +571,121 @@ def test_financial_projection_masks_account_and_preserves_credit_debit(
     assert document.json()['fiscal_document_id'] is None
 
 
+def test_accounting_intelligence_projects_exact_proposal_rule_and_evidence(
+    operational: OperationalFixture,
+) -> None:
+    imported = operational.client.post(
+        f'/api/v1/operations/companies/{operational.company}/imports/nfe',
+        params=_nfe_params(), content=NFE.read_bytes(), headers=operational.headers(
+            'proposer', content_type='application/xml', filename='accounting-phase08.xml',
+            key='accounting-phase08',
+        ),
+    )
+    assert imported.status_code == 202, imported.text
+    journey_id = imported.json()['resource_id']
+
+    listing = operational.client.get(
+        f'/api/v1/operations/companies/{operational.company}/accounting-proposals',
+        params={'status': 'PENDING_APPROVAL', 'offset': 0, 'limit': 10},
+        headers=operational.headers('accountant'),
+    )
+    assert listing.status_code == 200, listing.text
+    assert listing.json()['total'] == 1
+    summary = listing.json()['items'][0]
+    assert summary['journey_id'] == journey_id
+    assert summary['rule_name'] == 'NF-e rule'
+    assert Decimal(summary['total_debit']) == Decimal('100.00')
+    assert Decimal(summary['total_credit']) == Decimal('100.00')
+    assert summary['balanced'] is True
+    assert summary['status'] == 'PENDING_APPROVAL'
+    assert 'tenant_id' not in summary
+
+    detail = operational.client.get(
+        f'/api/v1/operations/companies/{operational.company}/accounting-proposals/{journey_id}',
+        headers=operational.headers('accountant'),
+    )
+    assert detail.status_code == 200, detail.text
+    payload = detail.json()
+    assert len(payload['lines']) == 2
+    assert payload['rule']['conditions'] == [
+        {'field': 'model', 'operator': 'EQ', 'value': '55'},
+    ]
+    assert payload['rule']['debit_account_code'] == '1.1'
+    assert payload['rule']['credit_account_code'] == '3.1'
+    assert payload['sources'][0]['source_type'] == 'FiscalDocument'
+    assert payload['sources'][0]['document_receipt_id'] is not None
+    assert 'raw_payload' not in payload['sources'][0]
+
+    activity = operational.client.get(
+        f'/api/v1/operations/companies/{operational.company}/accounting-proposals/{journey_id}/activity',
+        headers=operational.headers('accountant'),
+    )
+    assert activity.status_code == 200
+    assert all(item['integrity_valid'] for item in activity.json())
+
+    catalog = operational.client.get(
+        f'/api/v1/operations/companies/{operational.company}/accounting-catalog',
+        params={'effective_at': '2026-09-04'},
+        headers=operational.headers('proposer'),
+    )
+    assert catalog.status_code == 200, catalog.text
+    assert catalog.json()['decimal_places'] == 2
+    rule_id = catalog.json()['rules'][0]['id']
+    account_id = catalog.json()['accounts'][0]['id']
+    assert operational.client.get(
+        f'/api/v1/operations/companies/{operational.company}/accounting-rules/{rule_id}',
+        params={'effective_at': '2026-09-04'},
+        headers=operational.headers('proposer'),
+    ).status_code == 200
+    assert operational.client.get(
+        f'/api/v1/operations/companies/{operational.company}/accounting-accounts/{account_id}',
+        params={'effective_at': '2026-09-04'},
+        headers=operational.headers('proposer'),
+    ).status_code == 200
+
+
+def test_accounting_proposal_and_catalog_idor_are_safe(
+    operational: OperationalFixture,
+) -> None:
+    paths = (
+        f'accounting-proposals/{uuid4()}',
+        f'accounting-rules/{uuid4()}',
+        f'accounting-accounts/{uuid4()}',
+    )
+    for path in paths:
+        unauthenticated = operational.client.get(
+            f'/api/v1/operations/companies/{operational.company}/{path}',
+            params={'effective_at': '2026-09-04'},
+        )
+        own = operational.client.get(
+            f'/api/v1/operations/companies/{operational.company}/{path}',
+            params={'effective_at': '2026-09-04'},
+            headers=operational.headers('proposer'),
+        )
+        cross = operational.client.get(
+            f'/api/v1/operations/companies/{operational.other_company}/{path}',
+            params={'effective_at': '2026-09-04'},
+            headers=operational.headers('proposer'),
+        )
+        assert unauthenticated.status_code == 401
+        assert own.status_code == 404
+        assert own.json() == {'detail': 'resource unavailable'}
+        assert cross.status_code == 403
+        assert cross.json() == {'detail': 'access denied'}
+    catalog_cross = operational.client.get(
+        f'/api/v1/operations/companies/{operational.other_company}/accounting-catalog',
+        params={'effective_at': '2026-09-04'},
+        headers=operational.headers('proposer'),
+    )
+    assert catalog_cross.status_code == 403
+    assert catalog_cross.json() == {'detail': 'access denied'}
+    catalog_unauthenticated = operational.client.get(
+        f'/api/v1/operations/companies/{operational.company}/accounting-catalog',
+        params={'effective_at': '2026-09-04'},
+    )
+    assert catalog_unauthenticated.status_code == 401
+
+
 @pytest.mark.parametrize('resource', ['fiscal-documents', 'bank-statements'])
 def test_fiscal_and_financial_idor_are_uniform(
     operational: OperationalFixture, resource: str,
@@ -601,6 +716,8 @@ def test_fiscal_and_financial_idor_are_uniform(
     'processing/00000000-0000-0000-0000-000000000001',
     'reviews',
     'reviews/00000000-0000-0000-0000-000000000001',
+    'accounting-proposals',
+    'accounting-proposals/00000000-0000-0000-0000-000000000001',
     'exceptions',
     'audit-events',
 ])

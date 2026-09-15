@@ -1,5 +1,17 @@
 # Component Inventory
 
+## Componentes Phase 08
+
+| COMPONENT | PURPOSE | STATUS | ACCESSIBILITY / SECURITY |
+|---|---|---|---|
+| AccountingProposalTable | Fila paginada/filtrada | READY | Tabela semântica e status textual. |
+| AccountingProposalDetail | Regra, fonte, linhas e revisão | READY | Dados escapados; totais do backend. |
+| JournalLinesTable | Débitos/créditos compostos | READY | Conta, nome e valores rotulados. |
+| AccountingDecisionDialog | Confirmação humana | READY | `dialog`, checkbox obrigatório; versão/hash enviados. |
+| AccountLockNotice | Bloqueio seguro | READY | Escopo, alvo, motivo e data; sem release. |
+| AccountingCatalog | Regras/contas/mappings | READY_READ_ONLY | Exige `catalog.review`; versão íntegra. |
+| AccountingService | Provider API/sintético | READY | Sem fallback sintético no modo API. |
+
 ## Componentes Phase 07
 
 | COMPONENT | PURPOSE | STATUS | ACCESSIBILITY / SECURITY |

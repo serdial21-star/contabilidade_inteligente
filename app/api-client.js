@@ -19,6 +19,7 @@
       catch (_) { throw new ApiError('NETWORK_UNAVAILABLE', 0); }
       if (response.status === 401) { onAuthenticationFailure(); throw new ApiError('SESSION_EXPIRED', 401); }
       if (response.status === 403) throw new ApiError('FORBIDDEN', 403);
+      if (response.status === 423) throw new ApiError('RESOURCE_LOCKED', 423);
       if (response.status >= 500) throw new ApiError('SERVER_TEMPORARY_FAILURE', response.status);
       if (!response.ok) throw new ApiError('REQUEST_FAILED', response.status);
       if (response.status === 204) return null;
@@ -51,6 +52,16 @@
       bankStatement: (companyId, id, filters = {}) => request(`/operations/companies/${encodeURIComponent(companyId)}/bank-statements/${encodeURIComponent(id)}?${queryString(filters)}`),
       importOfx: (companyId, file) => request(`/operations/companies/${encodeURIComponent(companyId)}/imports/ofx`, {
         method: 'POST', body: file, headers: {'Content-Type': file.type || 'application/x-ofx', 'X-Filename': file.name, 'Idempotency-Key': root.crypto.randomUUID()},
+      }),
+      accountingProposals: (companyId, filters = {}) => request(`/operations/companies/${encodeURIComponent(companyId)}/accounting-proposals?${queryString(filters)}`),
+      accountingProposal: (companyId, id) => request(`/operations/companies/${encodeURIComponent(companyId)}/accounting-proposals/${encodeURIComponent(id)}`),
+      proposalActivity: (companyId, id) => request(`/operations/companies/${encodeURIComponent(companyId)}/accounting-proposals/${encodeURIComponent(id)}/activity?limit=10`),
+      accountingCatalog: (companyId, effectiveAt) => request(`/operations/companies/${encodeURIComponent(companyId)}/accounting-catalog?effective_at=${encodeURIComponent(effectiveAt)}`),
+      accountingRule: (companyId, id, effectiveAt) => request(`/operations/companies/${encodeURIComponent(companyId)}/accounting-rules/${encodeURIComponent(id)}?effective_at=${encodeURIComponent(effectiveAt)}`),
+      accountingAccount: (companyId, id, effectiveAt) => request(`/operations/companies/${encodeURIComponent(companyId)}/accounting-accounts/${encodeURIComponent(id)}?effective_at=${encodeURIComponent(effectiveAt)}`),
+      decideProposal: (companyId, id, decision, summary) => request(`/operations/companies/${encodeURIComponent(companyId)}/reviews/${encodeURIComponent(id)}/${decision === 'APPROVED' ? 'approve' : 'reject'}`, {
+        method: 'POST', headers: {'Content-Type': 'application/json', 'Idempotency-Key': root.crypto.randomUUID()},
+        body: JSON.stringify({expected_version: summary.version, revision_id: summary.revision_id, revision_hash: summary.revision_hash}),
       }),
     });
   }

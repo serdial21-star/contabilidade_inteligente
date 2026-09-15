@@ -19,6 +19,10 @@ from serdial21.modules.intake_documents.application.services.intake import (
     DocumentIntakeService, IntakeContext, StartBatchRequest,
 )
 from serdial21.modules.intake_documents.domain.entities import ImportBatch
+from serdial21.modules.locks.domain.entities import (
+    AccountLock, AccountLockedError, EffectChannel, EffectContext,
+    EffectOperation, validate_effect,
+)
 from serdial21.modules.operations.application.ports.repository import OperationalQueryRepository
 from serdial21.modules.workflow.application.journey import Journey, JourneyCommand
 from serdial21.modules.workflow.application.services.nfe_to_dominio import NFeToDominioService
@@ -101,6 +105,134 @@ class ReviewDetail:
     validation_status: str | None
     lines: tuple[ReviewLineView, ...]
     source_count: int
+
+
+@dataclass(frozen=True, slots=True)
+class AccountingProposalSummary:
+    journey_id: UUID
+    company_id: UUID
+    version: int
+    status: str
+    proposal_id: UUID
+    revision_id: UUID
+    revision_hash: str
+    accounting_date: date
+    source_type: str
+    source_id: UUID
+    source_document_receipt_id: UUID | None
+    rule_version_id: UUID
+    rule_name: str | None
+    total_debit: Decimal
+    total_credit: Decimal
+    balanced: bool
+    validation_status: str | None
+    proposer_id: UUID
+    approval_role: str
+    responsible_role: str
+    expires_at: datetime | None
+    decision_actor_id: UUID | None
+    decided_at: datetime | None
+
+
+@dataclass(frozen=True, slots=True)
+class AccountingProposalPage:
+    items: tuple[AccountingProposalSummary, ...]
+    total: int
+    offset: int
+    limit: int
+
+
+@dataclass(frozen=True, slots=True)
+class RuleConditionView:
+    field: str
+    operator: str
+    value: str
+
+
+@dataclass(frozen=True, slots=True)
+class AccountingRuleView:
+    id: UUID
+    name: str | None
+    scope: str
+    priority: int
+    status: str
+    automation_level: str
+    conditions: tuple[RuleConditionView, ...]
+    debit_account_version_id: UUID
+    debit_account_code: str
+    debit_account_name: str
+    credit_account_version_id: UUID
+    credit_account_code: str
+    credit_account_name: str
+
+
+@dataclass(frozen=True, slots=True)
+class AccountingSourceEvidence:
+    source_type: str
+    source_id: UUID
+    document_receipt_id: UUID | None
+    document_number: str | None
+    issuer_name: str | None
+    issued_at: datetime | None
+    amount: Decimal | None
+
+
+@dataclass(frozen=True, slots=True)
+class AccountingLockView:
+    id: UUID
+    scope: str
+    operations: tuple[str, ...]
+    reason: str
+    target: str
+    created_at: datetime
+
+
+@dataclass(frozen=True, slots=True)
+class AccountingProposalDetail:
+    summary: AccountingProposalSummary
+    rule: AccountingRuleView
+    lines: tuple[ReviewLineView, ...]
+    sources: tuple[AccountingSourceEvidence, ...]
+    active_locks: tuple[AccountingLockView, ...]
+
+
+@dataclass(frozen=True, slots=True)
+class AccountingAccountView:
+    id: UUID
+    code: str
+    name: str
+    nature: str
+    normal_balance: str
+    is_synthetic: bool
+    is_postable: bool
+    status: str
+
+
+@dataclass(frozen=True, slots=True)
+class AccountingMappingView:
+    id: UUID
+    key: str
+    priority: int
+    external_code: str | None
+    history_contains: str | None
+    dimension_code: str | None
+    canonical_entity: str | None
+    target_account_version_id: UUID
+    target_account_code: str
+    target_account_name: str
+
+
+@dataclass(frozen=True, slots=True)
+class AccountingCatalogView:
+    version_id: UUID
+    version_no: int
+    valid_from: date
+    valid_to: date | None
+    decimal_places: int
+    amount_field: str
+    rules: tuple[AccountingRuleView, ...]
+    accounts: tuple[AccountingAccountView, ...]
+    mappings: tuple[AccountingMappingView, ...]
 
 
 @dataclass(frozen=True, slots=True)
@@ -513,6 +645,130 @@ class OperationalService:
             lines, len(journey.sources),
         )
 
+    def accounting_proposals(
+        self, tenant_id: UUID, company_id: UUID, actor_id: UUID, *,
+        offset: int, limit: int, status: str | None = None,
+    ) -> AccountingProposalPage:
+        self._require(tenant_id, company_id, actor_id, 'journal.read')
+        rows, total = self._repository.list_proposal_journeys(
+            tenant_id, company_id, offset=offset, limit=limit, status=status,
+        )
+        return AccountingProposalPage(tuple(
+            self._proposal_summary(tenant_id, company_id, journey) for journey in rows
+        ), total, offset, limit)
+
+    def accounting_proposal(
+        self, tenant_id: UUID, company_id: UUID, actor_id: UUID, journey_id: UUID,
+    ) -> AccountingProposalDetail:
+        self._require(tenant_id, company_id, actor_id, 'journal.read')
+        journey = self._repository.get_journey(tenant_id, company_id, journey_id)
+        if journey is None or not _has_accounting_proposal(journey):
+            raise OperationalUnavailableError()
+        summary = self._proposal_summary(tenant_id, company_id, journey)
+        rule = _journey_rule(journey, summary.rule_name)
+        accounts = {item.id: item for item in journey.plan.accounts}
+        lines = tuple(ReviewLineView(
+            line.account_version_id, accounts[line.account_version_id].code,
+            accounts[line.account_version_id].name, line.debit, line.credit,
+        ) for line in journey.lines)
+        sources = []
+        for source in journey.sources:
+            fiscal = self._repository.get_fiscal_document(
+                tenant_id, company_id, source.source_id,
+            ) if source.source_type == 'FiscalDocument' else None
+            sources.append(AccountingSourceEvidence(
+                source.source_type, source.source_id,
+                fiscal.receipt_id if fiscal else None,
+                fiscal.document_number if fiscal else None,
+                fiscal.issuer_name if fiscal else None,
+                fiscal.issued_at if fiscal else None,
+                fiscal.invoice_total if fiscal else None,
+            ))
+        locks = tuple(AccountingLockView(
+            record.lock.id, record.lock.scope.value,
+            tuple(operation.value for operation in record.lock.operations),
+            record.lock.reason, _lock_target(record.lock), record.created_at,
+        ) for record in self._repository.list_active_lock_records(tenant_id, company_id)
+            if _blocks_accounting_decision(record.lock, journey))
+        return AccountingProposalDetail(summary, rule, lines, tuple(sources), locks)
+
+    def accounting_catalog(
+        self, tenant_id: UUID, company_id: UUID, actor_id: UUID,
+        *, at: date,
+    ) -> AccountingCatalogView:
+        self._require(tenant_id, company_id, actor_id, 'catalog.review')
+        record = self._repository.published_catalog(
+            tenant_id, company_id, at=at,
+        )
+        if record is None:
+            raise OperationalUnavailableError()
+        return _catalog_view(record)
+
+    def accounting_rule(
+        self, tenant_id: UUID, company_id: UUID, actor_id: UUID, rule_id: UUID,
+        *, at: date,
+    ) -> AccountingRuleView:
+        catalog = self.accounting_catalog(tenant_id, company_id, actor_id, at=at)
+        item = next((rule for rule in catalog.rules if rule.id == rule_id), None)
+        if item is None:
+            raise OperationalUnavailableError()
+        return item
+
+    def accounting_account(
+        self, tenant_id: UUID, company_id: UUID, actor_id: UUID, account_id: UUID,
+        *, at: date,
+    ) -> AccountingAccountView:
+        catalog = self.accounting_catalog(tenant_id, company_id, actor_id, at=at)
+        item = next((account for account in catalog.accounts if account.id == account_id), None)
+        if item is None:
+            raise OperationalUnavailableError()
+        return item
+
+    def proposal_activity(
+        self, tenant_id: UUID, company_id: UUID, actor_id: UUID, journey_id: UUID,
+        *, limit: int,
+    ) -> tuple[AuditView, ...]:
+        self._require(tenant_id, company_id, actor_id, 'journal.read')
+        journey = self._repository.get_journey(tenant_id, company_id, journey_id)
+        if journey is None or not _has_accounting_proposal(journey):
+            raise OperationalUnavailableError()
+        self._require(tenant_id, company_id, actor_id, 'audit.read')
+        return tuple(AuditView(
+            item.id, item.actor_id, item.origin.value, item.module, item.action,
+            item.subject_type, item.subject_id, item.subject_version,
+            item.correlation_id, item.occurred_at, self._audit.verify_integrity(item),
+        ) for item in self._repository.list_audit_events_by_correlation(
+            tenant_id, company_id, journey.correlation_id, limit=limit,
+        ))
+
+    def _proposal_summary(
+        self, tenant_id: UUID, company_id: UUID, journey: Journey,
+    ) -> AccountingProposalSummary:
+        if not _has_accounting_proposal(journey):
+            raise OperationalUnavailableError()
+        source = journey.sources[0]
+        fiscal = self._repository.get_fiscal_document(
+            tenant_id, company_id, source.source_id,
+        ) if source.source_type == 'FiscalDocument' else None
+        rule_id = UUID(journey.evaluation.proposal['rule_version_id'])
+        return AccountingProposalSummary(
+            journey.id, journey.company_id, journey.version, journey.status,
+            journey.proposal.id, journey.revision.id, journey.revision_hash,
+            journey.revision.accounting_date,
+            source.source_type, source.source_id,
+            fiscal.receipt_id if fiscal else None, rule_id,
+            self._repository.rule_name(tenant_id, company_id, rule_id),
+            sum((line.debit for line in journey.lines), Decimal('0')),
+            sum((line.credit for line in journey.lines), Decimal('0')),
+            sum((line.debit for line in journey.lines), Decimal('0'))
+            == sum((line.credit for line in journey.lines), Decimal('0')),
+            journey.validation_status, journey.proposer_id,
+            journey.plan.approval_role, journey.plan.responsible_role,
+            journey.request.expires_at if journey.request else None,
+            journey.decision.actor_id if journey.decision else None,
+            journey.decision.decided_at if journey.decision else None,
+        )
+
     def decide(
         self, tenant_id: UUID, company_id: UUID, actor_id: UUID,
         correlation_id: UUID, journey_id: UUID, *, expected_version: int,
@@ -575,6 +831,99 @@ def _review_summary(journey: Journey) -> ReviewSummary | None:
         journey.request.id if journey.request else None,
         journey.request.expires_at if journey.request else None,
     )
+
+
+def _has_accounting_proposal(journey: Journey) -> bool:
+    return bool(
+        journey.proposal is not None and journey.revision is not None
+        and journey.evaluation is not None and journey.evaluation.proposal is not None
+        and journey.plan is not None and journey.lines and journey.sources
+        and journey.revision_hash is not None
+    )
+
+
+def _journey_rule(journey: Journey, name: str | None) -> AccountingRuleView:
+    assert journey.plan is not None and journey.evaluation is not None
+    assert journey.evaluation.proposal is not None
+    rule_id = UUID(journey.evaluation.proposal['rule_version_id'])
+    rule = next(item for item in journey.plan.rules if item.id == rule_id)
+    accounts = {item.id: item for item in journey.plan.accounts}
+    debit = accounts[rule.debit_account_version_id]
+    credit = accounts[rule.credit_account_version_id]
+    return AccountingRuleView(
+        rule.id, name, rule.scope, rule.priority, rule.status,
+        rule.automation_level,
+        tuple(RuleConditionView(*condition) for condition in rule.conditions),
+        debit.id, debit.code, debit.name, credit.id, credit.code, credit.name,
+    )
+
+
+def _catalog_view(record: object) -> AccountingCatalogView:
+    content = record.content
+    raw_accounts = tuple(content.get('accounts', ()))
+    by_id = {str(item['id']): item for item in raw_accounts}
+    accounts = tuple(AccountingAccountView(
+        UUID(item['id']), str(item['code']), str(item['name']),
+        str(item['nature']), str(item['normal_balance']),
+        bool(item['is_synthetic']), bool(item['is_postable']), str(item['status']),
+    ) for item in raw_accounts)
+    rules = []
+    for item in content.get('rules', ()):
+        debit = by_id[str(item['debit_account_version_id'])]
+        credit = by_id[str(item['credit_account_version_id'])]
+        rules.append(AccountingRuleView(
+            UUID(item['id']), str(item.get('name') or '') or None,
+            str(item['scope']), int(item['priority']), str(item['status']),
+            str(item['automation_level']),
+            tuple(RuleConditionView(*map(str, condition)) for condition in item['conditions']),
+            UUID(debit['id']), str(debit['code']), str(debit['name']),
+            UUID(credit['id']), str(credit['code']), str(credit['name']),
+        ))
+    mapping = content.get('mapping', {})
+    mappings = []
+    for item in mapping.get('entries', ()):
+        target = by_id[str(item['target_account_version_id'])]
+        mappings.append(AccountingMappingView(
+            UUID(item['id']), str(item['key']), int(item['priority']),
+            item.get('external_code'), item.get('history_contains'),
+            item.get('dimension_code'), item.get('canonical_entity'),
+            UUID(target['id']), str(target['code']), str(target['name']),
+        ))
+    posting = content.get('posting', {})
+    return AccountingCatalogView(
+        record.id, record.version_no, record.valid_from, record.valid_to,
+        int(posting['decimal_places']), str(posting['amount_field']),
+        tuple(rules), accounts, tuple(mappings),
+    )
+
+
+def _lock_target(lock: AccountLock) -> str:
+    target = {
+        'ACCOUNT': lock.account_id,
+        'GROUP': lock.group_id,
+        'MODULE': lock.module,
+        'COMPETENCE': lock.competence,
+        'EXERCISE': lock.exercise,
+    }[lock.scope.value]
+    return str(target)
+
+
+def _blocks_accounting_decision(lock: AccountLock, journey: Journey) -> bool:
+    assert journey.plan is not None and journey.revision is not None
+    groups = dict(journey.plan.account_groups)
+    for line in journey.lines:
+        account = next(item for item in journey.plan.accounts
+                       if item.id == line.account_version_id)
+        try:
+            validate_effect((lock,), EffectContext(
+                journey.tenant_id, journey.company_id, account.account_id,
+                groups.get(account.account_id, ()), 'accounting',
+                journey.revision.accounting_date, EffectOperation.APPROVE,
+                EffectChannel.USER,
+            ))
+        except AccountLockedError:
+            return True
+    return False
 
 
 def _document_view(row: object) -> DocumentView:

@@ -1,5 +1,11 @@
 # Serdial21 Contabilidade Inteligente
 
+## Phase 08 — Accounting Intelligence
+
+O módulo Contábil integra a proposta NF-e já produzida pelo motor determinístico com lista paginada, evidência, regra explicada, linhas compostas e decisão humana segura. Aprovação/rejeição reutilizam revisão/hash, segregação, AccountLock, idempotência e auditoria existentes. Catálogo, regras, contas e mappings são read-only. Consulte [ACCOUNTING_INTELLIGENCE_SPEC.md](docs/ACCOUNTING_INTELLIGENCE_SPEC.md) e [ACCOUNTING_DECISION_SECURITY.md](docs/ACCOUNTING_DECISION_SECURITY.md).
+
+Não há contabilidade a partir de OFX, edição de proposta, posting/exportação Domínio, migration nova, dados reais ou Linha da Decisão da Fase 09.
+
 Fundação do produto Serdial21, construída como monólito modular orientado a
 domínios. O MVP mantém o sistema contábil externo como autoridade da
 escrituração oficial; o Serdial21 controla documentos processados, dados

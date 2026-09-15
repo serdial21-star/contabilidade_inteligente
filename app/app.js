@@ -21,6 +21,11 @@
   let fiscalFilters = Object.freeze({search: '', status: '', issued_from: '', issued_to: '', offset: 0, limit: 10});
   let statementFilters = Object.freeze({offset: 0, limit: 10});
   let transactionFilters = Object.freeze({search: '', direction: '', posted_from: '', posted_to: '', offset: 0, limit: 25});
+  let accountingModel = null;
+  let accountingRequest = 0;
+  let proposalFilters = Object.freeze({status: '', offset: 0, limit: 10});
+  let decisionIntent = null;
+  let decisionFeedback = null;
 
   const apiClient = root.S21ApiClient.createApiClient({
     baseUrl: config.apiBaseUrl,
@@ -39,6 +44,9 @@
   const intelligenceService = root.S21Intelligence.createIntelligenceService({
     dataMode: config.dataMode, apiClient, syntheticProvider: root.S21SyntheticProvider,
   });
+  const accountingService = root.S21Accounting.createAccountingService({
+    dataMode: config.dataMode, apiClient, syntheticProvider: root.S21SyntheticProvider,
+  });
 
   const navigation = Object.freeze([
     {group: 'Principal', id: 'overview', label: 'Minha Visão', permissions: ['company.read']},
@@ -46,7 +54,7 @@
     {group: 'Operação', id: 'documents', label: 'Documentos', permissions: ['company.read']},
     {group: 'Operação', id: 'fiscal', label: 'Fiscal · NF-e', permissions: ['company.read']},
     {group: 'Operação', id: 'financial', label: 'Financeiro · OFX', permissions: ['company.read']},
-    {group: 'Operação', id: 'accounting', label: 'Contábil', permissions: ['journal.read'], planned: true},
+    {group: 'Operação', id: 'accounting', label: 'Contábil', permissions: ['journal.read']},
     {group: 'Relacionamento', id: 'clients', label: 'Empresas', permissions: ['company.read']},
     {group: 'Relacionamento', id: 'obligations', label: 'Obrigações', permissions: [], planned: true},
     {group: 'Controle', id: 'governance', label: 'Governança', permissions: ['audit.read', 'lock.manage']},
@@ -182,7 +190,9 @@
     else if (state?.state === 'EMPTY') body = `<div class="widget-state"><strong>${escapeHtml(state.note)}</strong><p>Nenhuma ação é necessária neste contexto.</p></div>`;
     else if (state?.state === 'READY') {
       const value = state.value === '' ? '' : `<strong class="dashboard-value">${escapeHtml(state.value)}</strong>`;
-      const destination = ['W001', 'W002'].includes(widget.id) ? '#documents' : widget.id === 'W007' ? '#clients' : '';
+      const destination = ['W001', 'W002'].includes(widget.id) ? '#documents'
+        : ['W003', 'W005', 'W006'].includes(widget.id) ? '#accounting'
+          : widget.id === 'W007' ? '#clients' : '';
       const action = destination
         ? `<a class="btn ghost small" href="${destination}">${escapeHtml(widget.action)}</a>`
         : `<button class="btn ghost small" type="button" disabled title="Destino operacional ainda não integrado">${escapeHtml(widget.action)}</button>`;
@@ -415,6 +425,112 @@
     intelligenceModel = nextModel; renderShell(false);
   }
 
+  const accountingStatusClass = (status) => status === 'APPROVED' ? 'success'
+    : status === 'REJECTED' ? 'danger'
+      : status === 'BLOCKED_FOR_HOMOLOGATION' ? 'warning' : 'info';
+  const ruleOperator = Object.freeze({EQ: 'igual a', NE: 'diferente de', IN: 'contido em', CONTAINS: 'contém'});
+
+  function accountingTabs(profile, active = 'proposals') {
+    const rules = hasPermission(currentPermissions(profile), ['catalog.review'])
+      ? `<a class="btn ${active === 'rules' ? '' : 'ghost'} small" href="#accounting?view=rules">Regras, contas e mapeamentos</a>` : '';
+    return `<nav class="accounting-tabs" aria-label="Áreas contábeis"><a class="btn ${active === 'proposals' ? '' : 'ghost'} small" href="#accounting">Propostas e revisão</a>${rules}</nav>`;
+  }
+
+  function proposalListMarkup(profile) {
+    if (accountingModel?.error) return localizedError();
+    if (!accountingModel?.page) return loadingOperational('propostas contábeis');
+    const page = accountingModel.page;
+    const rows = page.items.map((item) => `<tr><td>${escapeHtml(item.accounting_date)}</td><td><button class="link-button" data-action="open-proposal" data-proposal-id="${escapeHtml(item.journey_id)}">${escapeHtml(item.source_type === 'FiscalDocument' ? 'NF-e 55' : item.source_type)}</button></td><td><span class="intelligence-label">SUGESTÃO</span><small class="row-note">${escapeHtml(item.rule_name || item.rule_version_id)}</small></td><td>${escapeHtml(money(item.total_debit))}</td><td>${escapeHtml(money(item.total_credit))}</td><td><span class="badge ${accountingStatusClass(item.status)}">${escapeHtml(accountingService.statusLabel(item.status))}</span></td><td><button class="btn ghost small" data-action="open-proposal" data-proposal-id="${escapeHtml(item.journey_id)}">Revisar</button></td></tr>`).join('');
+    const previous = Math.max(0, page.offset - page.limit), next = page.offset + page.limit;
+    return `<div class="page-heading"><div><span class="eyebrow">Inteligência Contábil</span><h1>Propostas e revisão profissional</h1><p>A automação prepara uma sugestão determinística. Somente o profissional autorizado decide.</p></div></div>${accountingTabs(profile)}<div class="alert info"><div><strong>AUTOMATION ≠ PROFESSIONAL DECISION</strong><p>Nenhuma proposta desta tela representa escrituração, postagem ou exportação oficial.</p></div></div><form id="proposal-filter-form" class="filter-bar document-filters"><label>Status<select name="status"><option value="">Todos</option>${Object.entries(root.S21Accounting.STATUS).map(([value, label]) => `<option value="${value}" ${proposalFilters.status === value ? 'selected' : ''}>${escapeHtml(label)}</option>`).join('')}</select></label><button class="btn secondary">Aplicar filtro</button></form><section class="card"><div class="table-wrap"><table><thead><tr><th>Data</th><th>Origem</th><th>Regra</th><th>Débito</th><th>Crédito</th><th>Status</th><th>Ação</th></tr></thead><tbody>${rows || '<tr><td colspan="7">Nenhuma proposta contábil encontrada.</td></tr>'}</tbody></table></div><footer class="pagination"><span>${escapeHtml(page.total)} proposta(s)</span><div><button class="btn ghost small" data-action="proposal-page" data-offset="${previous}" ${page.offset === 0 ? 'disabled' : ''}>Anterior</button><button class="btn ghost small" data-action="proposal-page" data-offset="${next}" ${next >= page.total ? 'disabled' : ''}>Próxima</button></div></footer></section>`;
+  }
+
+  function sourceEvidenceMarkup(source) {
+    const sourceLink = source.source_type === 'FiscalDocument'
+      ? `<a class="btn ghost small" href="#fiscal?company=${encodeURIComponent(companyId)}&fiscal=${encodeURIComponent(source.source_id)}">Abrir NF-e</a>` : '';
+    const receiptLink = source.document_receipt_id
+      ? `<a class="btn ghost small" href="#documents?company=${encodeURIComponent(companyId)}&document=${encodeURIComponent(source.document_receipt_id)}">Central de Documentos</a>` : '';
+    return `<article class="evidence-item"><dl class="detail-list"><div><dt>Origem</dt><dd>${escapeHtml(source.source_type === 'FiscalDocument' ? 'NF-e modelo 55' : source.source_type)}</dd></div><div><dt>Documento</dt><dd>${escapeHtml(source.document_number || 'Não informado')}</dd></div><div><dt>Emitente</dt><dd>${escapeHtml(source.issuer_name || 'Não informado')}</dd></div><div><dt>Emissão</dt><dd>${source.issued_at ? escapeHtml(formatDate(source.issued_at)) : 'Não informada'}</dd></div><div><dt>Valor de origem</dt><dd>${escapeHtml(money(source.amount))}</dd></div></dl><div class="actions">${sourceLink}${receiptLink}</div></article>`;
+  }
+
+  function decisionDialogMarkup(summary) {
+    if (!decisionIntent) return '';
+    const approve = decisionIntent === 'APPROVED';
+    const feedback = decisionFeedback ? `<div class="alert ${decisionFeedback.state === 'ERROR' ? 'error' : 'info'}" role="status"><div><strong>${decisionFeedback.state === 'LOADING' ? 'Registrando decisão…' : 'Decisão não registrada'}</strong><p>${escapeHtml(decisionFeedback.message)}</p></div></div>` : '';
+    return `<dialog id="accounting-decision-dialog" aria-labelledby="decision-title"><form id="accounting-decision-form"><input type="hidden" name="decision" value="${decisionIntent}"><div class="dialog-heading"><div><span class="eyebrow">Decisão profissional</span><h2 id="decision-title">${approve ? 'Aprovar internamente' : 'Rejeitar proposta'}</h2></div><button class="btn ghost" type="button" data-action="close-decision" aria-label="Fechar">×</button></div>${feedback}<p>${approve ? 'Confirme que revisou a origem, a regra, as contas e o balanceamento. Isto não posta nem exporta o lançamento.' : 'A rejeição encerra esta revisão. O domínio atual não possui campo seguro para persistir um motivo textual.'}</p><label class="check"><input type="checkbox" name="confirmed" required> <span>Confirmo esta decisão humana sobre a revisão <code>${escapeHtml(summary.revision_id)}</code>.</span></label><div class="actions"><button class="btn" type="submit" ${decisionFeedback?.state === 'LOADING' ? 'disabled' : ''}>Confirmar ${approve ? 'aprovação' : 'rejeição'}</button><button class="btn secondary" type="button" data-action="close-decision">Cancelar</button></div></form></dialog>`;
+  }
+
+  function proposalDetailMarkup(profile) {
+    if (accountingModel?.error) return localizedError();
+    if (!accountingModel?.item?.summary) return loadingOperational('revisão contábil');
+    const detail = accountingModel.item, summary = detail.summary, rule = detail.rule;
+    const conditions = rule.conditions.map((condition) => `<li><strong>${escapeHtml(condition.field)}</strong> ${escapeHtml(ruleOperator[condition.operator] || condition.operator)} <code>${escapeHtml(condition.value)}</code></li>`).join('');
+    const lines = detail.lines.map((line) => `<tr><td>${escapeHtml(line.account_code)}</td><td>${escapeHtml(line.account_name)}</td><td>${escapeHtml(money(line.debit))}</td><td>${escapeHtml(money(line.credit))}</td></tr>`).join('');
+    const locks = detail.active_locks.length ? `<div class="alert warning" role="alert"><div><strong>Período/operação bloqueada</strong>${detail.active_locks.map((lock) => `<p>${escapeHtml(lock.scope)} · ${escapeHtml(lock.target)} · ${escapeHtml(lock.reason)} · criado em ${escapeHtml(formatDate(lock.created_at))}. Operações: ${escapeHtml(lock.operations.join(', '))}.</p>`).join('')}<p>A autoridade final de bloqueio é revalidada pelo backend no instante da decisão.</p></div></div>` : '';
+    const decision = summary.decision_actor_id ? `<div class="alert ${summary.status === 'APPROVED' ? 'success' : 'warning'}"><div><strong>${summary.status === 'APPROVED' ? 'Aprovado' : 'Rejeitado'} por profissional</strong><p>Ator ${escapeHtml(summary.decision_actor_id)} · ${escapeHtml(formatDate(summary.decided_at))}</p></div></div>` : '';
+    const canDecide = summary.status === 'PENDING_APPROVAL' && hasPermission(currentPermissions(profile), ['journal.approve']);
+    const actions = canDecide ? `<div class="professional-actions"><button class="btn" data-action="open-decision" data-decision="APPROVED">Aprovar internamente</button><button class="btn secondary" data-action="open-decision" data-decision="REJECTED">Rejeitar</button></div>` : summary.status === 'PENDING_APPROVAL' ? '<p class="row-note">Seu contexto permite consultar, mas não decidir esta proposta.</p>' : '';
+    const activity = accountingModel.activity ? `<section class="card"><h2>Histórico contextual</h2><ol class="dashboard-list activity-list">${accountingModel.activity.map((event) => `<li><span><strong>${escapeHtml(event.action)}</strong><small>${escapeHtml(event.origin)} · versão ${escapeHtml(event.subject_version)}</small></span><time>${escapeHtml(formatDate(event.occurred_at))}</time></li>`).join('') || '<li>Nenhum evento contextual encontrado.</li>'}</ol><p class="row-note">Prévia minimizada. A Linha da Decisão completa permanece para a Fase 09.</p></section>` : '';
+    return `<div class="page-heading"><div><span class="eyebrow">PROPOSTA CONTÁBIL · SUGESTÃO DETERMINÍSTICA</span><h1>Revisão profissional</h1><p>A proposta é assistiva e não substitui decisão humana nem sistema contábil externo.</p></div><a class="btn secondary" href="#accounting">Voltar à fila</a></div>${accountingTabs(profile)}<section class="proposal-priority"><article class="card"><span class="eyebrow">1 · Status</span><h2><span class="badge ${accountingStatusClass(summary.status)}">${escapeHtml(accountingService.statusLabel(summary.status))}</span></h2><dl class="detail-list"><div><dt>Data contábil</dt><dd>${escapeHtml(summary.accounting_date)}</dd></div><div><dt>Responsável</dt><dd>${escapeHtml(summary.responsible_role)}</dd></div><div><dt>Validação</dt><dd>${escapeHtml(summary.validation_status || 'Não informada')}</dd></div></dl>${actions}</article><article class="card intelligence-card"><span class="eyebrow">2 · Regra / por quê</span><h2>${escapeHtml(rule.name || rule.id)}</h2><p>Escopo ${escapeHtml(rule.scope)}, prioridade ${escapeHtml(rule.priority)} e automação ${escapeHtml(rule.automation_level)}.</p><ul>${conditions}</ul><p><strong>Resultado:</strong> débito ${escapeHtml(rule.debit_account_code)} · ${escapeHtml(rule.debit_account_name)} / crédito ${escapeHtml(rule.credit_account_code)} · ${escapeHtml(rule.credit_account_name)}.</p></article></section>${locks}${decision}<section class="card"><span class="eyebrow">3 · Débitos e créditos</span><h2>Partida contábil proposta</h2><div class="table-wrap"><table><thead><tr><th>Conta</th><th>Nome</th><th>Débito</th><th>Crédito</th></tr></thead><tbody>${lines}</tbody><tfoot><tr><th colspan="2">Totais autorizados pelo backend</th><th>${escapeHtml(money(summary.total_debit))}</th><th>${escapeHtml(money(summary.total_credit))}</th></tr></tfoot></table></div><p><span class="badge ${summary.balanced ? 'success' : 'danger'}">${summary.balanced ? 'BALANCEADO' : 'NÃO BALANCEADO'}</span> O frontend apenas apresenta a validação; não recalcula a autoridade contábil.</p></section><section class="card"><span class="eyebrow">4 · Origem e evidências</span><h2>Rastreabilidade</h2>${detail.sources.map(sourceEvidenceMarkup).join('')}</section><section class="card"><h2>Revisão</h2><dl class="detail-list"><div><dt>Proponente</dt><dd>${escapeHtml(summary.proposer_id)}</dd></div><div><dt>Revisão imutável</dt><dd><code>${escapeHtml(summary.revision_id)}</code></dd></div><div><dt>Hash</dt><dd class="monospace">${escapeHtml(summary.revision_hash)}</dd></div><div><dt>Expira em</dt><dd>${summary.expires_at ? escapeHtml(formatDate(summary.expires_at)) : 'Sem expiração informada'}</dd></div></dl><p class="row-note">Edição de proposta está adiada: não existe caso de uso seguro de escrita. Uma nova revisão invalidaria a aprovação anterior.</p></section>${activity}${decisionDialogMarkup(summary)}`;
+  }
+
+  function catalogMarkup(profile) {
+    if (accountingModel?.error) return localizedError();
+    if (accountingModel?.needsEffectiveDate) return `<div class="page-heading"><div><span class="eyebrow">Automação contábil</span><h1>Regras, contas e mapeamentos</h1><p>Informe a data contábil de referência; ela não é inferida do relógio do servidor.</p></div></div>${accountingTabs(profile, 'rules')}<form id="catalog-effective-form" class="filter-bar document-filters"><label>Data efetiva<input name="effective_at" type="date" required></label><button class="btn">Consultar catálogo publicado</button></form>`;
+    if (!accountingModel?.catalog) return loadingOperational('catálogo contábil publicado');
+    const catalog = accountingModel.catalog;
+    const rules = catalog.rules.map((rule) => `<tr><td><button class="link-button" data-action="open-rule" data-rule-id="${escapeHtml(rule.id)}">${escapeHtml(rule.name || rule.id)}</button></td><td>${escapeHtml(rule.scope)}</td><td>${escapeHtml(rule.priority)}</td><td><span class="badge intelligent">${escapeHtml(rule.status)}</span></td><td>${escapeHtml(rule.debit_account_code)} → ${escapeHtml(rule.credit_account_code)}</td></tr>`).join('');
+    const accounts = catalog.accounts.map((account) => `<tr><td>${escapeHtml(account.code)}</td><td>${escapeHtml(account.name)}</td><td>${escapeHtml(account.nature)}</td><td>${account.is_postable ? 'Analítica / lançável' : 'Não lançável'}</td></tr>`).join('');
+    const mappings = catalog.mappings.map((mapping) => `<tr><td>${escapeHtml(mapping.key)}</td><td>${escapeHtml(mapping.external_code || mapping.history_contains || mapping.dimension_code || 'Condição canônica')}</td><td>${escapeHtml(mapping.target_account_code)} · ${escapeHtml(mapping.target_account_name)}</td><td>${escapeHtml(mapping.priority)}</td></tr>`).join('');
+    return `<div class="page-heading"><div><span class="eyebrow">Automação contábil</span><h1>Regras, contas e mapeamentos</h1><p>Catálogo publicado e efetivo, em modo somente leitura.</p></div></div>${accountingTabs(profile, 'rules')}<div class="alert info"><div><strong>Versão ${escapeHtml(catalog.version_no)} · válida desde ${escapeHtml(catalog.valid_from)}</strong><p>Precisão: ${escapeHtml(catalog.decimal_places)} casas; campo monetário: ${escapeHtml(catalog.amount_field)}. A integridade da versão publicada é validada no backend.</p></div></div><section class="card"><h2>Regras determinísticas</h2><div class="table-wrap"><table><thead><tr><th>Regra</th><th>Escopo</th><th>Prioridade</th><th>Status</th><th>Resultado</th></tr></thead><tbody>${rules || '<tr><td colspan="5">Nenhuma regra publicada.</td></tr>'}</tbody></table></div></section><section class="card"><h2>Plano de contas</h2><div class="table-wrap"><table><thead><tr><th>Código</th><th>Nome</th><th>Natureza</th><th>Uso</th></tr></thead><tbody>${accounts || '<tr><td colspan="4">Nenhuma conta publicada.</td></tr>'}</tbody></table></div></section><section class="card"><h2>Mapeamentos</h2><div class="table-wrap"><table><thead><tr><th>Chave</th><th>Condição</th><th>Conta alvo</th><th>Prioridade</th></tr></thead><tbody>${mappings || '<tr><td colspan="4">Nenhum mapeamento publicado.</td></tr>'}</tbody></table></div><p class="row-note">Escrita de regras e mapeamentos está adiada: o contrato atual governa a versão completa e não oferece editor granular seguro.</p></section>`;
+  }
+
+  function ruleDetailMarkup(profile) {
+    if (accountingModel?.error) return localizedError();
+    if (!accountingModel?.rule) return loadingOperational('detalhe da regra');
+    const rule = accountingModel.rule;
+    return `<div class="page-heading"><div><span class="eyebrow">Regra determinística publicada</span><h1>${escapeHtml(rule.name || rule.id)}</h1><p>Explicação segura da versão exata; sem expressão executável.</p></div><a class="btn secondary" href="#accounting?view=rules&effective_at=${encodeURIComponent(routeParams().get('effective_at'))}">Voltar ao catálogo</a></div>${accountingTabs(profile, 'rules')}<section class="card intelligence-card"><dl class="detail-list"><div><dt>Identificador da versão</dt><dd><code>${escapeHtml(rule.id)}</code></dd></div><div><dt>Escopo</dt><dd>${escapeHtml(rule.scope)}</dd></div><div><dt>Prioridade</dt><dd>${escapeHtml(rule.priority)}</dd></div><div><dt>Status</dt><dd>${escapeHtml(rule.status)}</dd></div><div><dt>Automação</dt><dd>${escapeHtml(rule.automation_level)}</dd></div></dl><h2>Quando se aplica</h2><ul>${rule.conditions.map((condition) => `<li><strong>${escapeHtml(condition.field)}</strong> ${escapeHtml(ruleOperator[condition.operator] || condition.operator)} <code>${escapeHtml(condition.value)}</code></li>`).join('')}</ul><h2>Resultado sugerido</h2><p>Débito em <strong>${escapeHtml(rule.debit_account_code)} · ${escapeHtml(rule.debit_account_name)}</strong> e crédito em <strong>${escapeHtml(rule.credit_account_code)} · ${escapeHtml(rule.credit_account_name)}</strong>.</p></section>`;
+  }
+
+  function accountingMarkup(profile) {
+    if (companyId === dashboardService.allAuthorizedId) return selectedCompanyRequired('Contábil');
+    if (routeParams().has('rule')) return ruleDetailMarkup(profile);
+    if (routeParams().get('view') === 'rules') return catalogMarkup(profile);
+    if (routeParams().has('proposal')) return proposalDetailMarkup(profile);
+    return proposalListMarkup(profile);
+  }
+
+  async function refreshAccounting(profile) {
+    const requestId = ++accountingRequest;
+    accountingModel = {loading: true}; renderShell(false);
+    let nextModel;
+    try {
+      const requestedCompany = routeParams().get('company');
+      if (requestedCompany) {
+        if (!profile.companies.some((item) => item.id === requestedCompany)) throw Object.assign(new Error('FORBIDDEN'), {code: 'FORBIDDEN'});
+        companyId = requestedCompany;
+      }
+      if (companyId === dashboardService.allAuthorizedId) nextModel = {loading: false, page: {items: [], total: 0, offset: 0, limit: 10}};
+      else if (routeParams().has('rule')) {
+        const effectiveAt = routeParams().get('effective_at');
+        nextModel = effectiveAt ? {loading: false, rule: await accountingService.accountingRule(companyId, routeParams().get('rule'), effectiveAt)} : {loading: false, needsEffectiveDate: true};
+      }
+      else if (routeParams().get('view') === 'rules') {
+        const effectiveAt = routeParams().get('effective_at');
+        nextModel = effectiveAt ? {loading: false, catalog: await accountingService.accountingCatalog(companyId, effectiveAt)} : {loading: false, needsEffectiveDate: true};
+      }
+      else if (routeParams().has('proposal')) {
+        const item = await accountingService.accountingProposal(companyId, routeParams().get('proposal'));
+        let activity = null;
+        if (hasPermission(currentPermissions(profile), ['audit.read'])) activity = await accountingService.proposalActivity(companyId, routeParams().get('proposal'));
+        nextModel = {loading: false, item, activity};
+      } else nextModel = {loading: false, page: await accountingService.accountingProposals(companyId, proposalFilters)};
+    } catch (error) { nextModel = {loading: false, error: error?.code || 'ERROR'}; }
+    if (requestId !== accountingRequest || session.snapshot().state !== STATES.AUTHENTICATED) return;
+    accountingModel = nextModel; renderShell(false);
+    if (decisionIntent) document.querySelector('#accounting-decision-dialog')?.showModal();
+  }
+
   function placeholderMarkup(item, profile) {
     if (!item || !hasPermission(currentPermissions(profile), item.permissions)) return null;
     return `<div class="page-heading"><div><span class="eyebrow">Aplicativo Serdial21</span><h1>${escapeHtml(item.label)}</h1><p>Esta área será integrada em uma etapa futura.</p></div></div><section class="card empty"><h2>Disponível em próxima etapa</h2><p>Nenhuma funcionalidade operacional fictícia foi criada.</p><a class="btn secondary" href="#overview">Voltar</a></section>`;
@@ -433,6 +549,7 @@
     else if (currentRoute === 'inbox' && hasPermission(currentPermissions(profile), ['company.read'])) content = documentsMarkup(profile, true);
     else if (currentRoute === 'fiscal' && hasPermission(currentPermissions(profile), ['company.read'])) content = fiscalMarkup(profile);
     else if (currentRoute === 'financial' && hasPermission(currentPermissions(profile), ['company.read'])) content = financialMarkup(profile);
+    else if (currentRoute === 'accounting' && hasPermission(currentPermissions(profile), ['journal.read'])) content = accountingMarkup(profile);
     else content = placeholderMarkup(target, profile);
     if (!content) { session.forbid(); renderState(STATES.FORBIDDEN); return; }
     const currentCompany = profile.companies.find((company) => company.id === companyId);
@@ -447,6 +564,7 @@
     if (loadDashboard && route() === 'overview') refreshDashboard(profile);
     if (loadDashboard && ['clients', 'documents', 'inbox'].includes(route())) refreshOperational(profile);
     if (loadDashboard && ['fiscal', 'financial'].includes(route())) refreshIntelligence(profile);
+    if (loadDashboard && route() === 'accounting') refreshAccounting(profile);
   }
 
   async function bootstrapAuthenticated(accessToken, returnTo = '#overview') {
@@ -601,6 +719,32 @@
       refreshOperational(session.snapshot().profile);
       return;
     }
+    if (action === 'open-proposal') {
+      accountingModel = null; accountingRequest += 1; decisionIntent = null; decisionFeedback = null;
+      location.hash = `accounting?company=${encodeURIComponent(companyId)}&proposal=${encodeURIComponent(actionElement.dataset.proposalId)}`;
+      return;
+    }
+    if (action === 'open-rule') {
+      accountingModel = null; accountingRequest += 1;
+      const effectiveAt = routeParams().get('effective_at');
+      location.hash = `accounting?company=${encodeURIComponent(companyId)}&rule=${encodeURIComponent(actionElement.dataset.ruleId)}&effective_at=${encodeURIComponent(effectiveAt)}`;
+      return;
+    }
+    if (action === 'proposal-page') {
+      proposalFilters = Object.freeze({...proposalFilters, offset: Number(actionElement.dataset.offset || 0)});
+      refreshAccounting(session.snapshot().profile);
+      return;
+    }
+    if (action === 'open-decision') {
+      decisionIntent = actionElement.dataset.decision; decisionFeedback = null;
+      renderShell(false); document.querySelector('#accounting-decision-dialog')?.showModal();
+      return;
+    }
+    if (action === 'close-decision') {
+      document.querySelector('#accounting-decision-dialog')?.close(); decisionIntent = null; decisionFeedback = null;
+      renderShell(false);
+      return;
+    }
     if (action === 'begin-login') {
       session.authenticating(); renderLogin();
       try { await oidcClient.beginLogin(`#${route()}`); }
@@ -609,7 +753,7 @@
       session.startSyntheticWorkspace(root.S21SyntheticProvider.loadProfile()); companyId = null; location.hash = 'overview'; renderShell();
     } else if (action === 'logout') {
       const wasOidc = session.snapshot().mode === 'oidc';
-      session.logout(); userMenuOpen = false; companyId = null; dashboardLayout = null; dashboardModel = null; dashboardRequest += 1; operationalModel = null; operationalRequest += 1; intelligenceModel = null; intelligenceRequest += 1; importFeedback = null;
+      session.logout(); userMenuOpen = false; companyId = null; dashboardLayout = null; dashboardModel = null; dashboardRequest += 1; operationalModel = null; operationalRequest += 1; intelligenceModel = null; intelligenceRequest += 1; importFeedback = null; accountingModel = null; accountingRequest += 1; decisionIntent = null; decisionFeedback = null;
       history.replaceState(null, '', location.pathname);
       if (wasOidc) await oidcClient.logout();
       renderLogin('A sessão do aplicativo foi encerrada.');
@@ -627,11 +771,13 @@
       dashboardRequest += 1; dashboardModel = null; dashboardLayout = null;
       operationalRequest += 1; operationalModel = null;
       intelligenceRequest += 1; intelligenceModel = null; importFeedback = null;
+      accountingRequest += 1; accountingModel = null; decisionIntent = null; decisionFeedback = null;
       fiscalFilters = Object.freeze({...fiscalFilters, offset: 0});
       statementFilters = Object.freeze({...statementFilters, offset: 0});
       transactionFilters = Object.freeze({...transactionFilters, offset: 0});
+      proposalFilters = Object.freeze({...proposalFilters, offset: 0});
       companyId = event.target.value;
-      const destination = ['documents', 'inbox', 'fiscal', 'financial'].includes(route()) ? route() : 'overview';
+      const destination = ['documents', 'inbox', 'fiscal', 'financial', 'accounting'].includes(route()) ? route() : 'overview';
       location.hash = destination; renderShell();
       setAnnouncement('Contexto de empresa alterado. Dados anteriores descartados.');
     }
@@ -666,6 +812,46 @@
       event.preventDefault();
       transactionFilters = Object.freeze({...transactionFilters, ...Object.fromEntries(new FormData(event.target).entries()), offset: 0});
       refreshIntelligence(session.snapshot().profile);
+    }
+    if (event.target.id === 'proposal-filter-form') {
+      event.preventDefault();
+      proposalFilters = Object.freeze({...proposalFilters, ...Object.fromEntries(new FormData(event.target).entries()), offset: 0});
+      refreshAccounting(session.snapshot().profile);
+      return;
+    }
+    if (event.target.id === 'catalog-effective-form') {
+      event.preventDefault();
+      const effectiveAt = new FormData(event.target).get('effective_at');
+      accountingModel = null; accountingRequest += 1;
+      location.hash = `accounting?view=rules&company=${encodeURIComponent(companyId)}&effective_at=${encodeURIComponent(effectiveAt)}`;
+      return;
+    }
+    if (event.target.id === 'accounting-decision-form') {
+      event.preventDefault();
+      const summary = accountingModel?.item?.summary;
+      if (!summary || !decisionIntent) return;
+      const requestId = ++accountingRequest;
+      decisionFeedback = {state: 'LOADING', message: 'A revisão, o hash, a versão, as permissões e os bloqueios serão revalidados no backend.'};
+      renderShell(false); document.querySelector('#accounting-decision-dialog')?.showModal();
+      (async () => {
+        try {
+          await accountingService.decideProposal(companyId, summary.journey_id, decisionIntent, summary);
+          if (requestId !== accountingRequest) return;
+          decisionIntent = null; decisionFeedback = null;
+          setAnnouncement('Decisão profissional registrada. Nenhuma postagem ou exportação foi realizada.');
+          await refreshAccounting(session.snapshot().profile);
+        } catch (error) {
+          if (requestId !== accountingRequest) return;
+          const messages = {
+            RESOURCE_LOCKED: 'A operação está bloqueada. Confira o escopo e o motivo do bloqueio exibido na proposta.',
+            FORBIDDEN: 'Seu contexto não autoriza esta decisão ou a segregação de funções a impede.',
+            REQUEST_FAILED: 'A proposta mudou, expirou ou já recebeu uma decisão. Atualize antes de tentar novamente.',
+          };
+          decisionFeedback = {state: 'ERROR', message: messages[error?.code] || 'A decisão não pôde ser registrada com segurança.'};
+          renderShell(false); document.querySelector('#accounting-decision-dialog')?.showModal();
+        }
+      })();
+      return;
     }
     if (event.target.id === 'nfe-import-form' || event.target.id === 'ofx-import-form') {
       event.preventDefault();

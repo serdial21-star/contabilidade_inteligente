@@ -1,5 +1,9 @@
 # Mapa de dados da Minha Visão
 
+## Atualização Phase 08
+
+W003, W005 e W006 continuam `REAL`, usando a projeção de reviews existente, e agora suas ações abrem a fila contábil. A tela especializada usa `GET .../accounting-proposals` com paginação/filtro server-side; não altera a fonte dos widgets. W004 e W010 permanecem `REAL`. Promoções: nenhuma fonte sintética foi promovida por aparência.
+
 ## Atualização Phase 07
 
 | Widget | Estado em API | Evidência / decisão |

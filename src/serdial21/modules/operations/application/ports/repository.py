@@ -7,6 +7,7 @@ from uuid import UUID
 
 from serdial21.modules.audit.domain.entities import AuditEvent
 from serdial21.modules.intake_documents.domain.entities import ImportBatch, ValidationIssue
+from serdial21.modules.locks.domain.entities import AccountLock
 from serdial21.modules.workflow.application.journey import Journey
 from serdial21.modules.operations.domain.entities import DomainEvent, InboxReceipt, OutboxMessage
 
@@ -114,6 +115,19 @@ class BankTransactionRecord(Protocol):
     created_at: datetime
 
 
+class CatalogRecord(Protocol):
+    id: UUID
+    version_no: int
+    valid_from: date
+    valid_to: date | None
+    content: dict[str, object]
+
+
+class LockRecord(Protocol):
+    lock: AccountLock
+    created_at: datetime
+
+
 class OperationRepository(Protocol):
     '''Persiste efeito crítico, inbox e outbox na mesma unidade de trabalho.'''
 
@@ -199,6 +213,27 @@ class OperationalQueryRepository(Protocol):
     def list_journeys(
         self, tenant_id: UUID, company_id: UUID, *, limit: int,
     ) -> tuple[Journey, ...]: ...
+
+    def list_proposal_journeys(
+        self, tenant_id: UUID, company_id: UUID, *, offset: int, limit: int,
+        status: str | None,
+    ) -> tuple[tuple[Journey, ...], int]: ...
+
+    def published_catalog(
+        self, tenant_id: UUID, company_id: UUID, *, at: date,
+    ) -> CatalogRecord | None: ...
+
+    def rule_name(
+        self, tenant_id: UUID, company_id: UUID, rule_version_id: UUID,
+    ) -> str | None: ...
+
+    def list_active_lock_records(
+        self, tenant_id: UUID, company_id: UUID,
+    ) -> tuple[LockRecord, ...]: ...
+
+    def list_audit_events_by_correlation(
+        self, tenant_id: UUID, company_id: UUID, correlation_id: UUID, *, limit: int,
+    ) -> tuple[AuditEvent, ...]: ...
 
     def get_journey(
         self, tenant_id: UUID, company_id: UUID, journey_id: UUID,

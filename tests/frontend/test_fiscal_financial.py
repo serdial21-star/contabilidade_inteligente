@@ -20,7 +20,7 @@ def test_phase07_navigation_only_exposes_implemented_surfaces() -> None:
     app = source('app.js')
     assert "id: 'fiscal', label: 'Fiscal · NF-e', permissions: ['company.read']" in app
     assert "id: 'financial', label: 'Financeiro · OFX', permissions: ['company.read']" in app
-    assert "id: 'accounting', label: 'Contábil', permissions: ['journal.read'], planned: true" in app
+    assert "id: 'accounting', label: 'Contábil', permissions: ['journal.read']" in app
     assert 'Conciliação ainda não operacional' in app
     assert 'data-action="manual-match"' not in app
 
@@ -65,7 +65,7 @@ def test_context_and_logout_invalidate_phase07_state() -> None:
     app = source('app.js')
     assert 'intelligenceRequest += 1; intelligenceModel = null; importFeedback = null;' in app
     assert 'requestId !== intelligenceRequest' in app
-    assert "['documents', 'inbox', 'fiscal', 'financial'].includes(route())" in app
+    assert "['documents', 'inbox', 'fiscal', 'financial', 'accounting'].includes(route())" in app
 
 
 def test_document_central_links_to_safe_domain_projection() -> None:

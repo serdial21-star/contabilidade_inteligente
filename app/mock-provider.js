@@ -7,7 +7,7 @@
     companies: Object.freeze([
       Object.freeze({
         id: 'synthetic-company-a', name: 'Empresa Horizonte · Matriz',
-        permissions: Object.freeze(['company.read', 'journal.read', 'journal.propose', 'journal.approve', 'reconciliation.manage', 'audit.read']),
+        permissions: Object.freeze(['company.read', 'journal.read', 'journal.propose', 'journal.approve', 'reconciliation.manage', 'audit.read', 'catalog.manage', 'catalog.review']),
       }),
       Object.freeze({
         id: 'synthetic-company-b', name: 'Comercial Aurora · Matriz',
@@ -100,6 +100,68 @@
     Object.freeze({id: 'synthetic-transaction-1', bank_statement_id: 'synthetic-statement-1', transaction_date: '2026-09-12', posted_date: '2026-09-12', amount: '-15.00', direction: 'DEBIT', description: 'Débito fictício', document_number: null, identity_kind: 'FITID'}),
     Object.freeze({id: 'synthetic-transaction-2', bank_statement_id: 'synthetic-statement-1', transaction_date: '2026-09-13', posted_date: '2026-09-13', amount: '50.00', direction: 'CREDIT', description: 'Crédito fictício', document_number: null, identity_kind: 'FITID'}),
   ])});
+  let syntheticProposalStatus = 'PENDING_APPROVAL';
+  const syntheticRule = Object.freeze({
+    id: 'synthetic-rule-version-1', name: 'Regra NF-e exclusivamente fictícia', scope: 'NFE',
+    priority: 10, status: 'PUBLISHED', automation_level: 'SUGGEST',
+    conditions: Object.freeze([{field: 'model', operator: 'EQ', value: '55'}]),
+    debit_account_version_id: 'synthetic-account-debit', debit_account_code: '1.1', debit_account_name: 'Conta débito fictícia',
+    credit_account_version_id: 'synthetic-account-credit', credit_account_code: '3.1', credit_account_name: 'Conta crédito fictícia',
+  });
+  const syntheticAccounts = Object.freeze([
+    Object.freeze({id: 'synthetic-account-debit', code: '1.1', name: 'Conta débito fictícia', nature: 'ASSET', normal_balance: 'DEBIT', is_synthetic: false, is_postable: true, status: 'PUBLISHED'}),
+    Object.freeze({id: 'synthetic-account-credit', code: '3.1', name: 'Conta crédito fictícia', nature: 'REVENUE', normal_balance: 'CREDIT', is_synthetic: false, is_postable: true, status: 'PUBLISHED'}),
+  ]);
+  function syntheticProposalSummary(companyId) {
+    return Object.freeze({
+      journey_id: 'synthetic-journey-1', company_id: companyId, version: syntheticProposalStatus === 'PENDING_APPROVAL' ? 8 : 10,
+      status: syntheticProposalStatus, proposal_id: 'synthetic-proposal-1', revision_id: 'synthetic-revision-1',
+      revision_hash: 'synthetic-revision-hash', accounting_date: '2026-09-14', source_type: 'FiscalDocument',
+      source_id: 'synthetic-fiscal-1', source_document_receipt_id: 'synthetic-document-1',
+      rule_version_id: syntheticRule.id, rule_name: syntheticRule.name,
+      total_debit: '100.00', total_credit: '100.00', balanced: true, validation_status: 'VALID',
+      proposer_id: 'synthetic-proposer', approval_role: 'CONTADOR', responsible_role: 'CONTADOR',
+      expires_at: '2026-09-30T23:59:59Z', decision_actor_id: syntheticProposalStatus === 'PENDING_APPROVAL' ? null : 'synthetic-accountant',
+      decided_at: syntheticProposalStatus === 'PENDING_APPROVAL' ? null : '2026-09-15T13:00:00Z',
+    });
+  }
+  async function listAccountingProposals(companyId, filters = {}) {
+    let rows = companyId === 'synthetic-company-a' ? [syntheticProposalSummary(companyId)] : [];
+    if (filters.status) rows = rows.filter((item) => item.status === filters.status);
+    const offset = Number(filters.offset || 0), limit = Number(filters.limit || 10);
+    return {items: rows.slice(offset, offset + limit), total: rows.length, offset, limit};
+  }
+  async function accountingProposal(companyId, id) {
+    if (companyId !== 'synthetic-company-a' || id !== 'synthetic-journey-1') throw Object.assign(new Error('REQUEST_FAILED'), {code: 'REQUEST_FAILED'});
+    return {
+      summary: syntheticProposalSummary(companyId), rule: syntheticRule,
+      lines: [
+        {account_version_id: 'synthetic-account-debit', account_code: '1.1', account_name: 'Conta débito fictícia', debit: '100.00', credit: '0.00'},
+        {account_version_id: 'synthetic-account-credit', account_code: '3.1', account_name: 'Conta crédito fictícia', debit: '0.00', credit: '100.00'},
+      ],
+      sources: [{source_type: 'FiscalDocument', source_id: 'synthetic-fiscal-1', document_receipt_id: 'synthetic-document-1', document_number: '1001', issuer_name: 'Emitente Sintético', issued_at: '2026-09-14T12:00:00Z', amount: '100.00'}],
+      active_locks: [],
+    };
+  }
+  async function syntheticAccountingCatalog(companyId) {
+    if (companyId !== 'synthetic-company-a') throw Object.assign(new Error('REQUEST_FAILED'), {code: 'REQUEST_FAILED'});
+    return {version_id: 'synthetic-catalog-version-1', version_no: 1, valid_from: '2026-01-01', valid_to: null, decimal_places: 2, amount_field: 'invoice_total', rules: [syntheticRule], accounts: syntheticAccounts, mappings: [{id: 'synthetic-mapping-1', key: 'synthetic-map', priority: 10, external_code: 'DEMO', history_contains: null, dimension_code: null, canonical_entity: 'FiscalDocument', target_account_version_id: 'synthetic-account-debit', target_account_code: '1.1', target_account_name: 'Conta débito fictícia'}]};
+  }
+  async function syntheticAccountingRule(companyId, id) {
+    const catalog = await syntheticAccountingCatalog(companyId);
+    const rule = catalog.rules.find((item) => item.id === id);
+    if (!rule) throw Object.assign(new Error('REQUEST_FAILED'), {code: 'REQUEST_FAILED'});
+    return rule;
+  }
+  async function syntheticDecision(companyId, id, decision) {
+    if (companyId !== 'synthetic-company-a' || id !== 'synthetic-journey-1' || syntheticProposalStatus !== 'PENDING_APPROVAL') throw Object.assign(new Error('REQUEST_FAILED'), {code: 'OPERATION_CONFLICT'});
+    syntheticProposalStatus = decision;
+    return {journey_id: id, version: 10, status: decision, decision_id: 'synthetic-decision-1', synthetic: true};
+  }
+  async function syntheticProposalActivity(companyId, id) {
+    if (companyId !== 'synthetic-company-a' || id !== 'synthetic-journey-1') throw Object.assign(new Error('REQUEST_FAILED'), {code: 'REQUEST_FAILED'});
+    return [{id: 'synthetic-audit-1', actor_id: 'synthetic-proposer', origin: 'HUMAN', module: 'workflow', action: 'accounting_proposal.created', subject_type: 'NFeJourney', subject_id: id, subject_version: 3, correlation_id: 'synthetic-correlation', occurred_at: '2026-09-14T12:10:00Z', integrity_valid: true}];
+  }
   async function listFiscal(companyId, filters = {}) {
     let rows = fiscal.filter((item) => item.company_id === companyId);
     const search = String(filters.search || '').toLocaleLowerCase('pt-BR');
@@ -171,5 +233,9 @@
     bankStatements: listStatements, bankStatement: statementDetail,
     importNfe: (companyId, file) => syntheticImport(file, 'nfe'),
     importOfx: (companyId, file) => syntheticImport(file, 'ofx'),
+    accountingProposals: listAccountingProposals, accountingProposal,
+    proposalActivity: syntheticProposalActivity,
+    accountingCatalog: syntheticAccountingCatalog, accountingRule: syntheticAccountingRule,
+    decideProposal: syntheticDecision,
   });
 }(globalThis));

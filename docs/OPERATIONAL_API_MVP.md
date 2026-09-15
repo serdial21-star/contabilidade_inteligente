@@ -1,5 +1,18 @@
 # API operacional MVP
 
+## Projeções de Inteligência Contábil (Phase 08)
+
+| Método | Rota relativa a `/operations/companies/{company_id}` | Permissão |
+|---|---|---|
+| GET | `/accounting-proposals?offset=&limit=&status=` | `journal.read` |
+| GET | `/accounting-proposals/{journey_id}` | `journal.read` |
+| GET | `/accounting-proposals/{journey_id}/activity` | `journal.read` + `audit.read` |
+| GET | `/accounting-catalog?effective_at=` | `catalog.review` |
+| GET | `/accounting-rules/{rule_version_id}?effective_at=` | `catalog.review` |
+| GET | `/accounting-accounts/{account_version_id}?effective_at=` | `catalog.review` |
+
+As consultas reconstroem versões existentes e não criam tabelas. `effective_at` é obrigatório para não inferir data contábil do relógio do servidor. O detalhe inclui linhas compostas, totais Decimal/balanceamento, regra explicada, evidência fiscal minimizada e locks aplicáveis. Aprovação/rejeição continuam nos comandos `/reviews`; `423` indica bloqueio aplicável. Não há endpoint de edição, postagem ou exportação.
+
 ## Projeções Fiscal e Financeira (Phase 07)
 
 | Método | Rota relativa a `/operations/companies/{company_id}` | Permissão |

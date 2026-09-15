@@ -18,10 +18,14 @@ from serdial21.modules.access_control.adapters.outbound.persistence.models impor
 from serdial21.modules.banking.adapters.outbound.persistence.models import (
     BankAccountModel, BankStatementModel, BankTransactionModel,
 )
+from serdial21.modules.catalog.adapters.outbound.persistence.models import ProductionCatalogVersionModel
 from serdial21.modules.fiscal_documents.adapters.outbound.persistence.models import (
     FiscalDocumentItemModel, FiscalDocumentModel, TaxDetailModel,
 )
 from serdial21.modules.intake_documents.domain.entities import ImportBatch, ValidationIssue
+from serdial21.modules.locks.adapters.outbound.persistence.models import AccountLockModel
+from serdial21.modules.locks.domain.entities import AccountLock, EffectOperation, LockScope, LockStatus
+from serdial21.modules.catalog.snapshot import snapshot_hash
 from serdial21.modules.workflow.adapters.outbound.persistence.journeys import (
     JourneyCheckpointModel, SqlAlchemyJourneyRepository,
 )
@@ -134,6 +138,21 @@ class SqlBankTransactionRecord:
     description: str | None
     document_number: str | None
     identity_kind: str
+    created_at: datetime
+
+
+@dataclass(frozen=True, slots=True)
+class SqlCatalogRecord:
+    id: UUID
+    version_no: int
+    valid_from: date
+    valid_to: date | None
+    content: dict[str, object]
+
+
+@dataclass(frozen=True, slots=True)
+class SqlLockRecord:
+    lock: AccountLock
     created_at: datetime
 
 
@@ -534,6 +553,111 @@ class SqlAlchemyOperationalQueryRepository:
                 tenant_id, company_id, journey_id,
             )) is not None
         )
+
+    def list_proposal_journeys(
+        self, tenant_id: UUID, company_id: UUID, *, offset: int, limit: int,
+        status: str | None,
+    ) -> tuple[tuple[Journey, ...], int]:
+        proposal_statuses = (
+            'PENDING_APPROVAL', 'APPROVED', 'REJECTED',
+            'BLOCKED_FOR_HOMOLOGATION', 'SUPERSEDED',
+        )
+        latest = select(
+            JourneyCheckpointModel.journey_id,
+            func.max(JourneyCheckpointModel.version).label('latest_version'),
+        ).where(
+            JourneyCheckpointModel.tenant_id == tenant_id,
+            JourneyCheckpointModel.company_id == company_id,
+        ).group_by(JourneyCheckpointModel.journey_id).subquery()
+        filters = [
+            JourneyCheckpointModel.tenant_id == tenant_id,
+            JourneyCheckpointModel.company_id == company_id,
+            JourneyCheckpointModel.status.in_(proposal_statuses),
+        ]
+        if status:
+            filters.append(JourneyCheckpointModel.status == status)
+        current = select(JourneyCheckpointModel).join(
+            latest, and_(
+                latest.c.journey_id == JourneyCheckpointModel.journey_id,
+                latest.c.latest_version == JourneyCheckpointModel.version,
+            ),
+        ).where(*filters)
+        total = int(self._session.scalar(
+            select(func.count()).select_from(current.subquery()),
+        ) or 0)
+        ids = tuple(self._session.scalars(
+            current.with_only_columns(JourneyCheckpointModel.journey_id)
+            .order_by(JourneyCheckpointModel.created_at.desc())
+            .offset(offset).limit(limit)
+        ))
+        return tuple(
+            journey for journey_id in ids
+            if (journey := self._journeys.get(tenant_id, company_id, journey_id)) is not None
+        ), total
+
+    def published_catalog(
+        self, tenant_id: UUID, company_id: UUID, *, at: date,
+    ) -> SqlCatalogRecord | None:
+        model = self._session.scalar(select(ProductionCatalogVersionModel).where(
+            ProductionCatalogVersionModel.tenant_id == tenant_id,
+            ProductionCatalogVersionModel.company_id == company_id,
+            ProductionCatalogVersionModel.status == 'PUBLISHED',
+            ProductionCatalogVersionModel.valid_from <= at,
+            or_(
+                ProductionCatalogVersionModel.valid_to.is_(None),
+                ProductionCatalogVersionModel.valid_to >= at,
+            ),
+        ).order_by(ProductionCatalogVersionModel.version_no.desc()).limit(1))
+        if model is None:
+            return None
+        if snapshot_hash(model.content) != model.content_hash:
+            raise ValueError('catalog integrity invalid')
+        return SqlCatalogRecord(
+            model.id, model.version_no, model.valid_from, model.valid_to, model.content,
+        )
+
+    def rule_name(
+        self, tenant_id: UUID, company_id: UUID, rule_version_id: UUID,
+    ) -> str | None:
+        versions = self._session.scalars(select(ProductionCatalogVersionModel).where(
+            ProductionCatalogVersionModel.tenant_id == tenant_id,
+            ProductionCatalogVersionModel.company_id == company_id,
+            ProductionCatalogVersionModel.status == 'PUBLISHED',
+        ).order_by(ProductionCatalogVersionModel.version_no.desc()))
+        target = str(rule_version_id)
+        for version in versions:
+            if snapshot_hash(version.content) != version.content_hash:
+                raise ValueError('catalog integrity invalid')
+            for rule in version.content.get('rules', []):
+                if isinstance(rule, dict) and rule.get('id') == target:
+                    return str(rule.get('name') or '') or None
+        return None
+
+    def list_active_lock_records(
+        self, tenant_id: UUID, company_id: UUID,
+    ) -> tuple[SqlLockRecord, ...]:
+        rows = self._session.scalars(select(AccountLockModel).where(
+            AccountLockModel.tenant_id == tenant_id,
+            AccountLockModel.company_id == company_id,
+            AccountLockModel.status == LockStatus.ACTIVE.value,
+        ).order_by(AccountLockModel.created_at.desc()))
+        return tuple(SqlLockRecord(AccountLock(
+            row.id, row.tenant_id, row.company_id, LockScope(row.scope),
+            tuple(EffectOperation(value) for value in row.operations), row.reason,
+            LockStatus(row.status), row.account_id, row.group_id, row.module,
+            row.competence, row.exercise, row.released_by, row.released_at,
+            row.release_reason,
+        ), row.created_at) for row in rows)
+
+    def list_audit_events_by_correlation(
+        self, tenant_id: UUID, company_id: UUID, correlation_id: UUID, *, limit: int,
+    ) -> tuple[AuditEvent, ...]:
+        rows = self._session.scalars(select(AuditEventModel).where(
+            AuditEventModel.tenant_id == tenant_id,
+            AuditEventModel.company_id == company_id,
+            AuditEventModel.correlation_id == correlation_id,
+        ).order_by(AuditEventModel.occurred_at.desc()).limit(limit))
+        return tuple(_audit(row) for row in rows)
 
     def get_journey(
         self, tenant_id: UUID, company_id: UUID, journey_id: UUID,

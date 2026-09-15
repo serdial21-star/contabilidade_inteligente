@@ -1,5 +1,17 @@
 # Product Backlog
 
+## Atualização Phase 08
+
+| ID | EPIC | STORY | PRIORITY | STATUS | TARGET_PHASE |
+|---|---|---|---|---|---|
+| PB-013 | EPIC-008 | Catálogo/regras/propostas reutilizando motor existente | P1 | DONE | PHASE 08 |
+| PB-014 | EPIC-008 | Revisão/aprovação/rejeição com guardas existentes | P0 | DONE | PHASE 08 |
+| PB-037 | EPIC-008 | Caso de uso auditável para nova revisão/edição | P1 | PLANNED | FUTURE_APPROVED_SCOPE |
+| PB-038 | EPIC-008 | Persistir motivo seguro de rejeição, se aprovado | P2 | PLANNED | FUTURE_APPROVED_SCOPE |
+| PB-039 | EPIC-008 | Proposta contábil a partir de fonte financeira | P1 | PLANNED | FUTURE_APPROVED_SCOPE |
+
+PB-015 permanece não iniciado para a Fase 09.
+
 ## Atualização Phase 07
 
 | ID | EPIC | STORY | PRIORITY | STATUS | TARGET_PHASE |

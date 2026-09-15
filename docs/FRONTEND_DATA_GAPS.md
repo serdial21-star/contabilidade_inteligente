@@ -1,5 +1,16 @@
 # Lacunas de dados do frontend
 
+## Reclassificação Phase 08
+
+| Gap | Classificação | Resultado / destino |
+|---|---|---|
+| Lista/detalhe/regra/evidência/linhas da proposta | RESOLVED_PHASE08 | Projeções reais tenant/company-aware. |
+| Aprovação e rejeição | RESOLVED_PHASE08 | Comandos existentes com revisão/hash, idempotência, SOD e lock. |
+| Edição de proposta e motivo persistido de rejeição | REAL_BACKEND_GAP | Sem caso de uso/campo seguro; nenhuma migration. |
+| Escrita granular de regra/mapping | REAL_BACKEND_GAP | Governança atual opera versão completa; somente leitura exposta. |
+| Contabilidade a partir de OFX/BankTransaction | DEFERRED_LATER | Nenhuma regra/caso de uso inventado. |
+| Linha da Decisão completa | DEFERRED_PHASE09 | Prévia contextual existe; timeline profunda não foi iniciada. |
+
 ## Reclassificação Phase 07
 
 | Gap | Classificação | Resultado / destino |

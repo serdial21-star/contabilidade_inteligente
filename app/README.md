@@ -1,5 +1,9 @@
 # Aplicativo web
 
+## Contábil — Phase 08
+
+`accounting-service.js` seleciona provider API ou sintético. A rota `#accounting` oferece propostas/revisão; `#accounting?view=rules` oferece catálogo publicado read-only quando `catalog.review` estiver presente. Decisões exigem confirmação e usam os comandos reais de review; `423` é apresentado como bloqueio. O frontend não recalcula balanceamento e não oferece posting/exportação.
+
 A entrada atual é [index.html](index.html), com o shell autenticado, Minha Visão, Empresas/Documentos e os módulos Fiscal NF-e e Financeiro OFX. Abra-a por servidor estático local. A configuração versionada habilita explicitamente o modo sintético; não autentica nem chama a API. O cliente OIDC Authorization Code + PKCE e o bootstrap por `/api/v1/identity/me` estão implementados, mas o provedor e seus valores públicos permanecem pendentes de homologação. Consulte [MY_VIEW_SPEC](../docs/MY_VIEW_SPEC.md), [FISCAL_MODULE_SPEC](../docs/FISCAL_MODULE_SPEC.md), [FINANCIAL_MODULE_SPEC](../docs/FINANCIAL_MODULE_SPEC.md) e [OIDC_CONFIGURATION](../docs/OIDC_CONFIGURATION.md).
 
 Arquitetura nativa: `config.js` (configuração pública), `core.js` (sessão), `oidc-client.js` (OIDC/PKCE), `api-client.js` (rede centralizada), `mock-provider.js` (fonte sintética), `dashboard-service.js` (Minha Visão), `operational-service.js` (Empresas/Documentos), `intelligence-service.js` (Fiscal/Financeiro) e `app.js` (bootstrap/shell). Nenhuma senha é recebida. O access token permanece somente em memória; `sessionStorage` guarda apenas state/verifier PKCE efêmeros e os remove no callback. `localStorage` contém somente preset, IDs, ordem e tamanho de widgets, sempre revalidados contra a permissão atual.

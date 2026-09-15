@@ -20,6 +20,7 @@ from serdial21.modules.identity.domain.entities import AuthenticatedPrincipal
 from serdial21.modules.intake_documents.application.services.intake import (
     IntakeResourceUnavailableError, UploadTooLargeError,
 )
+from serdial21.modules.locks.domain.entities import AccountLockedError
 from serdial21.modules.operations.application.services.operations import (
     NFeImportCommand, OfxImportCommand, OperationalConflictError,
     OperationalUnavailableError,
@@ -289,6 +290,133 @@ class BankStatementDetailResponse(BaseModel):
     transactions: BankTransactionPageResponse
 
 
+class AccountingProposalSummaryResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    journey_id: UUID
+    company_id: UUID
+    version: int
+    status: str
+    proposal_id: UUID
+    revision_id: UUID
+    revision_hash: str
+    accounting_date: date
+    source_type: str
+    source_id: UUID
+    source_document_receipt_id: UUID | None
+    rule_version_id: UUID
+    rule_name: str | None
+    total_debit: Decimal
+    total_credit: Decimal
+    balanced: bool
+    validation_status: str | None
+    proposer_id: UUID
+    approval_role: str
+    responsible_role: str
+    expires_at: datetime | None
+    decision_actor_id: UUID | None
+    decided_at: datetime | None
+
+
+class AccountingProposalPageResponse(BaseModel):
+    items: list[AccountingProposalSummaryResponse]
+    total: int
+    offset: int
+    limit: int
+
+
+class RuleConditionResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    field: str
+    operator: str
+    value: str
+
+
+class AccountingRuleResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: UUID
+    name: str | None
+    scope: str
+    priority: int
+    status: str
+    automation_level: str
+    conditions: list[RuleConditionResponse]
+    debit_account_version_id: UUID
+    debit_account_code: str
+    debit_account_name: str
+    credit_account_version_id: UUID
+    credit_account_code: str
+    credit_account_name: str
+
+
+class AccountingSourceResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    source_type: str
+    source_id: UUID
+    document_receipt_id: UUID | None
+    document_number: str | None
+    issuer_name: str | None
+    issued_at: datetime | None
+    amount: Decimal | None
+
+
+class AccountingLockResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: UUID
+    scope: str
+    operations: list[str]
+    reason: str
+    target: str
+    created_at: datetime
+
+
+class AccountingProposalDetailResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    summary: AccountingProposalSummaryResponse
+    rule: AccountingRuleResponse
+    lines: list[ReviewLineResponse]
+    sources: list[AccountingSourceResponse]
+    active_locks: list[AccountingLockResponse]
+
+
+class AccountingAccountResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: UUID
+    code: str
+    name: str
+    nature: str
+    normal_balance: str
+    is_synthetic: bool
+    is_postable: bool
+    status: str
+
+
+class AccountingMappingResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: UUID
+    key: str
+    priority: int
+    external_code: str | None
+    history_contains: str | None
+    dimension_code: str | None
+    canonical_entity: str | None
+    target_account_version_id: UUID
+    target_account_code: str
+    target_account_name: str
+
+
+class AccountingCatalogResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    version_id: UUID
+    version_no: int
+    valid_from: date
+    valid_to: date | None
+    decimal_places: int
+    amount_field: str
+    rules: list[AccountingRuleResponse]
+    accounts: list[AccountingAccountResponse]
+    mappings: list[AccountingMappingResponse]
+
+
 SessionDependency = Annotated[Session, Depends(get_db_session)]
 PrincipalDependency = Annotated[AuthenticatedPrincipal, Depends(get_authenticated_principal)]
 IdempotencyKey = Annotated[str, Header(alias='Idempotency-Key', min_length=1, max_length=128)]
@@ -454,6 +582,104 @@ def bank_statement_detail(
             limit=item.transactions.limit,
         ),
     )
+
+
+@router.get('/accounting-proposals', response_model=AccountingProposalPageResponse)
+def accounting_proposals(
+    company_id: UUID, request: Request, principal: PrincipalDependency,
+    session: SessionDependency, offset: Annotated[int, Query(ge=0)] = 0,
+    limit: Annotated[int, Query(ge=1, le=100)] = 25,
+    proposal_status: Annotated[
+        Literal['PENDING_APPROVAL', 'APPROVED', 'REJECTED',
+                'BLOCKED_FOR_HOMOLOGATION', 'SUPERSEDED'] | None,
+        Query(alias='status'),
+    ] = None,
+) -> AccountingProposalPageResponse:
+    try:
+        page = create_operational_runtime(session, request.app.state.settings).accounting_proposals(
+            principal.identity.tenant_id, company_id, principal.user_id,
+            offset=offset, limit=limit, status=proposal_status,
+        )
+    except Exception as error:
+        _map_error(session, error)
+    return AccountingProposalPageResponse(
+        items=[AccountingProposalSummaryResponse.model_validate(item) for item in page.items],
+        total=page.total, offset=page.offset, limit=page.limit,
+    )
+
+
+@router.get('/accounting-proposals/{journey_id}', response_model=AccountingProposalDetailResponse)
+def accounting_proposal_detail(
+    company_id: UUID, journey_id: UUID, request: Request,
+    principal: PrincipalDependency, session: SessionDependency,
+) -> AccountingProposalDetailResponse:
+    try:
+        item = create_operational_runtime(session, request.app.state.settings).accounting_proposal(
+            principal.identity.tenant_id, company_id, principal.user_id, journey_id,
+        )
+    except Exception as error:
+        _map_error(session, error)
+    return AccountingProposalDetailResponse.model_validate(item)
+
+
+@router.get('/accounting-proposals/{journey_id}/activity', response_model=list[AuditResponse])
+def accounting_proposal_activity(
+    company_id: UUID, journey_id: UUID, request: Request,
+    principal: PrincipalDependency, session: SessionDependency,
+    limit: Annotated[int, Query(ge=1, le=50)] = 10,
+) -> list[AuditResponse]:
+    try:
+        items = create_operational_runtime(session, request.app.state.settings).proposal_activity(
+            principal.identity.tenant_id, company_id, principal.user_id,
+            journey_id, limit=limit,
+        )
+    except Exception as error:
+        _map_error(session, error)
+    return [AuditResponse.model_validate(item) for item in items]
+
+
+@router.get('/accounting-catalog', response_model=AccountingCatalogResponse)
+def accounting_catalog(
+    company_id: UUID, request: Request, principal: PrincipalDependency,
+    session: SessionDependency, effective_at: date,
+) -> AccountingCatalogResponse:
+    try:
+        item = create_operational_runtime(session, request.app.state.settings).accounting_catalog(
+            principal.identity.tenant_id, company_id, principal.user_id, at=effective_at,
+        )
+    except Exception as error:
+        _map_error(session, error)
+    return AccountingCatalogResponse.model_validate(item)
+
+
+@router.get('/accounting-rules/{rule_id}', response_model=AccountingRuleResponse)
+def accounting_rule_detail(
+    company_id: UUID, rule_id: UUID, request: Request,
+    principal: PrincipalDependency, session: SessionDependency, effective_at: date,
+) -> AccountingRuleResponse:
+    try:
+        item = create_operational_runtime(session, request.app.state.settings).accounting_rule(
+            principal.identity.tenant_id, company_id, principal.user_id, rule_id,
+            at=effective_at,
+        )
+    except Exception as error:
+        _map_error(session, error)
+    return AccountingRuleResponse.model_validate(item)
+
+
+@router.get('/accounting-accounts/{account_id}', response_model=AccountingAccountResponse)
+def accounting_account_detail(
+    company_id: UUID, account_id: UUID, request: Request,
+    principal: PrincipalDependency, session: SessionDependency, effective_at: date,
+) -> AccountingAccountResponse:
+    try:
+        item = create_operational_runtime(session, request.app.state.settings).accounting_account(
+            principal.identity.tenant_id, company_id, principal.user_id, account_id,
+            at=effective_at,
+        )
+    except Exception as error:
+        _map_error(session, error)
+    return AccountingAccountResponse.model_validate(item)
 
 
 @router.post('/imports/nfe', response_model=ImportResponse, status_code=202)
@@ -672,7 +898,12 @@ def _batch_id_for_result(session: Session, receipt_id: UUID) -> UUID:
 
 
 def _map_error(session: Session, error: Exception) -> None:
+    if isinstance(error, AccountLockedError):
+        session.rollback()
+        raise HTTPException(status_code=423, detail='operation locked') from None
     if isinstance(error, AccessDeniedError):
+        raise HTTPException(status_code=403, detail='access denied') from None
+    if isinstance(error, PermissionError):
         raise HTTPException(status_code=403, detail='access denied') from None
     if isinstance(error, (OperationalUnavailableError, JourneyUnavailableError,
                           IntakeResourceUnavailableError)):

@@ -1,5 +1,16 @@
 # Mapa de permissões do frontend
 
+## Atualização Phase 08
+
+| Área/ação | Permissão exata | Autoridade |
+|---|---|---|
+| Propostas — lista/detalhe | `journal.read` | Tenant + CompanyAccess + permissão no serviço. |
+| Aprovar/rejeitar | `journal.approve` | Acrescenta papel, SOD, revisão/hash, versão, lock e estado. |
+| Catálogo/regras/contas/mappings read-only | `catalog.review` | Somente versão publicada, efetiva e íntegra. |
+| Histórico contextual | `audit.read` | Correlação company-scoped e payload minimizado. |
+
+Não foi criada permissão. Visibilidade de botão não autoriza a decisão.
+
 ## Atualização Phase 07
 
 | Área/ação | Permissão exata | Comportamento |
@@ -30,13 +41,13 @@ Mapa de apresentação baseado exclusivamente nos códigos reais de `INITIAL_PER
 | Operação | abrir placeholder | `company.read` | visível, desabilitado até fase do módulo | SIM |
 | Fiscal | consultar/importar NF-e | `company.read` / `journal.propose` | leitura e import especializado integrados | NÃO |
 | Financeiro | abrir placeholder | `reconciliation.manage` | visível, desabilitado até integração | SIM |
-| Contábil | consultar área | `journal.read` | visível; conteúdo operacional ainda não conectado | SIM |
+| Contábil | consultar propostas/revisão | `journal.read` | visível e conectado à projeção paginada | SIM |
 | Clientes | abrir placeholder | `company.read` | visível, desabilitado | SIM |
 | Obrigações | abrir módulo futuro | SEM CONTRATO | mostrado desabilitado; nenhuma permissão foi inventada | SIM |
 | Governança | consultar controles | `audit.read` OU `lock.manage` | visível com pelo menos uma capacidade | SIM |
 | Administração | administrar identidade/catálogo | `identity.manage` OU `catalog.manage` | oculto sem capacidade; funcionalidade não conectada | SIM |
-| Proposta | propor lançamento | `journal.propose` | não implementado na Phase 04 | SIM |
-| Proposta | aprovar lançamento | `journal.approve` | não implementado na Phase 04 | SIM |
+| Proposta | gerar via import NF-e suportado | `journal.propose` | fluxo existente; sem comando paralelo | SIM |
+| Proposta | aprovar/rejeitar internamente | `journal.approve` | confirmação conectada aos comandos reais | SIM |
 | Exportação | executar exportação | `export.execute` | não implementado; Domínio segue bloqueado | SIM |
 
 Identificadores segmentados, como `privacy.dsr.search`, devem permanecer completos. Não há prefixos implícitos, curingas ou simplificação por primeiro segmento.
