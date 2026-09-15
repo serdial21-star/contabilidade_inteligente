@@ -1,0 +1,58 @@
+# System A Integration Readiness Gate
+
+## Resultado
+
+| Critério mínimo | Resultado | Evidência/pendência |
+| --- | --- | --- |
+| Client master contract | `PARTIAL` | tabela/campos somente documentados |
+| CNPJ correlation | `PARTIAL` | normalização desenhada; formato runtime desconhecido |
+| Document receipt contract | `PARTIAL` | frontend/workflow/schema ausentes |
+| Document reference/transport | `BLOCKER` | secure pull curto não demonstrado |
+| Central Operations create | `PARTIAL` | v3/v5 conflitantes, sem teste |
+| Central Operations update persists | `FAIL` | v1/v5 e persistência não verificadas |
+| Authorization fail closed | `FAIL` no gate | falta evidência/teste positivo e negativo |
+| Client route security | `PARTIAL` | route registry/guard ausente do workspace |
+| Canonical endpoint map | `PARTIAL` | inventário pronto; sete conflitos runtime |
+| M2M API hosting | `PARTIAL` | host n8n responde; API dedicada não demonstrada |
+| M2M credential support | `MISSING` | nenhuma credencial de serviço demonstrada |
+| Audit | `UNKNOWN` | tabela/população/writes não verificados |
+| CORS browser readiness | `PARTIAL` | não testado por webhook/ambiente |
+| Homologation | `MISSING` | nenhum conjunto isolado fornecido |
+
+## Evidência aceita para reabrir o gate
+
+- source tag do frontend e exports n8n redigidos;
+- schema-only MySQL/read-only, sem dados de cliente;
+- homologação separada para frontend, n8n, DB, Drive, credentials e logs;
+- fixtures totalmente sintéticas;
+- testes de login/session/401, route guards e permissions fail-closed;
+- testes Central Ops create→read→update→read→delete/soft-delete;
+- teste de intake documental com hash e referência segura;
+- inventário de `Respond to Webhook`, CORS e SQL dos workflows relevantes;
+- evidência de audit log sem payload sensível.
+
+## Política de aprovação
+
+O host n8n acessível não satisfaz o gate. Nenhum endpoint será `ACTIVE_VERIFIED` até source, workflow ativo e teste HOM convergirem. Alegação de dossiê permanece documental. Falta de evidência obrigatória é falha de readiness, mesmo sem confirmação de defeito.
+
+## Alterações desta fase
+
+- produção: nenhuma;
+- banco/schema: nenhum;
+- n8n/workflows: nenhum;
+- credenciais: nenhuma;
+- dados reais: nenhum;
+- testes funcionais: não executados por ausência de source/HOM do Sistema A;
+- probe público: apenas HEAD/GET da UI raiz n8n, sem autenticação nem webhook.
+
+## Próxima fase recomendada
+
+Uma tarefa isolada **SYSTEM A HOMOLOGATION & VERIFICATION PACKAGE** deve fornecer os artefatos e o ambiente acima. Não iniciar Connect Hub, Phase 10 ou conexão com o Sistema B.
+
+**PHASE 09B — SYSTEM A RUNTIME VERIFICATION: BLOCKED**
+
+**SYSTEM A: NOT_READY_FOR_CONNECT_HUB_MVP**
+
+**INTEGRATION: NO_GO**
+
+**NEXT RECOMMENDED PHASE: SYSTEM A HOMOLOGATION & VERIFICATION PACKAGE**
