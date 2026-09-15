@@ -80,3 +80,7 @@ READY = fundação de apresentação implementada; PROTOTYPE = comportamento loc
 | ErrorState | Comunicar falhas sem vazamento | Page/inline/permission/not found/temporary | READY | Galeria/dialogs | Erro uniforme; não expõe existência protegida |
 | NotificationCenter | Notificações reais | Transporte/contador/persistência | PLANNED | Topbar mostra só aviso | Sem badge real inventado |
 | CompactDensity | Uso avançado | Compact | PLANNED | Settings | Desabilitado, não persistido |
+| DecisionLine | Explicar formação do estado | Cronologia vertical responsiva | READY | Documento, NF-e, OFX e proposta | Read-only; categorias controladas |
+| DecisionEvent | Exibir uma evidência segura | Marcador, categoria, ator, tempo e descrição | READY | DecisionLine | Sem payload bruto ou ID técnico |
+| DecisionEventDetails | Detalhe expandido | Não criado | PARTIAL | Futuro | DTO atual já é minimizado; sem necessidade operacional |
+| TraceabilityEntryPoint | Vincular detalhe à projeção | Composição no detalhe autorizado | READY | Central, fiscal, financeiro e contábil | Exige acesso ao recurso + `audit.read` |

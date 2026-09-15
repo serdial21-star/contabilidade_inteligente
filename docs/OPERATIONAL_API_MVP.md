@@ -125,3 +125,7 @@ Logs técnicos registram método, caminho, status e duração, sem corpo, query,
 cabeçalhos de autenticação, XML, OFX ou stack trace para o cliente. A consulta
 de auditoria é deliberadamente resumida e não expõe estados antes/depois,
 motivos ou conteúdo de documentos.
+
+## Linha da Decisão
+
+`GET /operations/companies/{company_id}/decision-lines/{root_type}/{root_id}` aceita `DOCUMENT`, `FISCAL_DOCUMENT`, `BANK_STATEMENT`, `ACCOUNTING_PROPOSAL` ou `REVIEW`, com `limit` entre 1 e 100. O caso de uso exige a permissão da raiz e `audit.read`, resolve o recurso antes da auditoria e retorna DTO sem payload bruto. Não existem métodos de escrita para este recurso.

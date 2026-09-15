@@ -11,6 +11,7 @@
       bankStatements: (companyId, filters) => apiClient.bankStatements(companyId, filters),
       bankStatement: (companyId, id, filters) => apiClient.bankStatement(companyId, id, filters),
       importOfx: (companyId, file) => apiClient.importOfx(companyId, file),
+      decisionLine: (companyId, rootType, id) => apiClient.decisionLine(companyId, rootType, id),
     });
     return Object.freeze({
       fiscalStatusLabel: (status) => FISCAL_STATUS[status] || 'Estado fiscal disponível no detalhe',
@@ -20,6 +21,7 @@
       bankStatements: provider.bankStatements,
       bankStatement: provider.bankStatement,
       importOfx: provider.importOfx,
+      decisionLine: provider.decisionLine,
     });
   }
 

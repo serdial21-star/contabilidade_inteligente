@@ -97,3 +97,7 @@ Nenhum gap bloqueia a demonstração sintética. Rótulo de mock não é requisi
 ## Gates e dívidas preservados
 
 REAL DATA = NO_GO; EXTERNAL EXPOSURE = NO_GO; MIGRATION 0012 = PRE_DEPLOY_REQUIRED; DOMINIO_EXPORT = BLOCKED_FOR_HOMOLOGATION. REPOSITORY_HYGIENE_DEBT = TRACKED_LEGACY_VENV_FILES, NON_BLOCKING / SEPARATE_MAINTENANCE. STAGING_CONFIG = PENDING_ENVIRONMENT_PHASE. Nenhuma alteração de schema, dados, privacidade, autorização ou autenticação. Site da Phase 03 apenas inspecionado e preservado.
+
+## Fase 09 — Linha da Decisão
+
+Nos detalhes autorizados de documento, NF-e, extrato e proposta, a pessoa com `audit.read` vê a sequência fonte → processamento → regra → proposta → solicitação de decisão → aprovação/rejeição, conforme evidência real. Estados parcial, vazio e integridade inválida são explícitos. A fila de revisão entra pelo detalhe da proposta; a UI não afirma revisão humana apenas porque um item foi enfileirado.

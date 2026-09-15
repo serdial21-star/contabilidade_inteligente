@@ -13,6 +13,7 @@
       documents: (id, filters) => apiClient.documents(id, filters),
       document: (companyId, documentId) => apiClient.document(companyId, documentId),
       summary: (id) => apiClient.documentSummary(id),
+      decisionLine: (companyId, rootType, id) => apiClient.decisionLine(companyId, rootType, id),
     });
     return Object.freeze({
       statusLabel: (status) => STATUS_LABELS[status] || 'Estado indisponível',
@@ -24,6 +25,7 @@
       documents: provider.documents,
       document: provider.document,
       summary: provider.summary,
+      decisionLine: provider.decisionLine,
     });
   }
 

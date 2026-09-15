@@ -25,6 +25,9 @@ from serdial21.modules.operations.application.services.operations import (
     NFeImportCommand, OfxImportCommand, OperationalConflictError,
     OperationalUnavailableError,
 )
+from serdial21.modules.operations.application.services.traceability import (
+    DecisionLineRoot, DecisionLineUnavailableError,
+)
 from serdial21.modules.workflow.application.journey import (
     JourneyConflictError, JourneyNotReadyError, JourneyUnavailableError,
 )
@@ -124,6 +127,33 @@ class AuditResponse(BaseModel):
     correlation_id: UUID
     occurred_at: datetime
     integrity_valid: bool
+
+
+class DecisionLineEventResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    sequence: int
+    occurred_at: datetime
+    category: Literal[
+        'SOURCE', 'RECEIPT', 'VALIDATION', 'PROCESSING', 'RULE', 'PROPOSAL',
+        'REVIEW', 'EDIT', 'APPROVAL', 'REJECTION', 'BLOCK', 'UNBLOCK', 'EXCEPTION',
+    ]
+    actor_kind: Literal['AUTOMATED', 'PROFESSIONAL_ACTION', 'SYSTEM_GOVERNANCE']
+    actor_display_name: str
+    title: str
+    description: str
+    evidence_kind: Literal['AUDIT_EVENT', 'DOMAIN_DERIVED_EVENT']
+    integrity_valid: bool
+
+
+class DecisionLineResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    root_type: DecisionLineRoot
+    root_id: UUID
+    root_title: str
+    root_status: str
+    completeness: Literal['COMPLETE', 'PARTIAL']
+    data_gaps: list[str]
+    events: list[DecisionLineEventResponse]
 
 
 class CompanyResponse(BaseModel):
@@ -638,6 +668,24 @@ def accounting_proposal_activity(
     return [AuditResponse.model_validate(item) for item in items]
 
 
+@router.get(
+    '/decision-lines/{root_type}/{root_id}', response_model=DecisionLineResponse,
+)
+def decision_line(
+    company_id: UUID, root_type: DecisionLineRoot, root_id: UUID,
+    request: Request, principal: PrincipalDependency, session: SessionDependency,
+    limit: Annotated[int, Query(ge=1, le=100)] = 100,
+) -> DecisionLineResponse:
+    try:
+        item = create_operational_runtime(session, request.app.state.settings).decision_line(
+            principal.identity.tenant_id, company_id, principal.user_id,
+            root_type, root_id, limit=limit,
+        )
+    except Exception as error:
+        _map_error(session, error)
+    return DecisionLineResponse.model_validate(item)
+
+
 @router.get('/accounting-catalog', response_model=AccountingCatalogResponse)
 def accounting_catalog(
     company_id: UUID, request: Request, principal: PrincipalDependency,
@@ -906,6 +954,7 @@ def _map_error(session: Session, error: Exception) -> None:
     if isinstance(error, PermissionError):
         raise HTTPException(status_code=403, detail='access denied') from None
     if isinstance(error, (OperationalUnavailableError, JourneyUnavailableError,
+                          DecisionLineUnavailableError,
                           IntakeResourceUnavailableError)):
         raise HTTPException(status_code=404, detail='resource unavailable') from None
     if isinstance(error, (OperationalConflictError, JourneyConflictError,

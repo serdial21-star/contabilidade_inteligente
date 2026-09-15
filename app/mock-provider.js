@@ -162,6 +162,21 @@
     if (companyId !== 'synthetic-company-a' || id !== 'synthetic-journey-1') throw Object.assign(new Error('REQUEST_FAILED'), {code: 'REQUEST_FAILED'});
     return [{id: 'synthetic-audit-1', actor_id: 'synthetic-proposer', origin: 'HUMAN', module: 'workflow', action: 'accounting_proposal.created', subject_type: 'NFeJourney', subject_id: id, subject_version: 3, correlation_id: 'synthetic-correlation', occurred_at: '2026-09-14T12:10:00Z', integrity_valid: true}];
   }
+  async function decisionLine(companyId, rootType, id) {
+    const valid = profile.companies.some((company) => company.id === companyId);
+    if (!valid) throw Object.assign(new Error('REQUEST_FAILED'), {code: 'REQUEST_FAILED'});
+    const approved = rootType === 'ACCOUNTING_PROPOSAL' && syntheticProposalStatus === 'APPROVED';
+    return Object.freeze({
+      root_type: rootType, root_id: id, root_title: 'Rastreabilidade sintética',
+      root_status: approved ? 'APPROVED' : 'PROCESSED', completeness: 'PARTIAL',
+      data_gaps: Object.freeze(['DISTINCT_REVIEW_ACTION_NOT_AVAILABLE']),
+      events: Object.freeze([
+        Object.freeze({sequence: 1, occurred_at: '2026-09-14T12:10:00Z', category: 'RECEIPT', actor_kind: 'PROFESSIONAL_ACTION', actor_display_name: 'Ana Exemplo', title: 'Documento recebido', description: 'Evidência exclusivamente sintética.', evidence_kind: 'AUDIT_EVENT', integrity_valid: true}),
+        Object.freeze({sequence: 2, occurred_at: '2026-09-14T12:11:00Z', category: 'PROCESSING', actor_kind: 'AUTOMATED', actor_display_name: 'Automação', title: 'Processamento executado', description: 'Cenário demonstrativo sem dado real.', evidence_kind: 'AUDIT_EVENT', integrity_valid: true}),
+        ...(rootType === 'ACCOUNTING_PROPOSAL' ? [Object.freeze({sequence: 3, occurred_at: '2026-09-14T12:12:00Z', category: approved ? 'APPROVAL' : 'PROPOSAL', actor_kind: approved ? 'PROFESSIONAL_ACTION' : 'AUTOMATED', actor_display_name: approved ? 'Ana Exemplo' : 'Automação', title: approved ? 'Proposta aprovada' : 'Proposta contábil criada', description: 'Decisão ou proposta do cenário sintético.', evidence_kind: 'AUDIT_EVENT', integrity_valid: true})] : []),
+      ]),
+    });
+  }
   async function listFiscal(companyId, filters = {}) {
     let rows = fiscal.filter((item) => item.company_id === companyId);
     const search = String(filters.search || '').toLocaleLowerCase('pt-BR');
@@ -237,5 +252,6 @@
     proposalActivity: syntheticProposalActivity,
     accountingCatalog: syntheticAccountingCatalog, accountingRule: syntheticAccountingRule,
     decideProposal: syntheticDecision,
+    decisionLine,
   });
 }(globalThis));

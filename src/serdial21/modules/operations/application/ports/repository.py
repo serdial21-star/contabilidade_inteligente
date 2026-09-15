@@ -88,6 +88,7 @@ class BankStatementRecord(Protocol):
     id: UUID
     company_id: UUID
     artifact_id: UUID
+    transformation_run_id: UUID
     bank_id: str | None
     branch_id: str | None
     account_number: str
@@ -235,8 +236,26 @@ class OperationalQueryRepository(Protocol):
         self, tenant_id: UUID, company_id: UUID, correlation_id: UUID, *, limit: int,
     ) -> tuple[AuditEvent, ...]: ...
 
+    def find_trace_correlation_ids(
+        self, tenant_id: UUID, company_id: UUID,
+        references: tuple[tuple[str, UUID], ...], *, limit: int,
+    ) -> tuple[UUID, ...]: ...
+
+    def list_trace_audit_events(
+        self, tenant_id: UUID, company_id: UUID,
+        correlation_ids: tuple[UUID, ...], *, limit: int,
+    ) -> tuple[AuditEvent, ...]: ...
+
+    def actor_display_names(
+        self, tenant_id: UUID, actor_ids: tuple[UUID, ...],
+    ) -> dict[UUID, str]: ...
+
     def get_journey(
         self, tenant_id: UUID, company_id: UUID, journey_id: UUID,
+    ) -> Journey | None: ...
+
+    def get_journey_by_fiscal_document(
+        self, tenant_id: UUID, company_id: UUID, fiscal_document_id: UUID,
     ) -> Journey | None: ...
 
     def list_issues(

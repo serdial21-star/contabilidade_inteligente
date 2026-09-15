@@ -1,10 +1,16 @@
 # Serdial21 Contabilidade Inteligente
 
+## Phase 09 — Linha da Decisão
+
+A rastreabilidade operacional agora projeta uma linha cronológica segura sobre auditoria e estado canônico existentes para documentos, NF-e, extratos, propostas e revisões. O contrato é somente leitura, tenant/company-aware, exige acesso ao recurso e `audit.read`, minimiza atores e não expõe payload bruto. Consulte [DECISION_LINE_SPEC.md](docs/DECISION_LINE_SPEC.md), [DECISION_LINE_SECURITY.md](docs/DECISION_LINE_SECURITY.md) e [DECISION_LINE_DATA_GAPS.md](docs/DECISION_LINE_DATA_GAPS.md).
+
+Não foi criada tabela, migration, exportação de auditoria, integração Domínio, dado real ou funcionalidade da Fase 10.
+
 ## Phase 08 — Accounting Intelligence
 
 O módulo Contábil integra a proposta NF-e já produzida pelo motor determinístico com lista paginada, evidência, regra explicada, linhas compostas e decisão humana segura. Aprovação/rejeição reutilizam revisão/hash, segregação, AccountLock, idempotência e auditoria existentes. Catálogo, regras, contas e mappings são read-only. Consulte [ACCOUNTING_INTELLIGENCE_SPEC.md](docs/ACCOUNTING_INTELLIGENCE_SPEC.md) e [ACCOUNTING_DECISION_SECURITY.md](docs/ACCOUNTING_DECISION_SECURITY.md).
 
-Não há contabilidade a partir de OFX, edição de proposta, posting/exportação Domínio, migration nova, dados reais ou Linha da Decisão da Fase 09.
+Não há contabilidade a partir de OFX, edição de proposta, posting/exportação Domínio, migration nova ou dados reais.
 
 Fundação do produto Serdial21, construída como monólito modular orientado a
 domínios. O MVP mantém o sistema contábil externo como autoridade da

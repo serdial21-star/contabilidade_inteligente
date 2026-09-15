@@ -34,5 +34,5 @@ W003, W005 e W006 direcionam à fila contábil real. Automação usa linguagem o
 - `PROPOSAL_EDIT`, `RULE_WRITE`, `ACCOUNT_MAPPING_WRITE`: `DEFERRED`.
 - `ACCOUNTING_FROM_FINANCIAL`: `DEFERRED`.
 - Motivo textual de rejeição: `PHASE08_SCHEMA_GAP`; nenhuma migration criada.
-- Linha da Decisão completa e visualização cross-module: `DEFERRED_PHASE09`.
+- Linha da Decisão completa e visualização cross-module: `READY_PHASE09` para NF-e/proposta/revisão; revisão humana distinta e motivo de rejeição permanecem gaps documentados.
 - Preferências de dashboard server-side, reconciliação e malware scanning continuam fora do escopo.

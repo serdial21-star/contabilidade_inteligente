@@ -25,7 +25,7 @@ from serdial21.modules.access_control.adapters.outbound.persistence.repositories
 from serdial21.modules.access_control.application.services.authorization import AuthorizationService
 from serdial21.modules.audit.adapters.outbound.persistence.models import AuditEventModel
 from serdial21.modules.audit.adapters.outbound.persistence.repositories import SqlAlchemyAuditRepository
-from serdial21.modules.audit.application.services.audit import AuditService
+from serdial21.modules.audit.application.services.audit import AuditRecord, AuditService
 from serdial21.modules.audit.domain.entities import AuditOrigin
 from serdial21.modules.catalog.adapters.outbound.persistence.repositories import SqlAlchemyProductionCatalogRepository
 from serdial21.modules.catalog.application.services.governance import CatalogGovernanceService
@@ -33,6 +33,15 @@ from serdial21.modules.catalog.domain.entities import (
     AccountSpec, CatalogSpec, MappingEntrySpec, RuleSpec, WorkflowSpec,
 )
 from serdial21.modules.identity.adapters.inbound.oidc import OidcJwtVerifier
+from serdial21.modules.locks.adapters.outbound.persistence.repositories import (
+    SQLAlchemyAccountLockRepository,
+)
+from serdial21.modules.locks.domain.entities import (
+    EffectOperation, LockScope, create_lock,
+)
+from serdial21.modules.workflow.adapters.outbound.persistence.journeys import (
+    SqlAlchemyJourneyRepository,
+)
 
 
 ISSUER = 'https://operations.identity.test'
@@ -644,6 +653,177 @@ def test_accounting_intelligence_projects_exact_proposal_rule_and_evidence(
     ).status_code == 200
 
 
+def test_decision_line_golden_approval_is_read_only_minimized_and_idempotent(
+    operational: OperationalFixture,
+) -> None:
+    imported = operational.client.post(
+        f'/api/v1/operations/companies/{operational.company}/imports/nfe',
+        params=_nfe_params(), content=NFE.read_bytes(), headers=operational.headers(
+            'proposer', content_type='application/xml', filename='trace.xml',
+            key='trace-golden',
+        ),
+    ).json()
+    journey_id = imported['resource_id']
+    review = operational.client.get(
+        f'/api/v1/operations/companies/{operational.company}/reviews/{journey_id}',
+        headers=operational.headers('accountant'),
+    ).json()['summary']
+    payload = {
+        'expected_version': review['version'], 'revision_id': review['revision_id'],
+        'revision_hash': review['revision_hash'],
+    }
+    url = f'/api/v1/operations/companies/{operational.company}/reviews/{journey_id}/approve'
+    headers = operational.headers('accountant') | {'Idempotency-Key': 'trace-approve'}
+    first = operational.client.post(url, headers=headers, json=payload)
+    retry = operational.client.post(url, headers=headers, json=payload)
+    assert first.status_code == retry.status_code == 200
+
+    trace_url = f'/api/v1/operations/companies/{operational.company}/decision-lines/ACCOUNTING_PROPOSAL/{journey_id}'
+    response = operational.client.get(trace_url, headers=operational.headers('accountant'))
+    assert response.status_code == 200, response.text
+    trace = response.json()
+    assert trace['root_status'] == 'APPROVED'
+    assert [event['occurred_at'] for event in trace['events']] == sorted(
+        event['occurred_at'] for event in trace['events']
+    )
+    approvals = [event for event in trace['events'] if event['title'] == 'Proposta aprovada']
+    categories = {event['category'] for event in trace['events']}
+    assert {'PROCESSING', 'RULE', 'PROPOSAL', 'REVIEW', 'APPROVAL'} <= categories
+    rule = next(event for event in trace['events'] if event['category'] == 'RULE')
+    proposal = next(event for event in trace['events'] if event['title'] == 'Proposta contábil criada')
+    assert rule['title'] == 'Regra aplicada: NF-e rule'
+    assert 'selecionada deterministicamente por prioridade' in rule['description']
+    assert 'débito total 100.00' in proposal['description']
+    assert 'crédito total 100.00' in proposal['description']
+    assert len(approvals) == 1
+    assert approvals[0]['actor_display_name'] == 'Accountant'
+    assert approvals[0]['actor_kind'] == 'PROFESSIONAL_ACTION'
+    serialized = response.text.lower()
+    assert all(term not in serialized for term in (
+        'actor_id', 'tenant_id', 'correlation_id', 'before_state', 'after_state',
+        'revision_hash', '@', '<nfe', 'storage_key',
+    ))
+    assert operational.client.post(
+        trace_url, headers=operational.headers('accountant'),
+    ).status_code == 405
+
+    proposal = operational.client.get(
+        f'/api/v1/operations/companies/{operational.company}/accounting-proposals/{journey_id}',
+        headers=operational.headers('accountant'),
+    ).json()
+    source = proposal['sources'][0]
+    for root_type, root_id in (
+        ('FISCAL_DOCUMENT', source['source_id']),
+        ('DOCUMENT', source['document_receipt_id']),
+    ):
+        source_trace = operational.client.get(
+            f'/api/v1/operations/companies/{operational.company}/decision-lines/{root_type}/{root_id}',
+            headers=operational.headers('accountant'),
+        )
+        assert source_trace.status_code == 200, source_trace.text
+        source_events = source_trace.json()['events']
+        assert any(
+            event['title'] == 'Regra aplicada: NF-e rule'
+            for event in source_events
+        )
+        professional_approvals = [
+            event for event in source_events
+            if event['title'] == 'Proposta aprovada'
+            and event['actor_kind'] == 'PROFESSIONAL_ACTION'
+        ]
+        assert len(professional_approvals) == 1
+
+
+def test_decision_line_does_not_follow_same_correlation_into_other_tenant(
+    operational: OperationalFixture,
+) -> None:
+    imported = operational.client.post(
+        f'/api/v1/operations/companies/{operational.company}/imports/nfe',
+        params=_nfe_params(), content=NFE.read_bytes(), headers=operational.headers(
+            'proposer', content_type='application/xml', filename='source-idor.xml',
+            key='source-chain-idor',
+        ),
+    ).json()
+    session_factory = operational.client.app.state.database.session_factory
+    assert session_factory is not None
+    with session_scope(session_factory) as session:
+        journey = SqlAlchemyJourneyRepository(session).get(
+            operational.tenant, operational.company, UUID(imported['resource_id']),
+        )
+        other = session.scalar(select(CompanyModel).where(
+            CompanyModel.id == operational.other_company,
+        ))
+        assert journey is not None and other is not None
+        AuditService(SqlAlchemyAuditRepository(session)).record(AuditRecord(
+            tenant_id=other.tenant_id, company_id=other.id, actor_id=None,
+            origin=AuditOrigin.AUTOMATION, module='workflow',
+            action='journey.quarantined', subject_type='NFeJourney',
+            subject_id=uuid4(), subject_version=1, before=None,
+            after={'status': 'QUARANTINED'}, reason=None,
+            correlation_id=journey.correlation_id,
+        ))
+
+    response = operational.client.get(
+        f"/api/v1/operations/companies/{operational.company}/decision-lines/ACCOUNTING_PROPOSAL/{imported['resource_id']}",
+        headers=operational.headers('accountant'),
+    )
+    assert response.status_code == 200
+    assert not any(
+        event['title'] == 'Documento em quarentena'
+        for event in response.json()['events']
+    )
+
+
+def test_decision_line_idor_and_underlying_permission_are_enforced(
+    operational: OperationalFixture,
+) -> None:
+    resource_id = uuid4()
+    own = f'/api/v1/operations/companies/{operational.company}/decision-lines/DOCUMENT/{resource_id}'
+    cross = f'/api/v1/operations/companies/{operational.other_company}/decision-lines/DOCUMENT/{resource_id}'
+    assert operational.client.get(own).status_code == 401
+    assert operational.client.get(
+        own, headers=operational.headers('accountant'),
+    ).status_code == 404
+    denied = operational.client.get(
+        own, headers=operational.headers('proposer'),
+    )
+    assert denied.status_code == 403
+    cross_response = operational.client.get(
+        cross, headers=operational.headers('accountant'),
+    )
+    assert cross_response.status_code == 403
+
+
+def test_decision_line_derives_current_lock_without_inventing_attempt(
+    operational: OperationalFixture,
+) -> None:
+    imported = operational.client.post(
+        f'/api/v1/operations/companies/{operational.company}/imports/nfe',
+        params=_nfe_params(), content=NFE.read_bytes(), headers=operational.headers(
+            'proposer', content_type='application/xml', filename='trace-lock.xml',
+            key='trace-lock',
+        ),
+    ).json()
+    session_factory = operational.client.app.state.database.session_factory
+    assert session_factory is not None
+    with session_scope(session_factory) as session:
+        SQLAlchemyAccountLockRepository(session).add(create_lock(
+            tenant_id=operational.tenant, company_id=operational.company,
+            scope=LockScope.MODULE, operations=(EffectOperation.APPROVE,),
+            reason='synthetic trace lock', module='accounting',
+        ))
+
+    response = operational.client.get(
+        f"/api/v1/operations/companies/{operational.company}/decision-lines/ACCOUNTING_PROPOSAL/{imported['resource_id']}",
+        headers=operational.headers('accountant'),
+    )
+    assert response.status_code == 200, response.text
+    blocks = [event for event in response.json()['events'] if event['category'] == 'BLOCK']
+    assert len(blocks) == 1
+    assert blocks[0]['evidence_kind'] == 'DOMAIN_DERIVED_EVENT'
+    assert 'tentativa' not in blocks[0]['description'].lower()
+
+
 def test_accounting_proposal_and_catalog_idor_are_safe(
     operational: OperationalFixture,
 ) -> None:
@@ -766,6 +946,13 @@ def test_insufficient_role_cannot_decide_and_reject_is_available(
     )
     assert denied.status_code == 403
     assert rejected.status_code == 200 and rejected.json()['status'] == 'REJECTED'
+    trace = operational.client.get(
+        f"/api/v1/operations/companies/{operational.company}/decision-lines/REVIEW/{imported['resource_id']}",
+        headers=operational.headers('accountant'),
+    )
+    assert trace.status_code == 200
+    assert any(event['category'] == 'REJECTION' for event in trace.json()['events'])
+    assert 'REJECTION_REASON_NOT_AVAILABLE' in trace.json()['data_gaps']
 
 
 def test_audit_endpoint_requires_audit_permission(operational: OperationalFixture) -> None:

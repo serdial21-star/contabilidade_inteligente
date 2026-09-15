@@ -14,7 +14,9 @@ from serdial21.modules.intake_documents.adapters.outbound.persistence.models imp
     ArtifactReceiptModel, EvidenceArtifactModel, ImportBatchModel, ImportItemModel,
     TransformationRunModel, ValidationIssueModel,
 )
-from serdial21.modules.access_control.adapters.outbound.persistence.models import CompanyModel
+from serdial21.modules.access_control.adapters.outbound.persistence.models import (
+    CompanyModel, TenantMembershipModel, UserModel,
+)
 from serdial21.modules.banking.adapters.outbound.persistence.models import (
     BankAccountModel, BankStatementModel, BankTransactionModel,
 )
@@ -113,6 +115,7 @@ class SqlBankStatementRecord:
     id: UUID
     company_id: UUID
     artifact_id: UUID
+    transformation_run_id: UUID
     bank_id: str | None
     branch_id: str | None
     account_number: str
@@ -499,7 +502,8 @@ class SqlAlchemyOperationalQueryRepository:
         self, row: BankStatementModel, account: BankAccountModel,
     ) -> SqlBankStatementRecord:
         return SqlBankStatementRecord(
-            row.id, row.company_id, row.artifact_id, account.bank_id,
+            row.id, row.company_id, row.artifact_id, row.transformation_run_id,
+            account.bank_id,
             account.branch_id, account.account_number, account.account_type,
             row.start_date, row.end_date, row.opening_balance,
             row.closing_balance, row.currency_code, row.sign_policy,
@@ -659,10 +663,73 @@ class SqlAlchemyOperationalQueryRepository:
         ).order_by(AuditEventModel.occurred_at.desc()).limit(limit))
         return tuple(_audit(row) for row in rows)
 
+    def find_trace_correlation_ids(
+        self, tenant_id: UUID, company_id: UUID,
+        references: tuple[tuple[str, UUID], ...], *, limit: int,
+    ) -> tuple[UUID, ...]:
+        if not references:
+            return ()
+        subjects = or_(*(
+            and_(AuditEventModel.subject_type == subject_type,
+                 AuditEventModel.subject_id == subject_id)
+            for subject_type, subject_id in references
+        ))
+        rows = self._session.scalars(select(AuditEventModel.correlation_id).where(
+            AuditEventModel.tenant_id == tenant_id,
+            AuditEventModel.company_id == company_id,
+            subjects,
+        ).distinct().order_by(AuditEventModel.correlation_id).limit(limit))
+        return tuple(rows)
+
+    def list_trace_audit_events(
+        self, tenant_id: UUID, company_id: UUID,
+        correlation_ids: tuple[UUID, ...], *, limit: int,
+    ) -> tuple[AuditEvent, ...]:
+        if not correlation_ids:
+            return ()
+        rows = self._session.scalars(select(AuditEventModel).where(
+            AuditEventModel.tenant_id == tenant_id,
+            AuditEventModel.company_id == company_id,
+            AuditEventModel.correlation_id.in_(correlation_ids),
+        ).order_by(
+            AuditEventModel.occurred_at.desc(), AuditEventModel.id.desc(),
+        ).limit(limit))
+        return tuple(_audit(row) for row in rows)
+
+    def actor_display_names(
+        self, tenant_id: UUID, actor_ids: tuple[UUID, ...],
+    ) -> dict[UUID, str]:
+        if not actor_ids:
+            return {}
+        rows = self._session.execute(select(UserModel.id, UserModel.display_name).join(
+            TenantMembershipModel,
+            TenantMembershipModel.user_id == UserModel.id,
+        ).where(
+            TenantMembershipModel.tenant_id == tenant_id,
+            UserModel.id.in_(actor_ids),
+        ).distinct())
+        return {user_id: display_name for user_id, display_name in rows}
+
     def get_journey(
         self, tenant_id: UUID, company_id: UUID, journey_id: UUID,
     ) -> Journey | None:
         return self._journeys.get(tenant_id, company_id, journey_id)
+
+    def get_journey_by_fiscal_document(
+        self, tenant_id: UUID, company_id: UUID, fiscal_document_id: UUID,
+    ) -> Journey | None:
+        journey_id = self._session.scalar(select(JourneyCheckpointModel.journey_id).where(
+            JourneyCheckpointModel.tenant_id == tenant_id,
+            JourneyCheckpointModel.company_id == company_id,
+            JourneyCheckpointModel.fiscal_document_id == fiscal_document_id,
+        ).order_by(
+            JourneyCheckpointModel.version.desc(),
+            JourneyCheckpointModel.created_at.desc(),
+        ).limit(1))
+        return (
+            self._journeys.get(tenant_id, company_id, journey_id)
+            if journey_id is not None else None
+        )
 
     def list_issues(
         self, tenant_id: UUID, company_id: UUID, *, limit: int,

@@ -67,6 +67,16 @@
   const routeParams = () => new URLSearchParams((location.hash.split('?')[1] || ''));
   const setAnnouncement = (message) => { announcer.textContent = ''; root.setTimeout(() => { announcer.textContent = message; }, 0); };
 
+  function decisionLineMarkup(line) {
+    if (!line) return '';
+    const actorLabels = {AUTOMATED: 'Automação', PROFESSIONAL_ACTION: 'Ação profissional', SYSTEM_GOVERNANCE: 'Governança do sistema'};
+    const gapLabels = {DISTINCT_REVIEW_ACTION_NOT_AVAILABLE: 'Ação de revisão distinta ainda não disponível', REJECTION_REASON_NOT_AVAILABLE: 'Motivo estruturado de rejeição não disponível', CORRELATED_AUDIT_NOT_AVAILABLE: 'Auditoria correlacionada não disponível', AUDIT_INTEGRITY_NOT_CONFIRMED: 'Integridade de auditoria não confirmada', UNMAPPED_AUDIT_ACTION: 'Existe evento ainda sem apresentação específica'};
+    const events = line.events.map((event) => `<li class="decision-event"><span class="decision-marker" aria-hidden="true"></span><div><div class="decision-meta"><span class="badge neutral">${escapeHtml(event.category)}</span><span>${escapeHtml(actorLabels[event.actor_kind] || 'Origem não identificada')}</span><time datetime="${escapeHtml(event.occurred_at)}">${escapeHtml(formatDate(event.occurred_at))}</time></div><h3>${escapeHtml(event.title)}</h3><p>${escapeHtml(event.description)}</p><small>${escapeHtml(event.actor_display_name)} · ${escapeHtml(event.evidence_kind === 'DOMAIN_DERIVED_EVENT' ? 'Estado de domínio derivado' : 'Evento de auditoria')}</small></div></li>`).join('');
+    const gaps = line.data_gaps.length
+      ? `<div class="alert info"><div><strong>Rastreabilidade parcial</strong><p>${line.data_gaps.map((gap) => escapeHtml(gapLabels[gap] || 'Evidência complementar indisponível')).join(' · ')}</p></div></div>` : '';
+    return `<section class="card decision-line" aria-labelledby="decision-line-title"><div class="decision-line-heading"><div><span class="eyebrow">Linha da Decisão</span><h2 id="decision-line-title">Como este estado foi formado</h2></div><span class="badge ${line.completeness === 'COMPLETE' ? 'success' : 'warning'}">${escapeHtml(line.completeness)}</span></div>${gaps}<ol class="decision-events">${events || '<li>Nenhuma evidência correlacionada disponível.</li>'}</ol><p class="row-note">Projeção somente leitura. Não representa escrituração, saldo ou fechamento oficial.</p></section>`;
+  }
+
   function currentPermissions(profile) {
     const tenantPermissions = profile.permissions || [];
     if (companyId === dashboardService.allAuthorizedId) {
@@ -325,7 +335,12 @@
         if (companyId === dashboardService.allAuthorizedId) { nextModel = {loading: false, page: {items: [], total: 0, offset: 0, limit: 10}}; }
         else {
           const documentId = routeParams().get('document');
-          if (documentId) nextModel = {loading: false, item: await operationalService.document(companyId, documentId)};
+          if (documentId) {
+            const item = await operationalService.document(companyId, documentId);
+            const decisionLine = hasPermission(currentPermissions(profile), ['audit.read'])
+              ? await operationalService.decisionLine(companyId, 'DOCUMENT', documentId) : null;
+            nextModel = {loading: false, item, decisionLine};
+          }
           else if (view === 'inbox') {
             const pages = await Promise.all(['STARTED', 'FAILED', 'QUARANTINED', 'DUPLICATE'].map((status) => operationalService.documents(companyId, {...documentFilters, search: '', source: '', received_from: '', received_to: '', status, offset: 0, limit: 25})));
             const unique = [...new Map(pages.flatMap((page) => page.items).map((item) => [item.id, item])).values()].sort((a, b) => String(b.received_at).localeCompare(String(a.received_at)));
@@ -359,7 +374,7 @@
 
   function fiscalMarkup(profile) {
     if (companyId === dashboardService.allAuthorizedId) return selectedCompanyRequired('Fiscal · NF-e');
-    if (routeParams().has('fiscal')) return fiscalDetailMarkup(profile);
+    if (routeParams().has('fiscal')) return fiscalDetailMarkup(profile) + decisionLineMarkup(intelligenceModel?.decisionLine);
     if (intelligenceModel?.error) return localizedError();
     if (!intelligenceModel?.page) return loadingOperational('documentos fiscais');
     const rows = intelligenceModel.page.items.map((item) => `<tr><td><button class="link-button" data-action="open-fiscal" data-fiscal-id="${escapeHtml(item.id)}">NF-e ${escapeHtml(item.document_number || 'sem número')}</button><small class="row-note">Série ${escapeHtml(item.series || '—')}</small></td><td>${escapeHtml(item.issuer_name || 'Não informado')}</td><td>${escapeHtml(formatDate(item.issued_at))}</td><td>${escapeHtml(money(item.invoice_total))}</td><td><span class="badge ${item.observed_status === 'REPORTED_AUTHORIZED' ? 'success' : 'warning'}">${escapeHtml(intelligenceService.fiscalStatusLabel(item.observed_status))}</span></td></tr>`).join('');
@@ -383,7 +398,7 @@
 
   function financialMarkup(profile) {
     if (companyId === dashboardService.allAuthorizedId) return selectedCompanyRequired('Financeiro · OFX');
-    if (routeParams().has('statement')) return statementDetailMarkup();
+    if (routeParams().has('statement')) return statementDetailMarkup() + decisionLineMarkup(intelligenceModel?.decisionLine);
     if (intelligenceModel?.error) return localizedError();
     if (!intelligenceModel?.page) return loadingOperational('extratos financeiros');
     const rows = intelligenceModel.page.items.map((item) => `<tr><td><button class="link-button" data-action="open-statement" data-statement-id="${escapeHtml(item.id)}">${escapeHtml(item.bank_id || 'Instituição não informada')}</button></td><td>${escapeHtml(item.branch_masked || '—')} · ${escapeHtml(item.account_masked)}</td><td>${escapeHtml(item.start_date || '—')} a ${escapeHtml(item.end_date || '—')}</td><td>${escapeHtml(money(item.closing_balance, item.currency_code || 'BRL'))}</td><td>${escapeHtml(formatDate(item.imported_at))}</td></tr>`).join('');
@@ -415,10 +430,18 @@
       if (companyId === dashboardService.allAuthorizedId) nextModel = {loading: false, page: {items: [], total: 0, offset: 0, limit: 10}};
       else if (route() === 'fiscal') {
         const id = routeParams().get('fiscal');
-        nextModel = id ? {loading: false, item: await intelligenceService.fiscalDocument(companyId, id)} : {loading: false, page: await intelligenceService.fiscalDocuments(companyId, fiscalFilters)};
+        if (id) {
+          const item = await intelligenceService.fiscalDocument(companyId, id);
+          const decisionLine = hasPermission(currentPermissions(profile), ['audit.read']) ? await intelligenceService.decisionLine(companyId, 'FISCAL_DOCUMENT', id) : null;
+          nextModel = {loading: false, item, decisionLine};
+        } else nextModel = {loading: false, page: await intelligenceService.fiscalDocuments(companyId, fiscalFilters)};
       } else {
         const id = routeParams().get('statement');
-        nextModel = id ? {loading: false, item: await intelligenceService.bankStatement(companyId, id, transactionFilters)} : {loading: false, page: await intelligenceService.bankStatements(companyId, statementFilters)};
+        if (id) {
+          const item = await intelligenceService.bankStatement(companyId, id, transactionFilters);
+          const decisionLine = hasPermission(currentPermissions(profile), ['audit.read']) ? await intelligenceService.decisionLine(companyId, 'BANK_STATEMENT', id) : null;
+          nextModel = {loading: false, item, decisionLine};
+        } else nextModel = {loading: false, page: await intelligenceService.bankStatements(companyId, statementFilters)};
       }
     } catch (error) { nextModel = {loading: false, error: error?.code || 'ERROR'}; }
     if (requestId !== intelligenceRequest || session.snapshot().state !== STATES.AUTHENTICATED) return;
@@ -496,7 +519,7 @@
     if (companyId === dashboardService.allAuthorizedId) return selectedCompanyRequired('Contábil');
     if (routeParams().has('rule')) return ruleDetailMarkup(profile);
     if (routeParams().get('view') === 'rules') return catalogMarkup(profile);
-    if (routeParams().has('proposal')) return proposalDetailMarkup(profile);
+    if (routeParams().has('proposal')) return proposalDetailMarkup(profile) + decisionLineMarkup(accountingModel?.decisionLine);
     return proposalListMarkup(profile);
   }
 
@@ -521,9 +544,9 @@
       }
       else if (routeParams().has('proposal')) {
         const item = await accountingService.accountingProposal(companyId, routeParams().get('proposal'));
-        let activity = null;
-        if (hasPermission(currentPermissions(profile), ['audit.read'])) activity = await accountingService.proposalActivity(companyId, routeParams().get('proposal'));
-        nextModel = {loading: false, item, activity};
+        let decisionLine = null;
+        if (hasPermission(currentPermissions(profile), ['audit.read'])) decisionLine = await accountingService.decisionLine(companyId, 'ACCOUNTING_PROPOSAL', routeParams().get('proposal'));
+        nextModel = {loading: false, item, decisionLine};
       } else nextModel = {loading: false, page: await accountingService.accountingProposals(companyId, proposalFilters)};
     } catch (error) { nextModel = {loading: false, error: error?.code || 'ERROR'}; }
     if (requestId !== accountingRequest || session.snapshot().state !== STATES.AUTHENTICATED) return;
@@ -545,7 +568,7 @@
     let content = null;
     if (currentRoute === 'overview' && hasPermission(currentPermissions(profile), ['company.read'])) content = overviewMarkup(profile);
     else if (currentRoute === 'clients' && hasPermission(currentPermissions(profile), ['company.read'])) content = routeParams().has('company') ? companyDetailMarkup() : companyListMarkup(profile);
-    else if (currentRoute === 'documents' && hasPermission(currentPermissions(profile), ['company.read'])) content = routeParams().has('document') ? documentDetailMarkup(profile) : documentsMarkup(profile, false);
+    else if (currentRoute === 'documents' && hasPermission(currentPermissions(profile), ['company.read'])) content = routeParams().has('document') ? documentDetailMarkup(profile) + decisionLineMarkup(operationalModel?.decisionLine) : documentsMarkup(profile, false);
     else if (currentRoute === 'inbox' && hasPermission(currentPermissions(profile), ['company.read'])) content = documentsMarkup(profile, true);
     else if (currentRoute === 'fiscal' && hasPermission(currentPermissions(profile), ['company.read'])) content = fiscalMarkup(profile);
     else if (currentRoute === 'financial' && hasPermission(currentPermissions(profile), ['company.read'])) content = financialMarkup(profile);

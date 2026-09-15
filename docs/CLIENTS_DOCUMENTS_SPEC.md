@@ -84,3 +84,7 @@ e exclusivamente sintéticos.
 - malware scanning: `INFRASTRUCTURE_GAP`;
 - paginação conjunta “todas as empresas”: `DEFERRED`; a UI exige empresa;
 - QA visual em navegador real: gate manual quando indisponível.
+
+## Rastreabilidade da Fase 09
+
+O detalhe documental oferece Linha da Decisão quando há `company.read + audit.read`. A raiz usa o recibo e o artefato para localizar correlações escopadas; conteúdo original, hashes e storage continuam ocultos. Nem todo documento possui etapa contábil.

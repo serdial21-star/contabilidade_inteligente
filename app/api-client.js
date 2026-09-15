@@ -56,6 +56,7 @@
       accountingProposals: (companyId, filters = {}) => request(`/operations/companies/${encodeURIComponent(companyId)}/accounting-proposals?${queryString(filters)}`),
       accountingProposal: (companyId, id) => request(`/operations/companies/${encodeURIComponent(companyId)}/accounting-proposals/${encodeURIComponent(id)}`),
       proposalActivity: (companyId, id) => request(`/operations/companies/${encodeURIComponent(companyId)}/accounting-proposals/${encodeURIComponent(id)}/activity?limit=10`),
+      decisionLine: (companyId, rootType, id) => request(`/operations/companies/${encodeURIComponent(companyId)}/decision-lines/${encodeURIComponent(rootType)}/${encodeURIComponent(id)}?limit=100`),
       accountingCatalog: (companyId, effectiveAt) => request(`/operations/companies/${encodeURIComponent(companyId)}/accounting-catalog?effective_at=${encodeURIComponent(effectiveAt)}`),
       accountingRule: (companyId, id, effectiveAt) => request(`/operations/companies/${encodeURIComponent(companyId)}/accounting-rules/${encodeURIComponent(id)}?effective_at=${encodeURIComponent(effectiveAt)}`),
       accountingAccount: (companyId, id, effectiveAt) => request(`/operations/companies/${encodeURIComponent(companyId)}/accounting-accounts/${encodeURIComponent(id)}?effective_at=${encodeURIComponent(effectiveAt)}`),

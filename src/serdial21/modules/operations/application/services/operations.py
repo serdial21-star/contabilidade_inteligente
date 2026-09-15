@@ -24,6 +24,9 @@ from serdial21.modules.locks.domain.entities import (
     EffectOperation, validate_effect,
 )
 from serdial21.modules.operations.application.ports.repository import OperationalQueryRepository
+from serdial21.modules.operations.application.services.traceability import (
+    DecisionLine, DecisionLineRoot, DecisionLineService,
+)
 from serdial21.modules.workflow.application.journey import Journey, JourneyCommand
 from serdial21.modules.workflow.application.services.nfe_to_dominio import NFeToDominioService
 
@@ -440,6 +443,7 @@ class OperationalService:
         self._nfe = nfe
         self._ofx = ofx
         self._audit = audit
+        self._traceability = DecisionLineService(repository, authorization, audit)
 
     def company(
         self, tenant_id: UUID, company_id: UUID, actor_id: UUID,
@@ -805,6 +809,14 @@ class OperationalService:
         ) for item in self._repository.list_audit_events(
             tenant_id, company_id, limit=limit,
         ))
+
+    def decision_line(
+        self, tenant_id: UUID, company_id: UUID, actor_id: UUID,
+        root_type: DecisionLineRoot, root_id: UUID, *, limit: int,
+    ) -> DecisionLine:
+        return self._traceability.get(
+            tenant_id, company_id, actor_id, root_type, root_id, limit=limit,
+        )
 
     def _require(
         self, tenant_id: UUID, company_id: UUID, actor_id: UUID, permission: str,

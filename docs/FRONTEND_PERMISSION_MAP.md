@@ -53,3 +53,7 @@ Mapa de apresentação baseado exclusivamente nos códigos reais de `INITIAL_PER
 Identificadores segmentados, como `privacy.dsr.search`, devem permanecer completos. Não há prefixos implícitos, curingas ou simplificação por primeiro segmento.
 
 Invariante verificada: `VISIBLE_COMPANIES ⊆ BACKEND_AUTHORIZED_COMPANIES`. A projeção não aceita permissões, papéis, tenant ou empresas informados pelo frontend.
+
+## Linha da Decisão
+
+Documento, NF-e e extrato exigem `company.read + audit.read`; proposta e revisão exigem `journal.read + audit.read`. A UI só solicita a projeção quando `audit.read` consta no contexto, mas o backend revalida ambas as permissões e o `CompanyAccess`.

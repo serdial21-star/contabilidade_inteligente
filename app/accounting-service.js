@@ -17,6 +17,7 @@
       accountingCatalog: (companyId, effectiveAt) => apiClient.accountingCatalog(companyId, effectiveAt),
       accountingRule: (companyId, id, effectiveAt) => apiClient.accountingRule(companyId, id, effectiveAt),
       decideProposal: (companyId, id, decision, summary) => apiClient.decideProposal(companyId, id, decision, summary),
+      decisionLine: (companyId, rootType, id) => apiClient.decisionLine(companyId, rootType, id),
     });
     return Object.freeze({
       statusLabel: (status) => STATUS[status] || 'Estado contábil controlado',
@@ -26,6 +27,7 @@
       accountingCatalog: provider.accountingCatalog,
       accountingRule: provider.accountingRule,
       decideProposal: provider.decideProposal,
+      decisionLine: provider.decisionLine,
     });
   }
 

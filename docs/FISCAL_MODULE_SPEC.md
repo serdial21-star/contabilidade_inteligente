@@ -33,3 +33,5 @@ Leitura exige `company.read`; importação preserva a permissão existente `jour
 ## Exceções e gaps conhecidos
 
 A Central de Documentos e W004 expõem a projeção real de issues existentes. O detalhe fiscal ainda não agrega essa projeção diretamente, então exceções fiscais são **parciais**. Upload em lote, raw XML, verificação online de protocolo, malware scanning, cálculo fiscal completo, obrigações e workflow contábil são adiados ou gaps explícitos.
+
+Na Fase 09, o detalhe de NF-e agrega a Linha da Decisão usando a correlação da evidência real. A linha pode alcançar regra, proposta e decisão somente quando essas transições existem; o status de protocolo continua sendo apenas o observado no XML.

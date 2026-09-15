@@ -53,3 +53,7 @@ Reclassificação após a Phase 05.
 | FD-10 | obrigações, conciliação e clientes agregados | REAL_BACKEND_GAP | obrigações sem fonte; conciliação sem consulta; empresas sem agregado eficiente |
 
 Contagem: `RESOLVED_PHASE04B=2`, `RESOLVED_PHASE05=2`, `RESOLVED_PHASE05_LOCAL=1`, `DEFERRED_LATER=4`, `REAL_BACKEND_GAP=1`.
+
+## Fase 09
+
+A Linha da Decisão resolve a visualização cross-module para raízes suportadas. Permanecem gaps: ação distinta de revisão, motivo de rejeição, tentativa bloqueada e destino seguro dos itens W010. O fallback é parcial e nunca fabrica transição.

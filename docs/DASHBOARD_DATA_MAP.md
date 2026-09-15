@@ -51,3 +51,7 @@ Inventário da Phase 05. `CURRENT AVAILABILITY` descreve o backend existente; `S
 O modo desta fase continua integralmente sintético. `READY` indica que o caminho read-only futuro pode reutilizar um contrato existente; não indica uso de dados reais no piloto atual. W008 não cria calendário tributário, e W009 não cria uma semântica de conciliação que o backend ainda não expõe.
 
 `Todas as empresas autorizadas` é calculado somente sobre empresas retornadas por `/identity/me`. No provider API futuro, chamadas continuam por empresa e por permissão; uma projeção server-side consolidada deverá ser avaliada antes de escala para evitar chamadas excessivas, sem consultar o tenant inteiro para filtrar no navegador.
+
+## W010 e Linha da Decisão
+
+W010 continua como resumo minimizado. O contrato atual do widget não fornece tipo/ID autorizável por item, portanto a Fase 09 não cria links especulativos. A Linha da Decisão é acessada pelos detalhes reais de recurso.
