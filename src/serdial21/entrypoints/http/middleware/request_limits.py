@@ -4,6 +4,8 @@ from collections.abc import Awaitable, Callable
 import json
 from typing import Any
 
+from serdial21.shared_kernel.observability import MetricsRegistry, security_event
+
 
 ASGIMessage = dict[str, Any]
 ASGIReceive = Callable[[], Awaitable[ASGIMessage]]
@@ -18,13 +20,14 @@ class RequestBodyTooLargeError(RuntimeError):
 class RequestBodyLimitMiddleware:
     def __init__(
         self, app: ASGIApp, *, api_prefix: str, general_limit: int,
-        nfe_limit: int, ofx_limit: int,
+        nfe_limit: int, ofx_limit: int, metrics: MetricsRegistry,
     ) -> None:
         self.app = app
         self._nfe_path = f'{api_prefix}/operations/companies/'
         self._general_limit = general_limit
         self._nfe_limit = nfe_limit
         self._ofx_limit = ofx_limit
+        self._metrics = metrics
 
     async def __call__(
         self, scope: dict[str, Any], receive: ASGIReceive, send: ASGISend,
@@ -45,6 +48,7 @@ class RequestBodyLimitMiddleware:
                 await _json_response(send, 400, 'invalid content length')
                 return
             if content_length > limit:
+                self._record_rejection(str(scope.get('path', '')))
                 await _json_response(send, 413, 'request body too large')
                 return
 
@@ -71,7 +75,15 @@ class RequestBodyLimitMiddleware:
         except RequestBodyTooLargeError:
             if response_started:
                 raise
+            self._record_rejection(str(scope.get('path', '')))
             await _json_response(send, 413, 'request body too large')
+
+    def _record_rejection(self, path: str) -> None:
+        source = 'nfe' if path.endswith('/imports/nfe') else (
+            'ofx' if path.endswith('/imports/ofx') else 'general'
+        )
+        self._metrics.increment('payload_too_large_total', {'source': source})
+        security_event('payload.rejected', fields={'reason': 'too_large', 'source': source})
 
     def _limit_for(self, path: str) -> int:
         if path.startswith(self._nfe_path) and path.endswith('/imports/nfe'):

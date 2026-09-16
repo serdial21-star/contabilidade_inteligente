@@ -8,6 +8,8 @@ from threading import Lock
 from time import monotonic
 from typing import Any, Protocol
 
+from serdial21.shared_kernel.observability import MetricsRegistry, security_event
+
 
 ASGIMessage = dict[str, Any]
 ASGIReceive = Callable[[], Awaitable[ASGIMessage]]
@@ -68,6 +70,7 @@ class RateLimitMiddleware:
     def __init__(
         self, app: ASGIApp, *, limiter: RateLimiter,
         general_limit: int, sensitive_limit: int, upload_limit: int,
+        metrics: MetricsRegistry,
     ) -> None:
         self.app = app
         self._limiter = limiter
@@ -76,6 +79,7 @@ class RateLimitMiddleware:
             'sensitive': sensitive_limit,
             'upload': upload_limit,
         }
+        self._metrics = metrics
 
     async def __call__(
         self, scope: dict[str, Any], receive: ASGIReceive, send: ASGISend,
@@ -86,6 +90,8 @@ class RateLimitMiddleware:
         bucket = _bucket(str(scope.get('path', '')), str(scope.get('method', 'GET')))
         identity = _safe_identity(scope)
         if not await self._limiter.allow(identity, bucket, self._limits[bucket], 60):
+            self._metrics.increment('rate_limit_exceeded_total', {'bucket': bucket})
+            security_event('rate_limit.exceeded', fields={'bucket': bucket})
             body = json.dumps({'detail': 'rate limit exceeded'}, separators=(',', ':')).encode()
             await send({
                 'type': 'http.response.start', 'status': 429,

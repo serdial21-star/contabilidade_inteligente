@@ -23,6 +23,7 @@ Estratégia conceitual de 14/09/2026. Não provisiona cloud, banco, IdP ou deplo
 | deploy method | Instalação local conforme README | Release identificado, CI e janela controlada conforme runbook | Release aprovado, revisão operacional e procedimento de abort/recuperação |
 | migration policy | Alembic revisável; testes isolados não são rollback operacional | Ensaio upgrade forward-only após backup | Upgrade forward-only em janela autorizada com verificação |
 | backup requirement | Proteger dados locais relevantes antes de ensaios; não versionar dumps | Backup pré-deploy e ensaio de restore; evidências de banco e storage | Backup recente/hash, política aprovada de banco/storage e recuperação demonstrada |
+| observability | JSON e métricas locais | agregação/alerta isolados e canário | backend privado, retenção, RBAC e canal redundante |
 | external integrations | Simuladores/contratos sintéticos isolados | Sandboxes autorizados; Domínio segue bloqueado | Somente provedores homologados e gates aprovados |
 
 ## Correspondência com configuração existente
@@ -44,3 +45,8 @@ Downgrade operacional não é estratégia de rollback. Reversão da aplicação 
 ## Condições de operação
 
 STAGING/PRODUCTION externos exigem os sete gates de external exposure; uso real exige os seis gates real data da baseline. Agendamento de backup, cópias de object storage, fornecedores/localização, retenção e revogação IdP precisam de evidência operacional. Nenhum deles recebe PASS por existir este plano. DEVELOPMENT não é exceção à autorização de corpus nem ao isolamento tenant/company.
+
+Logs, métricas e alertas sempre carregam o ambiente e não compartilham canal de
+produção sem identificação explícita. `METRICS_ENDPOINT_ENABLED` permanece
+false por padrão; quando ativado exige segredo operacional e bloqueio adicional
+do proxy/rede.

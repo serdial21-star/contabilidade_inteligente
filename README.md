@@ -1,5 +1,21 @@
 # Serdial21 Contabilidade Inteligente
 
+## Phase 12 — Observability + Recovery
+
+A aplicação agora emite logs JSON sanitizados com request/correlation IDs,
+métricas de schema fechado, liveness/readiness mínimos e alertas por porta
+neutra com cooldown. O tooling de backup recusa sobrescrita, registra checksum
+e metadados, e um drill SQLite sintético comprova backup/restore local. Consulte
+[OBSERVABILITY_ARCHITECTURE.md](docs/OBSERVABILITY_ARCHITECTURE.md),
+[ALERTING_POLICY.md](docs/ALERTING_POLICY.md),
+[BACKUP_RECOVERY_STRATEGY.md](docs/BACKUP_RECOVERY_STRATEGY.md),
+[RECOVERY_RUNBOOK.md](docs/RECOVERY_RUNBOOK.md) e
+[RECOVERY_DRILL_REPORT.md](docs/RECOVERY_DRILL_REPORT.md).
+
+Agregação central, transporte real de alertas, storage externo criptografado e
+drill MariaDB no ambiente final ainda exigem infraestrutura. Não houve conexão
+com banco externo, migration, dado real, deploy ou exposição pública.
+
 ## Phase 11 — Security Infrastructure
 
 A aplicação agora possui contrato fail-closed para homologação/produção, CORS e hosts explícitos, HSTS condicionado a HTTPS, respostas sensíveis `no-store`, limites independentes de corpo/NF-e/OFX e rate limiting por classes com porta para backend distribuído. Consulte [SECURITY_INFRASTRUCTURE_SPEC.md](docs/SECURITY_INFRASTRUCTURE_SPEC.md), [PRODUCTION_REVERSE_PROXY_SECURITY.md](docs/PRODUCTION_REVERSE_PROXY_SECURITY.md), [PRODUCTION_SECURITY_CHECKLIST.md](docs/PRODUCTION_SECURITY_CHECKLIST.md), [SECURITY_CONFIGURATION_MATRIX.md](docs/SECURITY_CONFIGURATION_MATRIX.md) e [THREAT_MODEL.md](docs/THREAT_MODEL.md).
@@ -109,6 +125,9 @@ DATABASE_URL no arquivo .env antes de executar:
 - [Módulo Fiscal — Phase 07](docs/FISCAL_MODULE_SPEC.md)
 - [Módulo Financeiro — Phase 07](docs/FINANCIAL_MODULE_SPEC.md)
 - [Segurança Fiscal e Financeira — Phase 07](docs/FISCAL_FINANCIAL_SECURITY.md)
+- [Observabilidade e operação — Phase 12](docs/OBSERVABILITY_ARCHITECTURE.md)
+- [Fundação SLI/SLO — Phase 12](docs/SLO_SLI_FOUNDATION.md)
+- [Resposta a incidentes — Phase 12](docs/INCIDENT_RESPONSE_RUNBOOK.md)
 - [Modelo de segurança documental](docs/DOCUMENT_SECURITY_MODEL.md)
 - [Mapa de fontes dos widgets](docs/DASHBOARD_DATA_MAP.md)
 - [Configuração OIDC do cliente web — contrato público sem segredos](docs/OIDC_CONFIGURATION.md)

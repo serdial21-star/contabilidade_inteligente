@@ -22,6 +22,12 @@ Valores abaixo são contratos, nunca credenciais. LOCAL corresponde ao literal t
 | `RATE_LIMIT_BACKEND_URL` | endpoint/credencial backend | vazio | vazio | provedor | provedor | sim | hom/prod | sim |
 | `RATE_LIMIT_*_PER_MINUTE` | políticas por classe | defaults seguros | determinístico | revisado | revisado | não | não | sim |
 | `API_DOCS_ENABLED` | Swagger/ReDoc/OpenAPI | true default | true default | false default | false default | não | não | sim |
+| `METRICS_ENDPOINT_ENABLED` | exposição operacional opt-in | false | false | conforme infraestrutura | conforme infraestrutura | não | não | sim |
+| `METRICS_ACCESS_TOKEN` | autenticação do scrape interno | vazio | sintético se ativado | secret provider | secret provider | sim | se endpoint ativo | sim |
 | `OBJECT_STORAGE_PATH` | evidência local | ignorado | temporário | storage isolado | storage privado | potencialmente | sim no deploy | operacional |
 
 O adapter distribuído implementa a porta `RateLimiter` e deve ser injetado na fábrica. Selecionar `distributed` sem adapter interrompe a composição; nunca cai silenciosamente para memória.
+
+Mesmo autenticado, `/internal/metrics` deve ser privado no proxy e inacessível
+pelo portal do cliente. O token possui no mínimo 32 caracteres, não aparece em
+logs e deve ser rotacionado pelo provedor de segredos.

@@ -134,6 +134,12 @@ class AppSettings(BaseSettings):
     api_docs_enabled: bool | None = Field(
         default=None, validation_alias='API_DOCS_ENABLED',
     )
+    metrics_endpoint_enabled: bool = Field(
+        default=False, validation_alias='METRICS_ENDPOINT_ENABLED',
+    )
+    metrics_access_token: SecretStr | None = Field(
+        default=None, validation_alias='METRICS_ACCESS_TOKEN',
+    )
     object_storage_path: Path = Field(
         default=Path('.serdial21-storage'),
         validation_alias='OBJECT_STORAGE_PATH',
@@ -177,7 +183,10 @@ class AppSettings(BaseSettings):
             raise ValueError('OIDC_ISSUER não pode ser vazio')
         return normalized
 
-    @field_validator('public_frontend_url', 'rate_limit_backend_url', mode='before')
+    @field_validator(
+        'public_frontend_url', 'rate_limit_backend_url', 'metrics_access_token',
+        mode='before',
+    )
     @classmethod
     def empty_optional_values_are_absent(cls, value: object) -> object:
         if isinstance(value, str) and not value.strip():
@@ -246,6 +255,11 @@ class AppSettings(BaseSettings):
                 raise ValueError('RATE_LIMIT_BACKEND_URL deve ser uma URL Redis válida')
             if secured_environment and parsed_backend.scheme != 'rediss':
                 raise ValueError('RATE_LIMIT_BACKEND_URL deve usar TLS em homologation/production')
+        if self.metrics_endpoint_enabled:
+            if self.metrics_access_token is None:
+                raise ValueError('METRICS_ACCESS_TOKEN é obrigatório quando métricas HTTP estão ativas')
+            if len(self.metrics_access_token.get_secret_value()) < 32:
+                raise ValueError('METRICS_ACCESS_TOKEN deve possuir ao menos 32 caracteres')
 
         if self.database_url is not None:
             try:

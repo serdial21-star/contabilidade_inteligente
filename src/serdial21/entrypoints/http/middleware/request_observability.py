@@ -38,13 +38,33 @@ class RequestObservabilityMiddleware:
             raise
         finally:
             duration = perf_counter() - started
-            self._metrics.observe_processing(duration)
+            route = scope.get('route')
+            route_template = str(getattr(route, 'path', '<unmatched>'))
+            method = str(scope.get('method', 'UNKNOWN'))
+            self._metrics.record_http(
+                method=method,
+                route_template=route_template,
+                status_code=status_code,
+                duration_seconds=duration,
+            )
+            if status_code == 401:
+                self._metrics.increment('auth_failures_total', {'reason': 'http_401'})
+            elif status_code == 403:
+                self._metrics.increment(
+                    'authorization_denials_total', {'reason': 'http_403'}
+                )
+            elif status_code == 423:
+                self._metrics.increment('account_lock_block_total')
+            elif status_code == 422 and route_template.endswith('/imports/nfe'):
+                self._metrics.increment('parser_rejection_total', {'source': 'nfe'})
+            elif status_code == 422 and route_template.endswith('/imports/ofx'):
+                self._metrics.increment('parser_rejection_total', {'source': 'ofx'})
             if status_code >= 500 or error_type is not None:
                 self._metrics.increment('errors_total')
             fields: dict[str, object] = {
-                'method': scope.get('method', 'UNKNOWN'),
-                'path': scope.get('path', ''),
-                'status': status_code,
+                'method': method,
+                'route': route_template,
+                'status_code': status_code,
                 'duration_ms': round(duration * 1000, 3),
             }
             if error_type is not None:

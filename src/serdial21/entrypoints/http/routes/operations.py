@@ -743,7 +743,9 @@ async def import_nfe(
     settings: AppSettings = request.app.state.settings
     content = await _read_limited(request, settings.nfe_max_xml_bytes)
     try:
-        journey = create_operational_runtime(session, settings).import_nfe(NFeImportCommand(
+        journey = create_operational_runtime(
+            session, settings, metrics=request.app.state.metrics,
+        ).import_nfe(NFeImportCommand(
             principal.identity.tenant_id, company_id, principal.user_id,
             idempotency_key, accounting_date, period_start, period_end,
             approval_expires_at,
@@ -770,7 +772,9 @@ async def import_ofx(
     settings: AppSettings = request.app.state.settings
     content = await _read_limited(request, settings.ofx_max_upload_bytes)
     try:
-        service = create_operational_runtime(session, settings)
+        service = create_operational_runtime(
+            session, settings, metrics=request.app.state.metrics,
+        )
         result = service.import_ofx(OfxImportCommand(
             principal.identity.tenant_id, company_id, principal.user_id,
             idempotency_key, content, filename,
@@ -888,7 +892,9 @@ def _decision(
     idempotency_key: str, request: Request, principal: AuthenticatedPrincipal, session: Session,
 ) -> DecisionResponse:
     try:
-        journey = create_operational_runtime(session, request.app.state.settings).decide(
+        journey = create_operational_runtime(
+            session, request.app.state.settings, metrics=request.app.state.metrics,
+        ).decide(
             principal.identity.tenant_id, company_id, principal.user_id,
             UUID(request.state.correlation_id), journey_id,
             expected_version=payload.expected_version,

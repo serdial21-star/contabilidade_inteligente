@@ -4,12 +4,21 @@
 
 Antes de qualquer exposição, validar o checklist em [PRODUCTION_SECURITY_CHECKLIST.md](PRODUCTION_SECURITY_CHECKLIST.md), a matriz em [SECURITY_CONFIGURATION_MATRIX.md](SECURITY_CONFIGURATION_MATRIX.md) e o contrato do proxy em [PRODUCTION_REVERSE_PROXY_SECURITY.md](PRODUCTION_REVERSE_PROXY_SECURITY.md). A composição deve fornecer backend distribuído de rate limit; selecionar `distributed` sem adapter falha no startup. Certificado/TLS, IdP real, segredos, migration 0012, observabilidade/recuperação, privacidade e UAT continuam gates externos.
 
+## Gates operacionais da Phase 12
+
+Antes da janela, seguir [OBSERVABILITY_ARCHITECTURE.md](OBSERVABILITY_ARCHITECTURE.md),
+[ALERTING_POLICY.md](ALERTING_POLICY.md) e
+[BACKUP_RECOVERY_STRATEGY.md](BACKUP_RECOVERY_STRATEGY.md). Confirmar agregação
+e retenção por ambiente, canal real de alertas testado, backup cifrado em
+storage separado e restore MariaDB no ambiente final. A existência dos
+contratos locais não aprova esses itens de infraestrutura.
+
 ## Pre-deploy
 
 O Incident Commander e o Technical Lead confirmam, sem expor valores de segredo:
 
 1. CI verde para a revisao candidata; `alembic heads` possui apenas um head.
-2. Runtime e banco corretos, banco alcancavel e backup recente com hash e destino confirmado conforme `BACKUP_RESTORE_RUNBOOK.md`.
+2. Runtime e banco corretos, banco alcançável e backup recente com hash e destino confirmado conforme `RECOVERY_RUNBOOK.md`.
 3. Configuracao tipada, referencias de secrets e conectividade externa exigida estao presentes fora do Git.
 4. Status dos incidentes, AccountLocks criticos e gates humanos foi revisado.
 5. Janela, responsaveis, versao anterior da aplicacao e plano de abort estao identificados.
@@ -31,3 +40,8 @@ O Incident Commander e o Technical Lead confirmam, sem expor valores de segredo:
 Acionar `ABORT_DEPLOYMENT` por health ou banco falho, falha de auth boundary, migration/schema inesperado, falha de auditoria, sintoma cross-tenant ou taxa 5xx critica. Parar novo trafego, preservar evidencia e restaurar a versao anterior da aplicacao. Avaliar explicitamente a compatibilidade do banco antes de reabrir trafego.
 
 Banco e migrations sao forward-only: rollback nao depende de `alembic downgrade`. Se houver incompatibilidade material, manter trafego parado e usar restore validado ou correcao forward aprovada, conforme o runbook de backup. Nao ha rollback automatico de banco.
+
+Um deploy ruim não implica restore automático: reverta primeiro a aplicação se
+o schema for compatível. Para migration ruim, mantenha tráfego parado e escolha
+migration corretiva forward ou restore isoladamente validado, com decisão do
+Incident Commander. Consulte [RECOVERY_RUNBOOK.md](RECOVERY_RUNBOOK.md).

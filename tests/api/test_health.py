@@ -4,7 +4,6 @@ from uuid import UUID, uuid4
 from fastapi import FastAPI
 from httpx import ASGITransport, AsyncClient, Response
 
-from serdial21 import __version__
 from serdial21.bootstrap.application import create_app
 from serdial21.bootstrap.settings import AppSettings
 
@@ -31,13 +30,9 @@ def test_liveness_contract() -> None:
     response = asyncio.run(async_get(build_app(), '/api/v1/health/live'))
 
     assert response.status_code == 200
-    assert response.json() == {
-        'status': 'ok',
-        'service': 'Serdial21 Contabilidade Inteligente',
-        'environment': 'test',
-        'version': __version__,
-    }
+    assert response.json() == {'status': 'ok'}
     UUID(response.headers['x-correlation-id'])
+    UUID(response.headers['x-request-id'])
     assert response.headers['cache-control'] == 'no-store'
     assert response.headers['content-security-policy'] == (
         "default-src 'none'; base-uri 'none'; frame-ancestors 'none'"
@@ -54,11 +49,10 @@ def test_request_metric_is_aggregated_without_request_data() -> None:
     app = build_app()
 
     response = asyncio.run(async_get(app, '/api/v1/health/live'))
-    metrics = app.state.metrics.snapshot()
+    metrics = app.state.metrics.render_prometheus()
 
     assert response.status_code == 200
-    assert metrics['processing_duration_count'] == 1
-    assert metrics['errors_total'] == 0
+    assert 'http_requests_total{method="GET",route_template="/health/live",status_class="2xx"} 1' in metrics
     assert 'tenant_id' not in metrics and 'company_id' not in metrics
 
 
@@ -103,10 +97,7 @@ def test_readiness_is_unavailable_without_database_configuration() -> None:
     response = asyncio.run(async_get(build_app(), '/api/v1/health/ready'))
 
     assert response.status_code == 503
-    assert response.json() == {
-        'status': 'unavailable',
-        'service': 'database',
-    }
+    assert response.json() == {'status': 'not_ready'}
 
 
 def test_readiness_validates_database_connection() -> None:
@@ -121,4 +112,4 @@ def test_readiness_validates_database_connection() -> None:
     app.state.database.dispose()
 
     assert response.status_code == 200
-    assert response.json() == {'status': 'ok', 'service': 'database'}
+    assert response.json() == {'status': 'ready'}

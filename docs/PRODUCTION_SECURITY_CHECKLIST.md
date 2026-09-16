@@ -20,7 +20,8 @@
 | LOGGING | body/query/auth/claims ausentes; acesso e retenção definidos | READY |
 | DEPENDENCIES | audit do release e política de correção | READY |
 | DEPENDENCIES | lock/hashes reproduzíveis para build de produção | CONFIG_REQUIRED |
-| DEPLOYMENT | observabilidade, alertas, backup e recuperação Phase 12 | BLOCKER |
+| DEPLOYMENT | contratos de observabilidade, alerta e recuperação Phase 12 | READY |
+| DEPLOYMENT | agregador, transporte real, backup externo cifrado e drill MariaDB final | INFRA_REQUIRED |
 | DEPLOYMENT | privacidade/legal Phase 13 e UAT Phase 14 | BLOCKER |
 | DEPLOYMENT | real data e exposição externa formalmente aprovados | BLOCKER |
 

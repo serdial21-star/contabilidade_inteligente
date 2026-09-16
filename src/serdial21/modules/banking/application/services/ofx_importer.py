@@ -15,6 +15,7 @@ from serdial21.modules.intake_documents.application.services.intake import (
     DocumentIntakeService, IntakeContext, LineageRequest, TransformationRequest,
     UploadRequest, ValidationIssueRequest,
 )
+from serdial21.shared_kernel.observability import MetricsRegistry, processing_started
 
 
 CANONICAL_SCHEMA_VERSION = 'serdial21.banking.ofx/v1'
@@ -45,11 +46,14 @@ class OfxImportResult:
 class OfxImportService:
     def __init__(self, intake: DocumentIntakeService, parser: OfxParser, repository: BankingRepository,
                  audit: AuditService, *, id_factory: Callable[[], UUID] = uuid4,
-                 clock: Callable[[], datetime] | None = None) -> None:
+                 clock: Callable[[], datetime] | None = None,
+                 metrics: MetricsRegistry | None = None) -> None:
         self._intake, self._parser, self._repository, self._audit = intake, parser, repository, audit
         self._id_factory, self._clock = id_factory, clock or (lambda: datetime.now(UTC))
+        self._metrics = metrics or MetricsRegistry()
 
     def import_ofx(self, context: IntakeContext, request: OfxImportRequest) -> OfxImportResult:
+        started = processing_started()
         upload = self._intake.upload(context, UploadRequest(
             batch_id=request.batch_id, content=request.content, original_filename=request.original_filename,
             media_type='application/x-ofx', classification='BANK_STATEMENT_OFX', channel='OFX_IMPORT',
@@ -65,6 +69,7 @@ class OfxImportService:
             self._intake.add_validation_issue(context, ValidationIssueRequest(
                 transformation_run_id=run.id, code=error.code, severity='ERROR', field_path=None,
                 rule_reference=error.schema_version, message=str(error), resolution_status='QUARANTINED'))
+            self._record_metrics(started, 'failure')
             return OfxImportResult('QUARANTINED', upload.artifact_id, upload.receipt_id, run.id, (), (), 0, 0, (error.code,))
 
         self._intake.require_access(context)
@@ -116,8 +121,19 @@ class OfxImportService:
                    'statement_count': len(statement_ids), 'imported_transactions': imported,
                    'duplicate_transactions': duplicates, 'sign_policy': SIGN_POLICY}, reason=None,
             correlation_id=context.correlation_id, causation_id=context.causation_id))
+        self._record_metrics(started, 'success')
         return OfxImportResult('IMPORTED', upload.artifact_id, upload.receipt_id, run.id, tuple(account_ids),
             tuple(statement_ids), imported, duplicates, ())
+
+    def _record_metrics(self, started: float, result: str) -> None:
+        self._metrics.increment(
+            'document_import_total', {'source': 'ofx', 'result': result}
+        )
+        self._metrics.observe(
+            'document_processing_duration_seconds',
+            processing_started() - started,
+            {'source': 'ofx', 'result': result},
+        )
 
     def _now(self) -> datetime:
         value = self._clock()

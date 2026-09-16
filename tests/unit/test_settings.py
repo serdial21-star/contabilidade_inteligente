@@ -138,3 +138,30 @@ def test_production_requires_complete_https_oidc_configuration() -> None:
             oidc_audience='serdial21-api',
             oidc_jwks_url='http://id.example.test/jwks.json',
         )
+
+
+def test_metrics_endpoint_is_fail_closed_without_strong_token() -> None:
+    with pytest.raises(ValidationError, match='METRICS_ACCESS_TOKEN'):
+        AppSettings(
+            _env_file=None,
+            environment='test',
+            metrics_endpoint_enabled=True,
+        )
+    with pytest.raises(ValidationError, match='32 caracteres'):
+        AppSettings(
+            _env_file=None,
+            environment='test',
+            metrics_endpoint_enabled=True,
+            metrics_access_token='short-synthetic-token',
+        )
+
+
+def test_metrics_access_token_is_redacted_from_representation() -> None:
+    settings = AppSettings(
+        _env_file=None,
+        environment='test',
+        metrics_endpoint_enabled=True,
+        metrics_access_token='synthetic-metrics-token-at-least-32-characters',
+    )
+
+    assert 'synthetic-metrics-token' not in repr(settings)

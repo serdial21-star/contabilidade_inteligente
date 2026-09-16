@@ -69,7 +69,8 @@ def test_cors_preflight_allowlist_and_unknown_origin() -> None:
         cors_allowed_origins='https://app.example.test',
         trusted_hosts='testserver',
     )
-    client = TestClient(create_app(settings))
+    app = create_app(settings)
+    client = TestClient(app)
     headers = {
         'Origin': 'https://app.example.test',
         'Access-Control-Request-Method': 'GET',
@@ -149,7 +150,8 @@ def test_http_rate_limit_returns_safe_429_and_hashes_bearer_identity() -> None:
     settings = AppSettings(
         _env_file=None, environment='test', rate_limit_general_per_minute=10,
     )
-    client = TestClient(create_app(settings))
+    app = create_app(settings)
+    client = TestClient(app)
     headers = {'Authorization': 'Bearer synthetic-a'}
     responses = [client.get('/api/v1/health/live', headers=headers) for _ in range(11)]
     separate = client.get(
@@ -160,3 +162,6 @@ def test_http_rate_limit_returns_safe_429_and_hashes_bearer_identity() -> None:
     assert responses[-1].json() == {'detail': 'rate limit exceeded'}
     assert responses[-1].headers['retry-after'] == '60'
     assert separate.status_code == 200
+    assert 'rate_limit_exceeded_total{bucket="general"} 1' in (
+        app.state.metrics.render_prometheus()
+    )

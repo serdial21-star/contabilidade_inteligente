@@ -14,10 +14,11 @@ from serdial21.modules.banking.adapters.outbound.persistence.repositories import
 from serdial21.modules.banking.application.services.ofx_importer import OfxImportService
 from serdial21.modules.operations.adapters.outbound.persistence.repositories import SqlAlchemyOperationalQueryRepository
 from serdial21.modules.operations.application.services.operations import OperationalService
+from serdial21.shared_kernel.observability import MetricsRegistry
 
 
 def create_operational_runtime(
-    session: Session, settings: AppSettings,
+    session: Session, settings: AppSettings, *, metrics: MetricsRegistry | None = None,
 ) -> OperationalService:
     nfe_runtime = create_nfe55_runtime(session, settings)
     audit = AuditService(SqlAlchemyAuditRepository(session))
@@ -25,11 +26,11 @@ def create_operational_runtime(
         SqlAlchemyOperationalQueryRepository(session),
         AuthorizationService(SqlAlchemyAuthorizationRepository(session)),
         nfe_runtime.intake,
-        create_nfe_to_dominio_runtime(session, settings),
+        create_nfe_to_dominio_runtime(session, settings, metrics=metrics),
         OfxImportService(
             nfe_runtime.intake,
             SafeOfxParser(max_ofx_bytes=settings.ofx_max_upload_bytes),
-            SqlAlchemyBankingRepository(session), audit,
+            SqlAlchemyBankingRepository(session), audit, metrics=metrics,
         ),
         audit,
     )

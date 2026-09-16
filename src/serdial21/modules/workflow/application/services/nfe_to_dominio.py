@@ -408,14 +408,27 @@ class NFeToDominioService:
     def _record_metric(self, action: str, status: str) -> None:
         if action == 'journey.imported':
             self._metrics.increment('imports_total')
+            self._metrics.increment(
+                'document_import_total', {'source': 'nfe', 'result': 'success'}
+            )
         elif action == 'journey.quarantined':
             self._metrics.increment('imports_total')
             self._metrics.increment('errors_total')
+            self._metrics.increment(
+                'document_import_total', {'source': 'nfe', 'result': 'failure'}
+            )
         elif action == 'accounting_proposal.created':
             self._metrics.increment('proposals_total')
+            self._metrics.increment(
+                'accounting_proposal_total', {'result': 'created'}
+            )
         elif action == 'approval_decision.recorded':
             self._metrics.increment(
                 'approvals_total' if status == 'APPROVED' else 'rejections_total',
+            )
+            self._metrics.increment(
+                'accounting_decision_total',
+                {'decision': 'approved' if status == 'APPROVED' else 'rejected'},
             )
         elif action in {'journey.pending_rule', 'approval_request.created'}:
             self._metrics.increment('pending_total')
@@ -423,7 +436,12 @@ class NFeToDominioService:
             self._metrics.increment('exports_total')
 
     def _completed(self, journey: Journey, started: float) -> Journey:
-        self._metrics.observe_processing(processing_started() - started)
+        duration = processing_started() - started
+        self._metrics.observe_processing(duration)
+        self._metrics.observe(
+            'document_processing_duration_seconds', duration,
+            {'source': 'nfe', 'result': 'success'},
+        )
         return journey
 
     def _now(self) -> datetime:
