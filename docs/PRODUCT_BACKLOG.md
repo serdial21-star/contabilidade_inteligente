@@ -81,7 +81,7 @@ STATUS: DONE (entrega desta fase), PLANNED (não iniciado), BLOCKED (depende de 
 | PB-021 | EPIC-011 | Ensaiar/aplicar cadeia faltante forward-only e comprovar MIGRATION_0012_VERIFIED antes do deploy | P0 | PB-020; CI; janela autorizada | BLOCKED | PHASE 12 |
 | PB-022 | EPIC-013 | Obter AUTHORIZED_REAL_CORPUS com finalidade e escopo explícitos | P0 | Autorização humana | BLOCKED | PHASE 13 |
 | PB-023 | EPIC-013 | Obter LEGAL_APPROVAL e PRIVACY_OPERATIONAL_APPROVAL para corpus, DSR, retenção, holds e cópias | P0 | Revisão jurídico-operacional; PB-020 | BLOCKED | PHASE 13 |
-| PB-024 | EPIC-008 | Executar QA/UAT integrado e obter ACCOUNTANT_SIGNOFF | P0 | PB-014; entregas integradas; corpus permitido | BLOCKED | PHASE 14 |
+| PB-024 | EPIC-008 | Executar QA/UAT integrado e obter ACCOUNTANT_SIGNOFF | P0 | PB-014; entregas integradas; corpus permitido | AUTOMATED_PASS_HUMAN_SIGNOFF_PENDING | PHASE 14 |
 | PB-025 | EPIC-015 | Planejar piloto real controlado, critérios de parada e recuperação; executar somente após GO humano | P1 | PB-017–024 e gates externos aplicáveis | BLOCKED | PHASE 15 |
 | PB-026 | EPIC-014 | Produzir páginas/conteúdo do marketing brief com alegações verificáveis | P1 | PB-003; MARKETING_SITE_BRIEF | PLANNED | PHASE 03 |
 | PB-027 | EPIC-015 | Criar onboarding guiado reutilizando lifecycle e aprovação de alçadas | P1 | PB-006; PB-023; piloto | PLANNED | PHASE 16 |

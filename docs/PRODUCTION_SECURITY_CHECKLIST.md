@@ -23,7 +23,8 @@
 | DEPLOYMENT | contratos de observabilidade, alerta e recuperação Phase 12 | READY |
 | DEPLOYMENT | agregador, transporte real, backup externo cifrado e drill MariaDB final | INFRA_REQUIRED |
 | DEPLOYMENT | controles técnicos de privacidade Phase 13 | READY |
-| DEPLOYMENT | revisão jurídica/contratual humana e UAT Phase 14 | BLOCKER |
+| DEPLOYMENT | QA integrada automatizada Phase 14 | READY |
+| DEPLOYMENT | UAT humano e revisão jurídica/contratual | BLOCKER |
 | DEPLOYMENT | real data e exposição externa formalmente aprovados | BLOCKER |
 
 Resultado atual: aplicação pronta para configurar infraestrutura de homologação, mas `APPLICATION EXTERNAL EXPOSURE = NO_GO`.

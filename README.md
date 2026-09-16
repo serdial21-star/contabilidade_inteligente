@@ -1,5 +1,17 @@
 # Serdial21 Contabilidade Inteligente
 
+## Phase 14 — Integrated QA + UAT
+
+A QA integrada sintética validou os fluxos suportados de autenticação, Minha
+Visão, empresas, documentos, NF-e, contabilidade, AccountLock, OFX, privacidade,
+segurança, observabilidade e health/readiness. Consulte o
+[plano e execução UAT](docs/qa/UAT_EXECUTION_REPORT.md).
+
+O runtime Node/browser não está disponível neste ambiente; QA visual,
+responsiva, acessibilidade e teclado exigem o
+[signoff manual](docs/qa/MANUAL_UAT_CHECKLIST.md). Isso não altera `REAL DATA =
+NO_GO`, revisão jurídica/contratual, IdP de produção ou migration 0012.
+
 ## Phase 13 — LGPD + Legal Gates
 
 A prontidão técnica de privacidade foi revisada sem declarar conformidade
