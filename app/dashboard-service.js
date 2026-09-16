@@ -38,7 +38,7 @@
   function defaultLayout(permissions, preset = 'Minha Visão') {
     const allowed = new Set(authorizedCatalog(permissions).map((widget) => widget.id));
     const widgets = (PRESETS[preset] || PRESETS['Minha Visão']).filter((id) => allowed.has(id));
-    const wide = widgets.filter((id) => id === 'W004' || id === 'W010');
+    const wide = widgets.filter((id) => id === 'W010');
     return Object.freeze({preset: PRESETS[preset] ? preset : 'Minha Visão', widgets: Object.freeze(widgets), wide: Object.freeze(wide)});
   }
 

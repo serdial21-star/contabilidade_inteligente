@@ -47,6 +47,7 @@ EXPECTED_TABLES = {
     'retention_policies',
     'legal_holds',
     'data_subject_requests',
+    'document_metadata',
 }
 
 

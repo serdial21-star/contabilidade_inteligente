@@ -148,6 +148,30 @@ class ArtifactReceiptModel(Base):
     )
 
 
+class DocumentMetadataModel(Base):
+    __tablename__ = 'document_metadata'
+    __table_args__ = (
+        UniqueConstraint('tenant_id', 'company_id', 'receipt_id', name='uq_document_metadata_receipt'),
+        ForeignKeyConstraint(
+            ['tenant_id', 'company_id', 'receipt_id'],
+            ['artifact_receipts.tenant_id', 'artifact_receipts.company_id', 'artifact_receipts.id'],
+            name='fk_document_metadata_receipt',
+        ),
+        Index('ix_document_metadata_number', 'tenant_id', 'company_id', 'document_number'),
+        TABLE_OPTIONS,
+    )
+    id: Mapped[UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid4)
+    tenant_id: Mapped[UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    company_id: Mapped[UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    receipt_id: Mapped[UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    document_number: Mapped[str | None] = mapped_column(String(100))
+    description: Mapped[str | None] = mapped_column(String(500))
+    observation: Mapped[str | None] = mapped_column(String(1000))
+    version: Mapped[int] = mapped_column(Integer, nullable=False, default=1, server_default='1')
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime(), nullable=False, server_default=func.current_timestamp())
+    updated_at: Mapped[datetime] = mapped_column(UTCDateTime(), nullable=False)
+
+
 class ImportItemModel(Base):
     __tablename__ = 'import_items'
     __table_args__ = (
@@ -317,7 +341,7 @@ for immutable_model in (
     event.listen(immutable_model, 'before_update', _prevent_immutable_change)
     event.listen(immutable_model, 'before_delete', _prevent_immutable_change)
 
-for append_oriented_model in (ImportItemModel, ValidationIssueModel):
+for append_oriented_model in (ImportItemModel, ValidationIssueModel, DocumentMetadataModel):
     event.listen(append_oriented_model, 'before_delete', _prevent_immutable_change)
 
 

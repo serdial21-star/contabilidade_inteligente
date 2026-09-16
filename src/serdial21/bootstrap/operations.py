@@ -12,6 +12,7 @@ from serdial21.modules.audit.application.services.audit import AuditService
 from serdial21.modules.banking.adapters.inbound.ofx import SafeOfxParser
 from serdial21.modules.banking.adapters.outbound.persistence.repositories import SqlAlchemyBankingRepository
 from serdial21.modules.banking.application.services.ofx_importer import OfxImportService
+from serdial21.modules.fiscal_documents.adapters.inbound.nfe55_xml import SafeNFe55XmlParser
 from serdial21.modules.operations.adapters.outbound.persistence.repositories import SqlAlchemyOperationalQueryRepository
 from serdial21.modules.operations.application.services.operations import OperationalService
 from serdial21.shared_kernel.observability import MetricsRegistry
@@ -22,6 +23,7 @@ def create_operational_runtime(
 ) -> OperationalService:
     nfe_runtime = create_nfe55_runtime(session, settings)
     audit = AuditService(SqlAlchemyAuditRepository(session))
+    banking = SqlAlchemyBankingRepository(session)
     return OperationalService(
         SqlAlchemyOperationalQueryRepository(session),
         AuthorizationService(SqlAlchemyAuthorizationRepository(session)),
@@ -30,7 +32,12 @@ def create_operational_runtime(
         OfxImportService(
             nfe_runtime.intake,
             SafeOfxParser(max_ofx_bytes=settings.ofx_max_upload_bytes),
-            SqlAlchemyBankingRepository(session), audit, metrics=metrics,
+            banking, audit, metrics=metrics,
         ),
         audit,
+        SafeNFe55XmlParser(
+            max_xml_bytes=settings.nfe_max_xml_bytes,
+            max_xml_elements=settings.nfe_max_xml_elements,
+        ),
+        banking,
     )

@@ -23,7 +23,8 @@
   let transactionFilters = Object.freeze({search: '', direction: '', posted_from: '', posted_to: '', offset: 0, limit: 25});
   let accountingModel = null;
   let accountingRequest = 0;
-  let proposalFilters = Object.freeze({status: '', offset: 0, limit: 10});
+  let proposalFilters = Object.freeze({status: '', account: '', source: '', document: '', rule: '', created_from: '', created_to: '', offset: 0, limit: 10});
+  let catalogSearch = '';
   let decisionIntent = null;
   let decisionFeedback = null;
 
@@ -66,6 +67,12 @@
   const route = () => (location.hash.slice(1) || 'overview').split('?')[0];
   const routeParams = () => new URLSearchParams((location.hash.split('?')[1] || ''));
   const setAnnouncement = (message) => { announcer.textContent = ''; root.setTimeout(() => { announcer.textContent = message; }, 0); };
+  const authorizedRoute = (profile, requested = route()) => {
+    const permissions = currentPermissions(profile);
+    const candidate = navigation.find((item) => item.id === requested && !item.planned
+      && hasPermission(permissions, item.permissions));
+    return candidate?.id || allowedNavigation(navigation, permissions).find((item) => !item.planned)?.id || 'overview';
+  };
 
   function decisionLineMarkup(line) {
     if (!line) return '';
@@ -191,7 +198,7 @@
 
   function widgetMarkup(widget, state, layout) {
     if (state?.state === 'FORBIDDEN') return '';
-    const wide = layout.wide.includes(widget.id) || ['LIST', 'TIMELINE', 'TABLE_PREVIEW'].includes(widget.kind);
+    const wide = layout.wide.includes(widget.id) || widget.id === 'W010';
     const classes = `card dashboard-widget ${wide ? 'wide' : ''} ${state?.state === 'ERROR' ? 'widget-error' : ''}`;
     const heading = `<header class="widget-heading"><div><span class="widget-code">${widget.id}</span><h2 id="heading-${widget.id}">${escapeHtml(widget.label)}</h2></div>${config.dataMode === 'synthetic' ? '<span class="badge intelligent">Sintético</span>' : ''}</header>`;
     let body = '<div class="widget-loading" role="status"><span>Carregando indicador…</span><div class="skeleton metric" aria-hidden="true"></div></div>';
@@ -202,7 +209,8 @@
       const value = state.value === '' ? '' : `<strong class="dashboard-value">${escapeHtml(state.value)}</strong>`;
       const destination = ['W001', 'W002'].includes(widget.id) ? '#documents'
         : ['W003', 'W005', 'W006'].includes(widget.id) ? '#accounting'
-          : widget.id === 'W007' ? '#clients' : '';
+          : widget.id === 'W004' ? '#inbox'
+            : widget.id === 'W007' ? '#clients' : '';
       const action = destination
         ? `<a class="btn ghost small" href="${destination}">${escapeHtml(widget.action)}</a>`
         : `<button class="btn ghost small" type="button" disabled title="Destino operacional ainda não integrado">${escapeHtml(widget.action)}</button>`;
@@ -270,9 +278,12 @@
     if (operationalModel?.error) return localizedError();
     if (!operationalModel || operationalModel.loading || !operationalModel.item?.detail) return loadingOperational('detalhe da empresa');
     const item = operationalModel.item;
-    return `<div class="page-heading"><div><span class="eyebrow">Empresa autorizada</span><h1>${escapeHtml(item.profile.name)}</h1><p>Hub contextual de documentos e pendências desta empresa.</p></div><a class="btn secondary" href="#clients">Voltar às empresas</a></div>
+    const canManage = hasPermission(currentPermissions(session.snapshot().profile), ['company.manage']);
+    const accounts = (item.bankAccounts || []).map((account) => `<tr><td><strong>${escapeHtml(account.nickname || account.bank_name || account.bank_code)}</strong><small class="row-note">${escapeHtml(account.bank_code)} · ${escapeHtml(account.account_type || 'Tipo não informado')}</small></td><td>${escapeHtml(account.branch_masked)}</td><td>${escapeHtml(account.account_masked)}</td><td><span class="badge ${account.status === 'ACTIVE' ? 'success' : 'neutral'}">${escapeHtml(account.status === 'ACTIVE' ? 'Ativa' : 'Inativa')}</span></td><td>${canManage ? `<button class="btn ghost small" data-action="bank-edit" data-account-id="${escapeHtml(account.id)}">Editar</button><button class="btn ghost small" data-action="bank-status" data-account-id="${escapeHtml(account.id)}" data-status="${account.status === 'ACTIVE' ? 'INACTIVE' : 'ACTIVE'}">${account.status === 'ACTIVE' ? 'Desativar' : 'Ativar'}</button>` : 'Somente leitura'}</td></tr>`).join('');
+    const form = canManage ? `<details class="card"><summary>Cadastrar conta bancária</summary><form id="bank-account-form" class="filter-bar"><label>Código do banco<input name="bank_code" maxlength="40" required></label><label>Nome do banco<input name="bank_name" maxlength="120"></label><label>Agência<input name="branch" maxlength="40" required></label><label>Conta<input name="account_number" maxlength="80" required></label><label>Tipo<input name="account_type" maxlength="40" placeholder="CHECKING"></label><label>Apelido<input name="nickname" maxlength="120"></label><label>Moeda<input name="currency_code" maxlength="3" value="BRL" required></label><button class="btn">Salvar conta</button></form></details>` : '';
+    return `<div class="page-heading"><div><span class="eyebrow">Empresa autorizada</span><h1>${escapeHtml(item.profile.name)}</h1><p>Hub contextual de documentos, contas bancárias e pendências desta empresa.</p></div><a class="btn secondary" href="#clients">Voltar às empresas</a></div>
       <section class="operational-cards"><article class="card"><span class="eyebrow">Resumo</span><h2>${escapeHtml(item.detail.legal_name)}</h2><dl class="detail-list"><div><dt>Nome fantasia</dt><dd>${escapeHtml(item.detail.trade_name || 'Não informado')}</dd></div><div><dt>Identificador fiscal</dt><dd>${escapeHtml(item.detail.tax_identifier)}</dd></div><div><dt>Status</dt><dd>${escapeHtml(item.detail.status)}</dd></div><div><dt>Fuso / moeda</dt><dd>${escapeHtml(item.detail.timezone)} · ${escapeHtml(item.detail.currency_code)}</dd></div></dl></article>
-      <article class="card"><span class="eyebrow">Documentos</span><strong class="dashboard-value">${escapeHtml(item.summary.received)}</strong><p>${escapeHtml(item.summary.processed)} processado(s); ${escapeHtml(item.summary.attention_required)} requer(em) atenção.</p><button class="btn secondary" data-action="company-documents" data-company-id="${escapeHtml(item.profile.id)}">Ver documentos</button></article></section>`;
+      <article class="card"><span class="eyebrow">Documentos</span><strong class="dashboard-value">${escapeHtml(item.summary.received)}</strong><p>${escapeHtml(item.summary.processed)} processado(s); ${escapeHtml(item.summary.attention_required)} requer(em) atenção.</p><button class="btn secondary" data-action="company-documents" data-company-id="${escapeHtml(item.profile.id)}">Ver documentos</button></article></section><section class="card"><h2>Contas bancárias autorizadas para OFX</h2><p>O importador associa o extrato somente a uma conta ativa desta empresa.</p><div class="table-wrap"><table><thead><tr><th>Banco/Apelido</th><th>Agência</th><th>Conta</th><th>Status</th><th>Ação</th></tr></thead><tbody>${accounts || '<tr><td colspan="5">Nenhuma conta bancária cadastrada.</td></tr>'}</tbody></table></div></section>${form}`;
   }
 
   function documentFiltersMarkup() {
@@ -285,14 +296,40 @@
     if (operationalModel?.error) return localizedError();
     if (!operationalModel || operationalModel.loading || !operationalModel.page) return `<div class="page-heading"><div><span class="eyebrow">Operação</span><h1>${title}</h1></div></div>${loadingOperational('documentos')}`;
     let items = operationalModel.page.items;
-    if (inbox) items = items.filter((item) => ['STARTED', 'FAILED', 'QUARANTINED', 'DUPLICATE'].includes(item.processing_status) || item.receipt_result === 'DUPLICATE').slice(0, 10);
+    if (inbox) items = items.slice(0, 10);
     const company = profile.companies.find((item) => item.id === companyId);
-    const rows = items.map((item) => `<tr><td><button class="link-button" data-action="open-document" data-document-id="${escapeHtml(item.id)}">${escapeHtml(item.filename)}</button></td><td>${escapeHtml(item.source === 'NFE55' ? 'NF-e 55' : item.source)}</td><td>${escapeHtml(company?.name || 'Empresa autorizada')}</td><td>${escapeHtml(formatDate(item.received_at))}</td><td><span class="badge ${statusClass(item.processing_status)}">${escapeHtml(operationalService.statusLabel(item.processing_status))}</span>${item.receipt_result === 'DUPLICATE' ? '<small class="row-note">Documento já recebido anteriormente.</small>' : ''}</td></tr>`).join('');
+    const rows = items.map((item) => `<tr><td><button class="link-button" data-action="open-document" data-document-id="${escapeHtml(item.id)}">${escapeHtml(item.document_number || item.filename)}</button><small class="row-note">${escapeHtml(item.description || item.filename)}${item.observation ? ' · possui observação' : ''}</small></td><td>${escapeHtml(item.source === 'NFE55' ? 'NF-e 55' : item.source)}</td><td>${escapeHtml(company?.name || 'Empresa autorizada')}</td><td>${escapeHtml(formatDate(item.received_at))}</td><td><span class="badge ${statusClass(item.processing_status)}">${escapeHtml(operationalService.statusLabel(item.processing_status))}</span>${item.receipt_result === 'DUPLICATE' ? '<small class="row-note">Documento já recebido anteriormente.</small>' : ''}</td></tr>`).join('');
     const previous = Math.max(0, operationalModel.page.offset - operationalModel.page.limit);
     const next = operationalModel.page.offset + operationalModel.page.limit;
     return `<div class="page-heading"><div><span class="eyebrow">Operação</span><h1>${title}</h1><p>${inbox ? 'Recebimentos recentes que pedem atenção inicial.' : 'Metadados seguros dos documentos recebidos.'}</p></div></div>${inbox ? '' : documentFiltersMarkup()}
       <div class="alert info"><div><strong>Upload documental genérico ainda não disponível</strong><p>Os contratos atuais são imports especializados de NF-e e OFX. A interface não inventa parâmetros contábeis nem amplia tipos aceitos.</p></div></div>
       <section class="card"><div class="table-wrap"><table><thead><tr><th>Documento</th><th>Tipo/origem</th><th>Empresa</th><th>Recebido em</th><th>Status</th></tr></thead><tbody>${rows || `<tr><td colspan="5">${inbox ? 'Nenhum item requer atenção inicial.' : 'Nenhum documento encontrado para os filtros.'}</td></tr>`}</tbody></table></div>${inbox ? '' : `<footer class="pagination"><span>${escapeHtml(operationalModel.page.total)} documento(s)</span><div><button class="btn ghost small" data-action="document-page" data-offset="${previous}" ${operationalModel.page.offset === 0 ? 'disabled' : ''}>Anterior</button><button class="btn ghost small" data-action="document-page" data-offset="${next}" ${next >= operationalModel.page.total ? 'disabled' : ''}>Próxima</button></div></footer>`}</section>`;
+  }
+
+  function hydrateRemediationUi() {
+    if (route() === 'inbox' && !document.querySelector('#document-filter-form')) {
+      document.querySelector('.page-heading')?.insertAdjacentHTML('afterend', documentFiltersMarkup());
+    }
+    const actions = {
+      'fiscal-filter-form': 'clear-fiscal-filters',
+      'transaction-filter-form': 'clear-transaction-filters',
+      'proposal-filter-form': 'clear-proposal-filters',
+    };
+    const proposalForm = document.querySelector('#proposal-filter-form');
+    if (proposalForm && !proposalForm.querySelector('[name="created_from"]')) {
+      proposalForm.querySelector('button')?.insertAdjacentHTML('beforebegin',
+        `<label>Registrada de<input name="created_from" type="date" value="${escapeHtml(proposalFilters.created_from)}"></label><label>Registrada até<input name="created_to" type="date" value="${escapeHtml(proposalFilters.created_to)}"></label>`);
+    }
+    Object.entries(actions).forEach(([formId, action]) => {
+      const form = document.querySelector(`#${formId}`);
+      if (!form || form.querySelector(`[data-action="${action}"]`)) return;
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.className = 'btn ghost';
+      button.dataset.action = action;
+      button.textContent = 'Limpar filtros';
+      form.append(button);
+    });
   }
 
   function documentDetailMarkup(profile) {
@@ -304,7 +341,8 @@
       ? `<a class="btn ghost" href="#fiscal?company=${encodeURIComponent(companyId)}&fiscal=${encodeURIComponent(operationalModel.item.fiscal_document_id)}">Abrir dados fiscais da NF-e</a>`
       : operationalModel.item.bank_statement_id
         ? `<a class="btn ghost" href="#financial?company=${encodeURIComponent(companyId)}&statement=${encodeURIComponent(operationalModel.item.bank_statement_id)}">Abrir extrato e transações</a>` : '';
-    return `<div class="page-heading"><div><span class="eyebrow">Documento autorizado</span><h1>${escapeHtml(item.filename)}</h1><p>Metadados minimizados; conteúdo original e caminhos de storage não são expostos.</p></div><a class="btn secondary" href="#documents">Voltar aos documentos</a></div><section class="operational-cards"><article class="card"><h2>Detalhes</h2><dl class="detail-list"><div><dt>Empresa</dt><dd>${escapeHtml(company?.name || 'Empresa autorizada')}</dd></div><div><dt>Origem</dt><dd>${escapeHtml(item.source)}</dd></div><div><dt>Canal</dt><dd>${escapeHtml(item.channel)}</dd></div><div><dt>Recebido em</dt><dd>${escapeHtml(formatDate(item.received_at))}</dd></div><div><dt>Tamanho</dt><dd>${escapeHtml(item.size_bytes)} bytes</dd></div><div><dt>Status</dt><dd><span class="badge ${statusClass(item.processing_status)}">${escapeHtml(operationalService.statusLabel(item.processing_status))}</span></dd></div></dl>${related}</article><article class="card"><h2>Validação</h2>${operationalModel.item.issues.length ? `<ul class="dashboard-list">${operationalModel.item.issues.map((issue) => `<li><span><strong>${escapeHtml(issue.code)}</strong><small>${escapeHtml(issue.severity)} · ${escapeHtml(issue.resolution_status)}</small></span><time>${escapeHtml(formatDate(issue.created_at))}</time></li>`).join('')}</ul>` : '<p>Nenhuma exceção segura associada a este documento.</p>'}<p class="row-note">Download e histórico contextual permanecem adiados até existir contrato específico autorizado.</p></article></section>`;
+    const metadata = hasPermission(currentPermissions(profile), ['company.manage']) ? `<article class="card"><h2>Metadados operacionais</h2><form id="document-metadata-form" class="stack"><label>Número<input name="document_number" maxlength="100" value="${escapeHtml(item.document_number || '')}"></label><label>Descrição<input name="description" maxlength="500" value="${escapeHtml(item.description || '')}"></label><label>Observação<textarea name="observation" maxlength="1000">${escapeHtml(item.observation || '')}</textarea></label><button class="btn">Salvar metadados</button></form><small>Versão ${escapeHtml(item.metadata_version || 0)}. A evidência original permanece imutável.</small></article>` : `<article class="card"><h2>Metadados operacionais</h2><dl class="detail-list"><div><dt>Número</dt><dd>${escapeHtml(item.document_number || 'Não informado')}</dd></div><div><dt>Descrição</dt><dd>${escapeHtml(item.description || 'Não informada')}</dd></div><div><dt>Observação</dt><dd>${escapeHtml(item.observation || 'Não informada')}</dd></div></dl></article>`;
+    return `<div class="page-heading"><div><span class="eyebrow">Documento autorizado</span><h1>${escapeHtml(item.filename)}</h1><p>Metadados minimizados; conteúdo original e caminhos de storage não são expostos.</p></div><a class="btn secondary" href="#documents">Voltar aos documentos</a></div><section class="operational-cards"><article class="card"><h2>Detalhes</h2><dl class="detail-list"><div><dt>Empresa</dt><dd>${escapeHtml(company?.name || 'Empresa autorizada')}</dd></div><div><dt>Origem</dt><dd>${escapeHtml(item.source)}</dd></div><div><dt>Canal</dt><dd>${escapeHtml(item.channel)}</dd></div><div><dt>Recebido em</dt><dd>${escapeHtml(formatDate(item.received_at))}</dd></div><div><dt>Tamanho</dt><dd>${escapeHtml(item.size_bytes)} bytes</dd></div><div><dt>Status</dt><dd><span class="badge ${statusClass(item.processing_status)}">${escapeHtml(operationalService.statusLabel(item.processing_status))}</span></dd></div></dl>${related}</article>${metadata}<article class="card"><h2>Validação</h2>${operationalModel.item.issues.length ? `<ul class="dashboard-list">${operationalModel.item.issues.map((issue) => `<li><span><strong>${escapeHtml(issue.code)}</strong><small>${escapeHtml(issue.severity)} · ${escapeHtml(issue.resolution_status)}</small></span><time>${escapeHtml(formatDate(issue.created_at))}</time></li>`).join('')}</ul>` : '<p>Nenhuma exceção segura associada a este documento.</p>'}<p class="row-note">Download e histórico contextual permanecem adiados até existir contrato específico autorizado.</p></article></section>`;
   }
 
   async function refreshOperational(profile) {
@@ -320,8 +358,8 @@
           const authorized = profile.companies.find((item) => item.id === detailId);
           if (!authorized) throw Object.assign(new Error('FORBIDDEN'), {code: 'FORBIDDEN'});
           companyId = detailId;
-          const [detail, summary] = await Promise.all([operationalService.company(detailId), operationalService.summary(detailId)]);
-          nextModel = {loading: false, item: {profile: authorized, detail, summary}};
+          const [detail, summary, bankAccounts] = await Promise.all([operationalService.company(detailId), operationalService.summary(detailId), operationalService.bankAccounts(detailId)]);
+          nextModel = {loading: false, item: {profile: authorized, detail, summary, bankAccounts}};
         } else {
           const items = await Promise.all(profile.companies.map(async (profileItem) => ({profile: profileItem, detail: await operationalService.company(profileItem.id), summary: await operationalService.summary(profileItem.id)})));
           nextModel = {loading: false, items, search: ''};
@@ -342,9 +380,9 @@
             nextModel = {loading: false, item, decisionLine};
           }
           else if (view === 'inbox') {
-            const pages = await Promise.all(['STARTED', 'FAILED', 'QUARANTINED', 'DUPLICATE'].map((status) => operationalService.documents(companyId, {...documentFilters, search: '', source: '', received_from: '', received_to: '', status, offset: 0, limit: 25})));
-            const unique = [...new Map(pages.flatMap((page) => page.items).map((item) => [item.id, item])).values()].sort((a, b) => String(b.received_at).localeCompare(String(a.received_at)));
-            nextModel = {loading: false, page: {items: unique, total: unique.length, offset: 0, limit: 25}};
+            nextModel = {loading: false, page: await operationalService.documents(
+              companyId, {...documentFilters, offset: 0, limit: 25},
+            )};
           } else nextModel = {loading: false, page: await operationalService.documents(companyId, documentFilters)};
         }
       }
@@ -357,8 +395,8 @@
   }
 
   const money = (value, currency = 'BRL') => value === null || value === undefined ? 'Não informado' : new Intl.NumberFormat('pt-BR', {style: 'currency', currency: currency || 'BRL'}).format(Number(value));
-  const importFeedbackMarkup = () => {
-    if (!importFeedback) return '';
+  const importFeedbackMarkup = (scope = route()) => {
+    if (!importFeedback || importFeedback.scope !== scope) return '';
     const loading = importFeedback.state === 'LOADING';
     const danger = importFeedback.state === 'ERROR' || importFeedback.status === 'QUARANTINED';
     const duplicate = Number(importFeedback.duplicate_items || 0) > 0 || importFeedback.status === 'IDEMPOTENT_REDELIVERY';
@@ -369,7 +407,7 @@
 
   function nfeImportMarkup(profile) {
     if (!hasPermission(currentPermissions(profile), ['journal.propose'])) return '<div class="alert info"><div><strong>Consulta disponível</strong><p>Seu contexto não possui permissão para importar documentos.</p></div></div>';
-    return `<details class="card import-panel"><summary>Importar NF-e XML</summary><form id="nfe-import-form" class="filter-bar import-form"><label>Arquivo XML<input name="file" type="file" accept=".xml,application/xml,text/xml" required></label><label>Data contábil<input name="accounting_date" type="date" required></label><label>Início do período<input name="period_start" type="date" required></label><label>Fim do período<input name="period_end" type="date" required></label><label>Expiração da etapa posterior<input name="approval_expires_at" type="datetime-local" required></label><button class="btn" type="submit">Importar XML</button></form><small>Somente NF-e modelo 55. Os campos são exigidos pelo contrato existente; nenhuma conta, regra ou decisão é inferida. A Phase 07 não oferece aprovação.</small></details>`;
+    return `<details class="card import-panel"><summary>Importar NF-e XML</summary><form id="nfe-import-form" class="filter-bar import-form"><label>Arquivos XML<input name="file" type="file" accept=".xml,application/xml,text/xml" multiple><small>Selecione um ou vários XML.</small></label><label>Pasta de XML (opcional)<input name="folder" type="file" accept=".xml,application/xml,text/xml" multiple webkitdirectory directory><small>Seleção progressiva de pasta, quando suportada pelo navegador.</small></label><label>Data contábil (opcional)<input name="accounting_date" type="date"><small>Sem ajuste manual, usa a data fiscal autoritativa do XML.</small></label><label>Início do período<input name="period_start" type="date" required></label><label>Fim do período<input name="period_end" type="date" required></label><label>Expiração da revisão<input name="approval_expires_at" type="datetime-local" aria-describedby="approval-expiry-help" required><small id="approval-expiry-help">Prazo até o qual a etapa humana posterior poderá ser decidida.</small></label><button class="btn" type="submit">Importar XML</button></form><small>Somente NF-e modelo 55. Cada arquivo é validado isoladamente contra o CNPJ da empresa selecionada. ZIP permanece desabilitado por segurança.</small></details>`;
   }
 
   function fiscalMarkup(profile) {
@@ -377,7 +415,7 @@
     if (routeParams().has('fiscal')) return fiscalDetailMarkup(profile) + decisionLineMarkup(intelligenceModel?.decisionLine);
     if (intelligenceModel?.error) return localizedError();
     if (!intelligenceModel?.page) return loadingOperational('documentos fiscais');
-    const rows = intelligenceModel.page.items.map((item) => `<tr><td><button class="link-button" data-action="open-fiscal" data-fiscal-id="${escapeHtml(item.id)}">NF-e ${escapeHtml(item.document_number || 'sem número')}</button><small class="row-note">Série ${escapeHtml(item.series || '—')}</small></td><td>${escapeHtml(item.issuer_name || 'Não informado')}</td><td>${escapeHtml(formatDate(item.issued_at))}</td><td>${escapeHtml(money(item.invoice_total))}</td><td><span class="badge ${item.observed_status === 'REPORTED_AUTHORIZED' ? 'success' : 'warning'}">${escapeHtml(intelligenceService.fiscalStatusLabel(item.observed_status))}</span></td></tr>`).join('');
+    const rows = intelligenceModel.page.items.map((item) => `<tr><td><button class="link-button" data-action="open-fiscal" data-fiscal-id="${escapeHtml(item.id)}">NF-e ${escapeHtml(item.document_number || 'sem número')}</button><small class="row-note">Série ${escapeHtml(item.series || '—')} · ${escapeHtml(item.direction || 'direção não determinada')}</small></td><td>${escapeHtml(item.issuer_name || 'Não informado')}</td><td>${escapeHtml(formatDate(item.issued_at))}</td><td>${escapeHtml(money(item.invoice_total))}</td><td><span class="badge ${item.observed_status === 'REPORTED_AUTHORIZED' ? 'success' : 'warning'}">${escapeHtml(intelligenceService.fiscalStatusLabel(item.observed_status))}</span></td></tr>`).join('');
     const previous = Math.max(0, intelligenceModel.page.offset - intelligenceModel.page.limit);
     const next = intelligenceModel.page.offset + intelligenceModel.page.limit;
     return `<div class="page-heading"><div><span class="eyebrow">Inteligência Fiscal</span><h1>NF-e · Documentos fiscais</h1><p>Importação e leitura estruturada do modelo 55; sem cálculo fiscal completo.</p></div></div>${importFeedbackMarkup()}${nfeImportMarkup(profile)}<form id="fiscal-filter-form" class="filter-bar document-filters"><label>Chave, número ou emitente<input name="search" type="search" maxlength="100" value="${escapeHtml(fiscalFilters.search)}"></label><label>Status<select name="status"><option value="">Todos</option><option value="REPORTED_AUTHORIZED" ${fiscalFilters.status === 'REPORTED_AUTHORIZED' ? 'selected' : ''}>Autorizada informada</option><option value="UNVERIFIED" ${fiscalFilters.status === 'UNVERIFIED' ? 'selected' : ''}>Não verificada</option></select></label><label>Emissão de<input name="issued_from" type="date" value="${escapeHtml(fiscalFilters.issued_from)}"></label><label>Emissão até<input name="issued_to" type="date" value="${escapeHtml(fiscalFilters.issued_to)}"></label><button class="btn secondary">Aplicar filtros</button></form><section class="card"><div class="table-wrap"><table><thead><tr><th>Documento</th><th>Emitente</th><th>Emissão</th><th>Valor</th><th>Status observado</th></tr></thead><tbody>${rows || '<tr><td colspan="5">Nenhuma NF-e encontrada.</td></tr>'}</tbody></table></div><footer class="pagination"><span>${escapeHtml(intelligenceModel.page.total)} NF-e</span><div><button class="btn ghost small" data-action="fiscal-page" data-offset="${previous}" ${intelligenceModel.page.offset === 0 ? 'disabled' : ''}>Anterior</button><button class="btn ghost small" data-action="fiscal-page" data-offset="${next}" ${next >= intelligenceModel.page.total ? 'disabled' : ''}>Próxima</button></div></footer></section>`;
@@ -411,7 +449,7 @@
     if (intelligenceModel?.error) return localizedError();
     if (!intelligenceModel?.item?.statement) return loadingOperational('extrato e transações');
     const detail = intelligenceModel.item, item = detail.statement;
-    const rows = detail.transactions.items.map((row) => `<tr><td>${escapeHtml(row.posted_date || row.transaction_date || '—')}</td><td>${escapeHtml(row.description || 'Sem descrição')}</td><td><span class="badge ${row.direction === 'CREDIT' ? 'success' : 'neutral'}">${row.direction === 'CREDIT' ? 'Crédito +' : 'Débito −'}</span></td><td class="amount ${row.direction === 'CREDIT' ? 'credit' : 'debit'}">${escapeHtml(money(row.amount, item.currency_code || 'BRL'))}</td><td>${escapeHtml(row.identity_kind)}</td></tr>`).join('');
+    const rows = detail.transactions.items.map((row) => `<tr><td>${escapeHtml(row.transaction_date || '—')}<small class="row-note">Postada: ${escapeHtml(row.posted_date || '—')}</small></td><td>${escapeHtml(row.description || 'Sem descrição')}<small class="row-note">Documento: ${escapeHtml(row.document_number || 'não informado')}</small></td><td><span class="badge ${row.direction === 'CREDIT' ? 'success' : 'neutral'}">${row.direction === 'CREDIT' ? 'Crédito +' : 'Débito −'}</span></td><td class="amount ${row.direction === 'CREDIT' ? 'credit' : 'debit'}">${escapeHtml(money(row.amount, item.currency_code || 'BRL'))}</td><td>${escapeHtml(row.identity_kind)}<small class="row-note">Referência preservada e minimizada</small></td></tr>`).join('');
     const previous = Math.max(0, detail.transactions.offset - detail.transactions.limit);
     const next = detail.transactions.offset + detail.transactions.limit;
     return `<div class="page-heading"><div><span class="eyebrow">Extrato OFX</span><h1>${escapeHtml(item.bank_id || 'Instituição não informada')} · ${escapeHtml(item.account_masked)}</h1><p>${escapeHtml(item.start_date || '—')} a ${escapeHtml(item.end_date || '—')}</p></div><a class="btn secondary" href="#financial">Voltar</a></div><section class="operational-cards"><article class="card"><h2>Resumo</h2><dl class="detail-list"><div><dt>Agência</dt><dd>${escapeHtml(item.branch_masked || '—')}</dd></div><div><dt>Conta</dt><dd>${escapeHtml(item.account_masked)}</dd></div><div><dt>Saldo inicial</dt><dd>${escapeHtml(money(item.opening_balance, item.currency_code || 'BRL'))}</dd></div><div><dt>Saldo final</dt><dd>${escapeHtml(money(item.closing_balance, item.currency_code || 'BRL'))}</dd></div></dl>${item.document_receipt_id ? `<a class="btn ghost" href="#documents?company=${encodeURIComponent(companyId)}&document=${encodeURIComponent(item.document_receipt_id)}">Ver arquivo na Central</a>` : ''}</article><article class="card"><h2>Semântica</h2><p>Crédito mantém valor positivo; débito mantém valor negativo conforme <code>${escapeHtml(item.sign_policy)}</code>.</p><p>Nenhuma classificação ou conciliação foi inferida.</p></article></section><form id="transaction-filter-form" class="filter-bar document-filters"><label>Descrição<input name="search" type="search" maxlength="100" value="${escapeHtml(transactionFilters.search)}"></label><label>Movimento<select name="direction"><option value="">Todos</option><option value="CREDIT" ${transactionFilters.direction === 'CREDIT' ? 'selected' : ''}>Crédito</option><option value="DEBIT" ${transactionFilters.direction === 'DEBIT' ? 'selected' : ''}>Débito</option></select></label><label>De<input name="posted_from" type="date" value="${escapeHtml(transactionFilters.posted_from)}"></label><label>Até<input name="posted_to" type="date" value="${escapeHtml(transactionFilters.posted_to)}"></label><button class="btn secondary">Aplicar</button></form><section class="card"><h2>Transações (${escapeHtml(detail.transactions.total)})</h2><div class="table-wrap"><table><thead><tr><th>Data</th><th>Descrição</th><th>Tipo</th><th>Valor</th><th>Identidade</th></tr></thead><tbody>${rows || '<tr><td colspan="5">Nenhuma transação encontrada.</td></tr>'}</tbody></table></div><footer class="pagination"><span>${escapeHtml(detail.transactions.total)} transação(ões)</span><div><button class="btn ghost small" data-action="transaction-page" data-offset="${previous}" ${detail.transactions.offset === 0 ? 'disabled' : ''}>Anterior</button><button class="btn ghost small" data-action="transaction-page" data-offset="${next}" ${next >= detail.transactions.total ? 'disabled' : ''}>Próxima</button></div></footer></section>`;
@@ -463,9 +501,9 @@
     if (accountingModel?.error) return localizedError();
     if (!accountingModel?.page) return loadingOperational('propostas contábeis');
     const page = accountingModel.page;
-    const rows = page.items.map((item) => `<tr><td>${escapeHtml(item.accounting_date)}</td><td><button class="link-button" data-action="open-proposal" data-proposal-id="${escapeHtml(item.journey_id)}">${escapeHtml(item.source_type === 'FiscalDocument' ? 'NF-e 55' : item.source_type)}</button></td><td><span class="intelligence-label">SUGESTÃO</span><small class="row-note">${escapeHtml(item.rule_name || item.rule_version_id)}</small></td><td>${escapeHtml(money(item.total_debit))}</td><td>${escapeHtml(money(item.total_credit))}</td><td><span class="badge ${accountingStatusClass(item.status)}">${escapeHtml(accountingService.statusLabel(item.status))}</span></td><td><button class="btn ghost small" data-action="open-proposal" data-proposal-id="${escapeHtml(item.journey_id)}">Revisar</button></td></tr>`).join('');
+    const rows = page.items.map((item) => `<tr><td>${escapeHtml(item.accounting_date)}</td><td><button class="link-button" data-action="open-proposal" data-proposal-id="${escapeHtml(item.journey_id)}">${escapeHtml(item.document_number || (item.source_type === 'FiscalDocument' ? 'NF-e 55' : item.source_type))}</button><small class="row-note">${escapeHtml(item.source_type)}</small></td><td><span class="intelligence-label">SUGESTÃO</span><small class="row-note">${escapeHtml(item.rule_name || item.rule_version_id)}</small></td><td>${escapeHtml((item.debit_accounts || []).join('; ') || 'Conta não informada')}<small class="row-note">${escapeHtml(money(item.total_debit))}</small></td><td>${escapeHtml((item.credit_accounts || []).join('; ') || 'Conta não informada')}<small class="row-note">${escapeHtml(money(item.total_credit))}</small></td><td><span class="badge ${accountingStatusClass(item.status)}">${escapeHtml(accountingService.statusLabel(item.status))}</span></td><td><button class="btn ghost small" data-action="open-proposal" data-proposal-id="${escapeHtml(item.journey_id)}">Revisar</button></td></tr>`).join('');
     const previous = Math.max(0, page.offset - page.limit), next = page.offset + page.limit;
-    return `<div class="page-heading"><div><span class="eyebrow">Inteligência Contábil</span><h1>Propostas e revisão profissional</h1><p>A automação prepara uma sugestão determinística. Somente o profissional autorizado decide.</p></div></div>${accountingTabs(profile)}<div class="alert info"><div><strong>AUTOMATION ≠ PROFESSIONAL DECISION</strong><p>Nenhuma proposta desta tela representa escrituração, postagem ou exportação oficial.</p></div></div><form id="proposal-filter-form" class="filter-bar document-filters"><label>Status<select name="status"><option value="">Todos</option>${Object.entries(root.S21Accounting.STATUS).map(([value, label]) => `<option value="${value}" ${proposalFilters.status === value ? 'selected' : ''}>${escapeHtml(label)}</option>`).join('')}</select></label><button class="btn secondary">Aplicar filtro</button></form><section class="card"><div class="table-wrap"><table><thead><tr><th>Data</th><th>Origem</th><th>Regra</th><th>Débito</th><th>Crédito</th><th>Status</th><th>Ação</th></tr></thead><tbody>${rows || '<tr><td colspan="7">Nenhuma proposta contábil encontrada.</td></tr>'}</tbody></table></div><footer class="pagination"><span>${escapeHtml(page.total)} proposta(s)</span><div><button class="btn ghost small" data-action="proposal-page" data-offset="${previous}" ${page.offset === 0 ? 'disabled' : ''}>Anterior</button><button class="btn ghost small" data-action="proposal-page" data-offset="${next}" ${next >= page.total ? 'disabled' : ''}>Próxima</button></div></footer></section>`;
+    return `<div class="page-heading"><div><span class="eyebrow">Inteligência Contábil</span><h1>Propostas e revisão profissional</h1><p>A automação prepara uma sugestão determinística. Somente o profissional autorizado decide.</p></div></div>${accountingTabs(profile)}<div class="alert info"><div><strong>AUTOMATION ≠ PROFESSIONAL DECISION</strong><p>Nenhuma proposta desta tela representa escrituração, postagem ou exportação oficial.</p></div></div><form id="proposal-filter-form" class="filter-bar document-filters"><label>Conta<input name="account" value="${escapeHtml(proposalFilters.account)}" placeholder="Código ou nome"></label><label>Origem<input name="source" value="${escapeHtml(proposalFilters.source)}" placeholder="FiscalDocument"></label><label>Documento<input name="document" value="${escapeHtml(proposalFilters.document)}"></label><label>Regra<input name="rule" value="${escapeHtml(proposalFilters.rule)}"></label><label>Data contábil de<input name="created_from" type="date" value="${escapeHtml(proposalFilters.created_from)}"></label><label>Data contábil até<input name="created_to" type="date" value="${escapeHtml(proposalFilters.created_to)}"></label><label>Status<select name="status"><option value="">Todos</option>${Object.entries(root.S21Accounting.STATUS).map(([value, label]) => `<option value="${value}" ${proposalFilters.status === value ? 'selected' : ''}>${escapeHtml(label)}</option>`).join('')}</select></label><button class="btn secondary">Aplicar filtros</button><button class="btn ghost" type="button" data-action="clear-proposal-filters">Limpar</button></form><section class="card"><div class="table-wrap"><table><thead><tr><th>Data contábil</th><th>Origem/documento</th><th>Regra</th><th>Débito</th><th>Crédito</th><th>Status</th><th>Ação</th></tr></thead><tbody>${rows || '<tr><td colspan="7">Nenhuma proposta contábil encontrada.</td></tr>'}</tbody></table></div><footer class="pagination"><span>${escapeHtml(page.total)} proposta(s)</span><div><button class="btn ghost small" data-action="proposal-page" data-offset="${previous}" ${page.offset === 0 ? 'disabled' : ''}>Anterior</button><button class="btn ghost small" data-action="proposal-page" data-offset="${next}" ${next >= page.total ? 'disabled' : ''}>Próxima</button></div></footer></section>`;
   }
 
   function sourceEvidenceMarkup(source) {
@@ -503,9 +541,10 @@
     if (!accountingModel?.catalog) return loadingOperational('catálogo contábil publicado');
     const catalog = accountingModel.catalog;
     const rules = catalog.rules.map((rule) => `<tr><td><button class="link-button" data-action="open-rule" data-rule-id="${escapeHtml(rule.id)}">${escapeHtml(rule.name || rule.id)}</button></td><td>${escapeHtml(rule.scope)}</td><td>${escapeHtml(rule.priority)}</td><td><span class="badge intelligent">${escapeHtml(rule.status)}</span></td><td>${escapeHtml(rule.debit_account_code)} → ${escapeHtml(rule.credit_account_code)}</td></tr>`).join('');
-    const accounts = catalog.accounts.map((account) => `<tr><td>${escapeHtml(account.code)}</td><td>${escapeHtml(account.name)}</td><td>${escapeHtml(account.nature)}</td><td>${account.is_postable ? 'Analítica / lançável' : 'Não lançável'}</td></tr>`).join('');
+    const term = catalogSearch.trim().toLocaleLowerCase('pt-BR');
+    const accounts = catalog.accounts.filter((account) => !term || [account.code, account.name, account.nature, account.status].some((value) => String(value).toLocaleLowerCase('pt-BR').includes(term))).map((account) => `<tr><td>${escapeHtml(account.code)}</td><td>${escapeHtml(account.name)}</td><td>${escapeHtml(account.nature)}</td><td>${account.is_postable ? 'Analítica / lançável' : 'Não lançável'}</td><td><span class="badge intelligent">${escapeHtml(account.status)}</span></td></tr>`).join('');
     const mappings = catalog.mappings.map((mapping) => `<tr><td>${escapeHtml(mapping.key)}</td><td>${escapeHtml(mapping.external_code || mapping.history_contains || mapping.dimension_code || 'Condição canônica')}</td><td>${escapeHtml(mapping.target_account_code)} · ${escapeHtml(mapping.target_account_name)}</td><td>${escapeHtml(mapping.priority)}</td></tr>`).join('');
-    return `<div class="page-heading"><div><span class="eyebrow">Automação contábil</span><h1>Regras, contas e mapeamentos</h1><p>Catálogo publicado e efetivo, em modo somente leitura.</p></div></div>${accountingTabs(profile, 'rules')}<div class="alert info"><div><strong>Versão ${escapeHtml(catalog.version_no)} · válida desde ${escapeHtml(catalog.valid_from)}</strong><p>Precisão: ${escapeHtml(catalog.decimal_places)} casas; campo monetário: ${escapeHtml(catalog.amount_field)}. A integridade da versão publicada é validada no backend.</p></div></div><section class="card"><h2>Regras determinísticas</h2><div class="table-wrap"><table><thead><tr><th>Regra</th><th>Escopo</th><th>Prioridade</th><th>Status</th><th>Resultado</th></tr></thead><tbody>${rules || '<tr><td colspan="5">Nenhuma regra publicada.</td></tr>'}</tbody></table></div></section><section class="card"><h2>Plano de contas</h2><div class="table-wrap"><table><thead><tr><th>Código</th><th>Nome</th><th>Natureza</th><th>Uso</th></tr></thead><tbody>${accounts || '<tr><td colspan="4">Nenhuma conta publicada.</td></tr>'}</tbody></table></div></section><section class="card"><h2>Mapeamentos</h2><div class="table-wrap"><table><thead><tr><th>Chave</th><th>Condição</th><th>Conta alvo</th><th>Prioridade</th></tr></thead><tbody>${mappings || '<tr><td colspan="4">Nenhum mapeamento publicado.</td></tr>'}</tbody></table></div><p class="row-note">Escrita de regras e mapeamentos está adiada: o contrato atual governa a versão completa e não oferece editor granular seguro.</p></section>`;
+    return `<div class="page-heading"><div><span class="eyebrow">Automação contábil</span><h1>Regras, contas e mapeamentos</h1><p>Catálogo publicado e efetivo, em modo somente leitura.</p></div></div>${accountingTabs(profile, 'rules')}<div class="alert info"><div><strong>Versão ${escapeHtml(catalog.version_no)} · válida desde ${escapeHtml(catalog.valid_from)}</strong><p>Precisão: ${escapeHtml(catalog.decimal_places)} casas; campo monetário: ${escapeHtml(catalog.amount_field)}. A integridade da versão publicada é validada no backend.</p></div></div><section class="card"><h2>Regras determinísticas</h2><div class="table-wrap"><table><thead><tr><th>Regra</th><th>Escopo</th><th>Prioridade</th><th>Status</th><th>Resultado</th></tr></thead><tbody>${rules || '<tr><td colspan="5">Nenhuma regra publicada.</td></tr>'}</tbody></table></div></section><section class="card"><h2>Plano de contas</h2><form id="catalog-account-search" class="filter-bar"><label>Buscar por código, nome, natureza ou status<input name="search" type="search" value="${escapeHtml(catalogSearch)}"></label><button class="btn secondary">Buscar</button></form><div class="table-wrap"><table><thead><tr><th>Código</th><th>Nome</th><th>Natureza</th><th>Uso</th><th>Status</th></tr></thead><tbody>${accounts || '<tr><td colspan="5">Nenhuma conta publicada para a busca.</td></tr>'}</tbody></table></div></section><section class="card"><h2>Mapeamentos</h2><div class="table-wrap"><table><thead><tr><th>Chave</th><th>Condição</th><th>Conta alvo</th><th>Prioridade</th></tr></thead><tbody>${mappings || '<tr><td colspan="4">Nenhum mapeamento publicado.</td></tr>'}</tbody></table></div><p class="row-note">Escrita de regras e mapeamentos está adiada: o contrato atual governa a versão completa e não oferece editor granular seguro.</p></section>`;
   }
 
   function ruleDetailMarkup(profile) {
@@ -543,10 +582,14 @@
         nextModel = effectiveAt ? {loading: false, catalog: await accountingService.accountingCatalog(companyId, effectiveAt)} : {loading: false, needsEffectiveDate: true};
       }
       else if (routeParams().has('proposal')) {
-        const item = await accountingService.accountingProposal(companyId, routeParams().get('proposal'));
+        const proposalId = routeParams().get('proposal');
+        const [item, activity] = await Promise.all([
+          accountingService.accountingProposal(companyId, proposalId),
+          accountingService.proposalActivity(companyId, proposalId),
+        ]);
         let decisionLine = null;
-        if (hasPermission(currentPermissions(profile), ['audit.read'])) decisionLine = await accountingService.decisionLine(companyId, 'ACCOUNTING_PROPOSAL', routeParams().get('proposal'));
-        nextModel = {loading: false, item, decisionLine};
+        if (hasPermission(currentPermissions(profile), ['audit.read'])) decisionLine = await accountingService.decisionLine(companyId, 'ACCOUNTING_PROPOSAL', proposalId);
+        nextModel = {loading: false, item, activity, decisionLine};
       } else nextModel = {loading: false, page: await accountingService.accountingProposals(companyId, proposalFilters)};
     } catch (error) { nextModel = {loading: false, error: error?.code || 'ERROR'}; }
     if (requestId !== accountingRequest || session.snapshot().state !== STATES.AUTHENTICATED) return;
@@ -584,6 +627,7 @@
       : '';
     app.innerHTML = `<div class="app-shell auth-shell"><aside class="sidebar ${drawerOpen ? 'open' : ''}" aria-label="Navegação lateral"><a class="brand-link" href="#overview"><img class="brand-image shell-logo" src="../ui/assets/brand/S21%20assinatura%20principal.png" alt="Serdial21 Contabilidade Inteligente"></a><div class="office">${escapeHtml(profile.tenant.name)}<small>${mode === 'synthetic' ? 'Contexto fictício' : 'Contexto autorizado'}</small></div><nav class="nav" aria-label="Navegação principal">${navMarkup(profile)}</nav><div class="sidebar-foot"><span>${escapeHtml(profile.user.displayName)}</span><small>${escapeHtml(profile.user.roleLabel || '')}</small><button class="btn ghost drawer-close" data-action="close-drawer">Fechar menu</button></div></aside><button class="drawer-backdrop ${drawerOpen ? 'open' : ''}" data-action="close-drawer" aria-label="Fechar navegação"></button><div class="workspace"><header class="topbar"><div class="context"><button class="btn ghost mobile-menu" data-action="open-drawer" aria-label="Abrir navegação">☰</button><div class="context-copy"><strong>${escapeHtml(contextName)}</strong><small>${escapeHtml(profile.tenant.name)}</small></div><label>Empresa<select id="company-context" ${profile.companies.length < 2 ? 'disabled' : ''}>${allOption}${profile.companies.map((company) => `<option value="${escapeHtml(company.id)}" ${company.id === companyId ? 'selected' : ''}>${escapeHtml(company.name)}</option>`).join('')}</select></label></div><div class="topbar-actions"><span class="environment-banner">${escapeHtml(config.environmentLabel)}</span><div class="profile-menu"><button class="btn ghost profile-trigger" data-action="toggle-user-menu" aria-expanded="${userMenuOpen}" aria-controls="user-popover"><span class="avatar">${escapeHtml(initials(profile.user.displayName))}</span><span class="profile-label">${escapeHtml(profile.user.displayName)}</span></button><div class="profile-popover" id="user-popover" ${userMenuOpen ? '' : 'hidden'}><strong>${escapeHtml(profile.user.displayName)}</strong><p>${escapeHtml(profile.tenant.name)}</p><button class="btn secondary" data-action="logout">Sair do aplicativo</button></div></div></div></header><div class="mode-banner">${mode === 'synthetic' ? 'DEMONSTRAÇÃO LOCAL · identidade, empresas e conteúdo sintéticos · sem acesso à API' : `SESSÃO OIDC · ${config.dataMode === 'synthetic' ? 'conteúdo de negócio sintético' : 'contexto autorizado'}`}</div><main id="main" tabindex="-1">${content}<p class="footer-note">Serdial21 Contabilidade Inteligente · A automação prepara. O profissional decide.</p></main></div></div>`;
     app.setAttribute('aria-busy', 'false');
+    hydrateRemediationUi();
     if (loadDashboard && route() === 'overview') refreshDashboard(profile);
     if (loadDashboard && ['clients', 'documents', 'inbox'].includes(route())) refreshOperational(profile);
     if (loadDashboard && ['fiscal', 'financial'].includes(route())) refreshIntelligence(profile);
@@ -601,10 +645,8 @@
       const profile = normalizeCurrentApplication(current);
       companyId = profile.companies[0]?.id || null;
       session.establish({token: accessToken, userProfile: profile});
-      const permissions = currentPermissions(profile);
       const requested = String(returnTo || '').match(/^#[a-z-]+$/)?.[0]?.slice(1);
-      const firstAllowed = allowedNavigation(navigation, permissions).find((item) => !item.planned)?.id;
-      location.hash = navigation.some((item) => item.id === requested && hasPermission(permissions, item.permissions)) ? requested : firstAllowed || 'overview';
+      location.hash = authorizedRoute(profile, requested);
       renderShell();
     } catch (error) {
       if (error.code === 'SESSION_EXPIRED') { session.expire(); renderLogin(); }
@@ -616,6 +658,10 @@
 
   function navigateSafe() {
     if (session.snapshot().state !== STATES.AUTHENTICATED) { renderLogin(); return; }
+    const profile = session.snapshot().profile;
+    const safe = authorizedRoute(profile);
+    if (safe !== route()) { location.hash = safe; return; }
+    if (importFeedback && importFeedback.scope !== route()) importFeedback = null;
     renderShell();
   }
 
@@ -702,6 +748,29 @@
       location.hash = 'documents';
       return;
     }
+    if (action === 'bank-edit') {
+      const account = operationalModel?.item?.bankAccounts?.find((item) => item.id === actionElement.dataset.accountId);
+      const form = document.querySelector('#bank-account-form');
+      if (!account || !form) return;
+      form.dataset.accountId = account.id;
+      form.elements.bank_code.value = account.bank_code;
+      form.elements.bank_name.value = account.bank_name || '';
+      form.elements.branch.value = '';
+      form.elements.branch.placeholder = 'Deixe em branco para manter a agência atual';
+      form.elements.account_number.value = '';
+      form.elements.account_number.placeholder = 'Deixe em branco para manter a conta atual';
+      form.elements.account_type.value = account.account_type || '';
+      form.elements.nickname.value = account.nickname || '';
+      form.elements.currency_code.value = account.currency_code || 'BRL';
+      form.closest('details').open = true; form.elements.bank_name.focus();
+      return;
+    }
+    if (action === 'bank-status') {
+      await operationalService.setBankAccountStatus(companyId, actionElement.dataset.accountId, actionElement.dataset.status);
+      await refreshOperational(session.snapshot().profile);
+      setAnnouncement('Status da conta bancária atualizado.');
+      return;
+    }
     if (action === 'open-document') {
       location.hash = `documents?company=${encodeURIComponent(companyId)}&document=${encodeURIComponent(actionElement.dataset.documentId)}`;
       return;
@@ -742,6 +811,22 @@
       refreshOperational(session.snapshot().profile);
       return;
     }
+    if (action === 'clear-fiscal-filters') {
+      fiscalFilters = Object.freeze({search: '', status: '', issued_from: '', issued_to: '', offset: 0, limit: 10});
+      importFeedback = null;
+      refreshIntelligence(session.snapshot().profile);
+      return;
+    }
+    if (action === 'clear-transaction-filters') {
+      transactionFilters = Object.freeze({search: '', direction: '', posted_from: '', posted_to: '', offset: 0, limit: 25});
+      refreshIntelligence(session.snapshot().profile);
+      return;
+    }
+    if (action === 'clear-proposal-filters') {
+      proposalFilters = Object.freeze({status: '', account: '', source: '', document: '', rule: '', created_from: '', created_to: '', offset: 0, limit: 10});
+      refreshAccounting(session.snapshot().profile);
+      return;
+    }
     if (action === 'open-proposal') {
       accountingModel = null; accountingRequest += 1; decisionIntent = null; decisionFeedback = null;
       location.hash = `accounting?company=${encodeURIComponent(companyId)}&proposal=${encodeURIComponent(actionElement.dataset.proposalId)}`;
@@ -773,7 +858,9 @@
       try { await oidcClient.beginLogin(`#${route()}`); }
       catch (_) { session.unauthenticated(); renderLogin('Não foi possível iniciar a autenticação. Verifique a configuração do ambiente.'); }
     } else if (action === 'start-demo' && config.authMode === 'synthetic' && config.environment === 'development') {
-      session.startSyntheticWorkspace(root.S21SyntheticProvider.loadProfile()); companyId = null; location.hash = 'overview'; renderShell();
+      const profile = root.S21SyntheticProvider.loadProfile();
+      session.startSyntheticWorkspace(profile); companyId = null;
+      location.hash = authorizedRoute(profile); renderShell();
     } else if (action === 'logout') {
       const wasOidc = session.snapshot().mode === 'oidc';
       session.logout(); userMenuOpen = false; companyId = null; dashboardLayout = null; dashboardModel = null; dashboardRequest += 1; operationalModel = null; operationalRequest += 1; intelligenceModel = null; intelligenceRequest += 1; importFeedback = null; accountingModel = null; accountingRequest += 1; decisionIntent = null; decisionFeedback = null;
@@ -812,7 +899,7 @@
     }
   });
 
-  app.addEventListener('submit', (event) => {
+  app.addEventListener('submit', async (event) => {
     if (event.target.id === 'company-search-form') {
       event.preventDefault();
       const value = new FormData(event.target).get('search') || '';
@@ -826,8 +913,26 @@
       documentFilters = Object.freeze({...documentFilters, ...values, offset: 0});
       refreshOperational(session.snapshot().profile);
     }
+    if (event.target.id === 'bank-account-form') {
+      event.preventDefault();
+      const payload = Object.fromEntries(new FormData(event.target).entries());
+      const accountId = event.target.dataset.accountId;
+      await (accountId ? operationalService.updateBankAccount(companyId, accountId, payload) : operationalService.createBankAccount(companyId, payload));
+      await refreshOperational(session.snapshot().profile);
+      setAnnouncement(accountId ? 'Conta bancária atualizada.' : 'Conta bancária cadastrada.');
+      return;
+    }
+    if (event.target.id === 'document-metadata-form') {
+      event.preventDefault();
+      const documentId = routeParams().get('document');
+      await operationalService.updateDocumentMetadata(companyId, documentId, Object.fromEntries(new FormData(event.target).entries()));
+      await refreshOperational(session.snapshot().profile);
+      setAnnouncement('Metadados do documento atualizados; a evidência original não foi alterada.');
+      return;
+    }
     if (event.target.id === 'fiscal-filter-form') {
       event.preventDefault();
+      importFeedback = null;
       fiscalFilters = Object.freeze({...fiscalFilters, ...Object.fromEntries(new FormData(event.target).entries()), offset: 0});
       refreshIntelligence(session.snapshot().profile);
     }
@@ -847,6 +952,12 @@
       const effectiveAt = new FormData(event.target).get('effective_at');
       accountingModel = null; accountingRequest += 1;
       location.hash = `accounting?view=rules&company=${encodeURIComponent(companyId)}&effective_at=${encodeURIComponent(effectiveAt)}`;
+      return;
+    }
+    if (event.target.id === 'catalog-account-search') {
+      event.preventDefault();
+      catalogSearch = String(new FormData(event.target).get('search') || '');
+      renderShell(false);
       return;
     }
     if (event.target.id === 'accounting-decision-form') {
@@ -878,14 +989,17 @@
     }
     if (event.target.id === 'nfe-import-form' || event.target.id === 'ofx-import-form') {
       event.preventDefault();
-      const file = event.target.elements.file.files[0];
       const isNfe = event.target.id === 'nfe-import-form';
       const extension = isNfe ? '.xml' : '.ofx';
-      if (!file || !file.name.toLocaleLowerCase('pt-BR').endsWith(extension)) {
-        importFeedback = {state: 'ERROR', message: `Selecione um arquivo ${extension} compatível.`}; renderShell(false); return;
+      const files = [
+        ...event.target.elements.file.files,
+        ...(isNfe ? event.target.elements.folder.files : []),
+      ];
+      if (!files.length || files.some((file) => !file.name.toLocaleLowerCase('pt-BR').endsWith(extension))) {
+        importFeedback = {scope: route(), state: 'ERROR', message: `Selecione arquivo(s) ${extension} compatível(is).`}; renderShell(false); return;
       }
       const values = Object.fromEntries(new FormData(event.target).entries());
-      importFeedback = {state: 'LOADING', message: 'Enviando arquivo ao contrato autorizado…'}; renderShell(false);
+      importFeedback = {scope: route(), state: 'LOADING', message: `Validando ${files.length} arquivo(s) no contrato autorizado…`}; renderShell(false);
       const requestId = ++intelligenceRequest;
       (async () => {
         try {
@@ -893,18 +1007,31 @@
           if (isNfe) {
             const expires = new Date(String(values.approval_expires_at));
             if (Number.isNaN(expires.getTime())) throw new Error('invalid date');
-            result = await intelligenceService.importNfe(companyId, file, {
-              accounting_date: values.accounting_date, period_start: values.period_start,
-              period_end: values.period_end, approval_expires_at: expires.toISOString(),
-            });
-          } else result = await intelligenceService.importOfx(companyId, file);
+            const summary = {total: files.length, success: 0, duplicate: 0, invalid: 0, wrong_company: 0, failed: 0};
+            for (const file of files) {
+              try {
+                const item = await intelligenceService.importNfe(companyId, file, {
+                  accounting_date: values.accounting_date || '', period_start: values.period_start,
+                  period_end: values.period_end, approval_expires_at: expires.toISOString(),
+                });
+                if (item.status === 'IDEMPOTENT_REDELIVERY' || Number(item.duplicate_items || 0) > 0) summary.duplicate += 1;
+                else if (item.status === 'QUARANTINED') summary.invalid += 1;
+                else summary.success += 1;
+              } catch (error) {
+                if (error?.code === 'NFE_COMPANY_MISMATCH') summary.wrong_company += 1;
+                else if (error?.code === 'COMPANY_TAX_ID_GAP') summary.failed += 1;
+                else summary.failed += 1;
+              }
+            }
+            result = {scope: 'fiscal', state: summary.failed || summary.invalid || summary.wrong_company ? 'ERROR' : 'SUCCESS', message: `Total ${summary.total} · sucesso ${summary.success} · duplicado ${summary.duplicate} · inválido ${summary.invalid} · empresa divergente ${summary.wrong_company} · falhou ${summary.failed}`};
+          } else result = {...await intelligenceService.importOfx(companyId, files[0]), scope: 'financial'};
           if (requestId !== intelligenceRequest) return;
           importFeedback = result;
           setAnnouncement('Resultado da importação disponível.');
           await refreshIntelligence(session.snapshot().profile);
         } catch (error) {
           if (requestId !== intelligenceRequest) return;
-          importFeedback = {state: 'ERROR', message: error?.code === 'FORBIDDEN' ? 'Importação não autorizada.' : 'Não foi possível importar. Verifique o arquivo e os campos.'};
+          importFeedback = {scope: route(), state: 'ERROR', message: error?.code === 'FORBIDDEN' ? 'Importação não autorizada.' : 'Não foi possível importar. Verifique o arquivo e os campos.'};
           renderShell(false);
         }
       })();
@@ -912,7 +1039,15 @@
   });
 
   async function boot() {
-    if (config.authMode === 'synthetic' && config.environment === 'development') { session.unauthenticated(); renderLogin(); return; }
+    if (config.authMode === 'synthetic' && config.environment === 'development') {
+      if (location.hash && route() !== 'overview') {
+        const profile = root.S21SyntheticProvider.loadProfile();
+        session.startSyntheticWorkspace(profile);
+        location.hash = authorizedRoute(profile);
+        renderShell();
+      } else { session.unauthenticated(); renderLogin(); }
+      return;
+    }
     if (config.authMode !== 'oidc' || !oidcClient.isConfigured()) { session.unauthenticated(); renderLogin(); return; }
     if (!oidcClient.hasCallback()) { session.unauthenticated(); renderLogin(); return; }
     session.authenticating(); renderLogin();

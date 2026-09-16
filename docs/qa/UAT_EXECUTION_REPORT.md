@@ -1,5 +1,34 @@
 # Phase 14 — Relatório de execução UAT
 
+## Incremento operacional pós-remediação — 16/09/2026
+
+Foram adicionados o cadastro bancário autorizado usado pelo matching OFX,
+metadados persistentes de documento, filtros contábeis server-side e busca no
+plano de contas. A migration aditiva `20260916_0013` preserva evidências e
+checkpoints imutáveis. A evidência automatizada está registrada nos testes;
+o roteiro manual foi ampliado, sem alterar o gate:
+
+```text
+HUMAN UAT: RETEST_REQUIRED
+```
+
+## HUMAN UAT REMEDIATION PASS — 16/09/2026
+
+Analisados 20/20 achados. Corrigidos deep-link/F5, alertas, data fiscal padrão,
+ownership NF-e e OFX, detalhes OFX/contábil, filtros/reset, inbox, ajuda,
+timeline e widgets. Não houve migration. ZIP, metadados documentais genéricos,
+Company amplo e Supplier permanecem fora desta remediação, registrados em backlog.
+
+Os resultados automatizados originais abaixo não foram alterados. O reteste
+reduzido está em `UAT_REMEDIATION_RETEST.md`.
+
+```text
+HUMAN UAT FINDINGS ANALYZED: 20 / 20
+P0 OPEN: 0
+P1 OPEN: 0
+HUMAN UAT: RETEST_REQUIRED
+```
+
 ## Resultado por cenário
 
 | ID | Resultado | Evidência | Defeito | Notas |

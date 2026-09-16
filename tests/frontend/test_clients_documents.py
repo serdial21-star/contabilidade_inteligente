@@ -64,3 +64,16 @@ def test_operational_views_have_filters_pagination_empty_error_and_accessibility
     css = source('app-shell.css')
     assert '.table-wrap{overflow-x:auto}' in css
     assert '.operational-cards{grid-template-columns:1fr}' in css
+
+
+def test_company_banking_and_document_metadata_are_exposed_by_scoped_services() -> None:
+    client = source('api-client.js')
+    service = source('operational-service.js')
+    app = source('app.js')
+    for marker in ('bankAccounts', 'createBankAccount', 'updateBankAccount',
+                   'updateBankAccountStatus', 'updateDocumentMetadata'):
+        assert marker in client
+    assert 'setBankAccountStatus' in service
+    assert 'bank-account-form' in app
+    assert 'document-metadata-form' in app
+    assert 'A evidência original permanece imutável' in app

@@ -1,5 +1,16 @@
 # Product Backlog
 
+## Atualização Phase 14 — Human UAT remediation
+
+| ID | Prioridade | Item | Motivo | Bloqueia piloto? | Dependência |
+|---|---|---|---|---|---|
+| PB-049 | P1 | Manutenção autorizada de contas bancárias por Company | persistência existe, UI/caso de uso não | sim para OFX real | master-data, autorização, auditoria |
+| PB-050 | P1 | Expandir Company (IE/IM, endereço, contatos) | campos ausentes no schema | avaliar piloto | domínio e migration dedicada |
+| PB-051 | P1 | Criar Supplier/Vendor master quando requerido | domínio inexistente | não no sintético | incremento aprovado |
+| PB-052 | P2 | Metadados genéricos de documento | número/descrição/observação/competência ausentes | não | contrato e migration |
+| PB-053 | P2 | ZIP seguro de XML | traversal, limites e zip bomb | não | desenho de segurança |
+| PB-054 | P2 | Destinos operacionais W008/W009 | módulos seguros não entregues | não | obrigações/conciliação |
+
 ## Atualização Phase 08
 
 | ID | EPIC | STORY | PRIORITY | STATUS | TARGET_PHASE |

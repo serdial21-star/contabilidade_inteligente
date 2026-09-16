@@ -7,7 +7,7 @@
     companies: Object.freeze([
       Object.freeze({
         id: 'synthetic-company-a', name: 'Empresa Horizonte · Matriz',
-        permissions: Object.freeze(['company.read', 'journal.read', 'journal.propose', 'journal.approve', 'reconciliation.manage', 'audit.read', 'catalog.manage', 'catalog.review']),
+        permissions: Object.freeze(['company.read', 'company.manage', 'journal.read', 'journal.propose', 'journal.approve', 'reconciliation.manage', 'audit.read', 'catalog.manage', 'catalog.review']),
       }),
       Object.freeze({
         id: 'synthetic-company-b', name: 'Comercial Aurora · Matriz',
@@ -57,14 +57,19 @@
     Object.freeze({id: 'synthetic-document-4', company_id: 'synthetic-company-b', batch_id: 'synthetic-batch-4', filename: 'nfe-aurora-001.xml', media_type: 'application/xml', size_bytes: 2501, source: 'NFE55', channel: 'UPLOAD', receipt_result: 'ACCEPTED', processing_status: 'COMPLETED', error_code: null, received_at: '2026-09-13T17:40:00Z'}),
     Object.freeze({id: 'synthetic-document-5', company_id: 'synthetic-company-b', batch_id: 'synthetic-batch-5', filename: 'arquivo-divergente.xml', media_type: 'application/xml', size_bytes: 2700, source: 'NFE55', channel: 'UPLOAD', receipt_result: 'ACCEPTED', processing_status: 'QUARANTINED', error_code: 'SYNTHETIC_DIVERGENCE', received_at: '2026-09-13T16:20:00Z'}),
   ]);
+  const documentMetadata = new Map();
+  let bankAccounts = [
+    {id: 'synthetic-bank-account-1', company_id: 'synthetic-company-a', bank_code: '000', bank_name: 'Banco demonstração', branch: '0001', account_number: '00001', account_type: 'CHECKING', currency_code: 'BRL', nickname: 'Conta operacional', status: 'ACTIVE', created_at: '2026-09-01T12:00:00Z', updated_at: null},
+  ];
+  const enrichedDocument = (item) => Object.freeze({...item, document_number: null, description: null, observation: null, metadata_version: null, ...(documentMetadata.get(item.id) || {})});
 
   async function loadCompany(id) { return companyDetails[id] || null; }
   async function listDocuments(companyId, filters = {}) {
     const offset = Number(filters.offset || 0);
     const limit = Number(filters.limit || 25);
     const search = String(filters.search || '').toLocaleLowerCase('pt-BR');
-    let rows = documents.filter((item) => item.company_id === companyId);
-    if (search) rows = rows.filter((item) => item.filename.toLocaleLowerCase('pt-BR').includes(search));
+    let rows = documents.filter((item) => item.company_id === companyId).map(enrichedDocument);
+    if (search) rows = rows.filter((item) => [item.filename, item.document_number, item.description].some((value) => String(value || '').toLocaleLowerCase('pt-BR').includes(search)));
     if (filters.status) rows = rows.filter((item) => item.processing_status === filters.status || item.receipt_result === filters.status);
     if (filters.source) rows = rows.filter((item) => item.source === filters.source);
     if (filters.received_from) rows = rows.filter((item) => item.received_at.slice(0, 10) >= filters.received_from);
@@ -76,10 +81,38 @@
     if (!document) throw Object.assign(new Error('REQUEST_FAILED'), {code: 'REQUEST_FAILED'});
     const issues = document.error_code ? [Object.freeze({id: 'synthetic-issue', code: document.error_code, severity: 'WARNING', resolution_status: 'QUARANTINED', created_at: document.received_at})] : [];
     return Object.freeze({
-      document, issues: Object.freeze(issues),
+      document: enrichedDocument(document), issues: Object.freeze(issues),
       fiscal_document_id: fiscal.find((item) => item.company_id === companyId && item.document_receipt_id === documentId)?.id || null,
       bank_statement_id: statements.find((item) => item.company_id === companyId && item.document_receipt_id === documentId)?.id || null,
     });
+  }
+  async function updateDocumentMetadata(companyId, documentId, payload) {
+    const item = documents.find((row) => row.company_id === companyId && row.id === documentId);
+    if (!item) throw Object.assign(new Error('REQUEST_FAILED'), {code: 'REQUEST_FAILED'});
+    const previous = documentMetadata.get(documentId);
+    documentMetadata.set(documentId, {...payload, metadata_version: (previous?.metadata_version || 0) + 1});
+    return enrichedDocument(item);
+  }
+  const masked = (value) => `••••${String(value || '').slice(-2)}`;
+  const bankAccountView = (item) => Object.freeze({...item, branch_masked: masked(item.branch), account_masked: masked(item.account_number), branch: undefined, account_number: undefined});
+  async function listBankAccounts(companyId) { return bankAccounts.filter((item) => item.company_id === companyId).map(bankAccountView); }
+  async function createBankAccount(companyId, payload) {
+    const item = {...payload, id: `synthetic-bank-account-${bankAccounts.length + 1}`, company_id: companyId, status: 'ACTIVE', created_at: new Date().toISOString(), updated_at: null};
+    bankAccounts = [...bankAccounts, item]; return bankAccountView(item);
+  }
+  async function updateBankAccount(companyId, accountId, payload) {
+    const index = bankAccounts.findIndex((item) => item.company_id === companyId && item.id === accountId);
+    if (index < 0) throw Object.assign(new Error('REQUEST_FAILED'), {code: 'REQUEST_FAILED'});
+    const clean = {...payload};
+    if (!clean.branch) delete clean.branch;
+    if (!clean.account_number) delete clean.account_number;
+    const item = {...bankAccounts[index], ...clean, updated_at: new Date().toISOString()};
+    bankAccounts = bankAccounts.map((row, rowIndex) => rowIndex === index ? item : row); return bankAccountView(item);
+  }
+  async function setBankAccountStatus(companyId, accountId, status) {
+    const current = bankAccounts.find((item) => item.company_id === companyId && item.id === accountId);
+    if (!current) throw Object.assign(new Error('REQUEST_FAILED'), {code: 'REQUEST_FAILED'});
+    return updateBankAccount(companyId, accountId, {...current, status});
   }
   async function loadSummary(companyId) {
     const rows = documents.filter((item) => item.company_id === companyId);
@@ -118,6 +151,7 @@
       status: syntheticProposalStatus, proposal_id: 'synthetic-proposal-1', revision_id: 'synthetic-revision-1',
       revision_hash: 'synthetic-revision-hash', accounting_date: '2026-09-14', source_type: 'FiscalDocument',
       source_id: 'synthetic-fiscal-1', source_document_receipt_id: 'synthetic-document-1',
+      document_number: '1001', debit_accounts: ['1.1 · Conta débito fictícia'], credit_accounts: ['3.1 · Conta crédito fictícia'],
       rule_version_id: syntheticRule.id, rule_name: syntheticRule.name,
       total_debit: '100.00', total_credit: '100.00', balanced: true, validation_status: 'VALID',
       proposer_id: 'synthetic-proposer', approval_role: 'CONTADOR', responsible_role: 'CONTADOR',
@@ -128,6 +162,12 @@
   async function listAccountingProposals(companyId, filters = {}) {
     let rows = companyId === 'synthetic-company-a' ? [syntheticProposalSummary(companyId)] : [];
     if (filters.status) rows = rows.filter((item) => item.status === filters.status);
+    if (filters.account) rows = rows.filter((item) => [...item.debit_accounts, ...item.credit_accounts].join(' ').toLocaleLowerCase('pt-BR').includes(String(filters.account).toLocaleLowerCase('pt-BR')));
+    if (filters.source) rows = rows.filter((item) => item.source_type === filters.source);
+    if (filters.document) rows = rows.filter((item) => String(item.document_number || '').includes(filters.document));
+    if (filters.rule) rows = rows.filter((item) => String(item.rule_name || '').toLocaleLowerCase('pt-BR').includes(String(filters.rule).toLocaleLowerCase('pt-BR')));
+    if (filters.created_from) rows = rows.filter((item) => item.accounting_date >= filters.created_from);
+    if (filters.created_to) rows = rows.filter((item) => item.accounting_date <= filters.created_to);
     const offset = Number(filters.offset || 0), limit = Number(filters.limit || 10);
     return {items: rows.slice(offset, offset + limit), total: rows.length, offset, limit};
   }
@@ -243,7 +283,8 @@
 
   root.S21SyntheticProvider = Object.freeze({
     loadProfile: () => profile, loadWidget, company: loadCompany,
-    documents: listDocuments, document: loadDocument, summary: loadSummary,
+    documents: listDocuments, document: loadDocument, summary: loadSummary, updateDocumentMetadata,
+    bankAccounts: listBankAccounts, createBankAccount, updateBankAccount, setBankAccountStatus,
     fiscalDocuments: listFiscal, fiscalDocument: fiscalDetail,
     bankStatements: listStatements, bankStatement: statementDetail,
     importNfe: (companyId, file) => syntheticImport(file, 'nfe'),

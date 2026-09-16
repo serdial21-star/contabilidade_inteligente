@@ -12,7 +12,7 @@ from serdial21.modules.audit.adapters.outbound.persistence.models import AuditEv
 from serdial21.modules.audit.domain.entities import AuditEvent, AuditOrigin
 from serdial21.modules.intake_documents.adapters.outbound.persistence.models import (
     ArtifactReceiptModel, EvidenceArtifactModel, ImportBatchModel, ImportItemModel,
-    TransformationRunModel, ValidationIssueModel,
+    TransformationRunModel, ValidationIssueModel, DocumentMetadataModel,
 )
 from serdial21.modules.access_control.adapters.outbound.persistence.models import (
     CompanyModel, TenantMembershipModel, UserModel,
@@ -60,6 +60,10 @@ class SqlDocumentRecord:
     processing_status: str
     error_code: str | None
     received_at: datetime
+    document_number: str | None
+    description: str | None
+    observation: str | None
+    metadata_version: int | None
 
 
 @dataclass(frozen=True, slots=True)
@@ -186,7 +190,12 @@ class SqlAlchemyOperationalQueryRepository:
             ArtifactReceiptModel.company_id == company_id,
         ]
         if search:
-            filters.append(ArtifactReceiptModel.original_filename.ilike(f'%{search}%'))
+            filters.append(or_(
+                ArtifactReceiptModel.original_filename.ilike(f'%{search}%'),
+                DocumentMetadataModel.document_number.ilike(f'%{search}%'),
+                DocumentMetadataModel.description.ilike(f'%{search}%'),
+                FiscalDocumentModel.document_number.ilike(f'%{search}%'),
+            ))
         if status:
             filters.append(or_(
                 ImportItemModel.status == status,
@@ -208,6 +217,7 @@ class SqlAlchemyOperationalQueryRepository:
             select(
                 ArtifactReceiptModel, EvidenceArtifactModel, ImportBatchModel,
                 ImportItemModel.status, ImportItemModel.error_code,
+                DocumentMetadataModel, FiscalDocumentModel,
             )
             .join(EvidenceArtifactModel, and_(
                 EvidenceArtifactModel.tenant_id == ArtifactReceiptModel.tenant_id,
@@ -222,6 +232,16 @@ class SqlAlchemyOperationalQueryRepository:
                 ImportItemModel.tenant_id == ArtifactReceiptModel.tenant_id,
                 ImportItemModel.company_id == ArtifactReceiptModel.company_id,
                 ImportItemModel.receipt_id == ArtifactReceiptModel.id,
+            ))
+            .outerjoin(DocumentMetadataModel, and_(
+                DocumentMetadataModel.tenant_id == ArtifactReceiptModel.tenant_id,
+                DocumentMetadataModel.company_id == ArtifactReceiptModel.company_id,
+                DocumentMetadataModel.receipt_id == ArtifactReceiptModel.id,
+            ))
+            .outerjoin(FiscalDocumentModel, and_(
+                FiscalDocumentModel.tenant_id == ArtifactReceiptModel.tenant_id,
+                FiscalDocumentModel.company_id == ArtifactReceiptModel.company_id,
+                FiscalDocumentModel.artifact_id == ArtifactReceiptModel.artifact_id,
             ))
             .where(*filters)
         )
@@ -247,6 +267,7 @@ class SqlAlchemyOperationalQueryRepository:
             select(
                 ArtifactReceiptModel, EvidenceArtifactModel, ImportBatchModel,
                 ImportItemModel.status, ImportItemModel.error_code,
+                DocumentMetadataModel, FiscalDocumentModel,
             )
             .join(EvidenceArtifactModel, and_(
                 EvidenceArtifactModel.tenant_id == ArtifactReceiptModel.tenant_id,
@@ -261,6 +282,16 @@ class SqlAlchemyOperationalQueryRepository:
                 ImportItemModel.tenant_id == ArtifactReceiptModel.tenant_id,
                 ImportItemModel.company_id == ArtifactReceiptModel.company_id,
                 ImportItemModel.receipt_id == ArtifactReceiptModel.id,
+            ))
+            .outerjoin(DocumentMetadataModel, and_(
+                DocumentMetadataModel.tenant_id == ArtifactReceiptModel.tenant_id,
+                DocumentMetadataModel.company_id == ArtifactReceiptModel.company_id,
+                DocumentMetadataModel.receipt_id == ArtifactReceiptModel.id,
+            ))
+            .outerjoin(FiscalDocumentModel, and_(
+                FiscalDocumentModel.tenant_id == ArtifactReceiptModel.tenant_id,
+                FiscalDocumentModel.company_id == ArtifactReceiptModel.company_id,
+                FiscalDocumentModel.artifact_id == ArtifactReceiptModel.artifact_id,
             ))
             .where(
                 ArtifactReceiptModel.tenant_id == tenant_id,
@@ -310,6 +341,7 @@ class SqlAlchemyOperationalQueryRepository:
     def _document_record(
         self, receipt: ArtifactReceiptModel, artifact: EvidenceArtifactModel,
         batch: ImportBatchModel, item_status: str | None, error_code: str | None,
+        metadata: DocumentMetadataModel | None, fiscal: FiscalDocumentModel | None,
     ) -> SqlDocumentRecord:
         run = self._session.scalar(
             select(TransformationRunModel).where(
@@ -324,7 +356,44 @@ class SqlAlchemyOperationalQueryRepository:
             batch.source, receipt.channel, receipt.result,
             run.status if run is not None else (item_status or receipt.result),
             error_code, receipt.received_at,
+            metadata.document_number if metadata and metadata.document_number else (fiscal.document_number if fiscal else None),
+            metadata.description if metadata else None,
+            metadata.observation if metadata else None,
+            metadata.version if metadata else None,
         )
+
+    def update_document_metadata(
+        self, tenant_id: UUID, company_id: UUID, document_id: UUID, *,
+        document_number: str | None, description: str | None,
+        observation: str | None, updated_at: datetime,
+    ) -> SqlDocumentRecord | None:
+        receipt = self._session.scalar(select(ArtifactReceiptModel).where(
+            ArtifactReceiptModel.tenant_id == tenant_id,
+            ArtifactReceiptModel.company_id == company_id,
+            ArtifactReceiptModel.id == document_id,
+        ))
+        if receipt is None:
+            return None
+        metadata = self._session.scalar(select(DocumentMetadataModel).where(
+            DocumentMetadataModel.tenant_id == tenant_id,
+            DocumentMetadataModel.company_id == company_id,
+            DocumentMetadataModel.receipt_id == document_id,
+        ))
+        if metadata is None:
+            metadata = DocumentMetadataModel(
+                tenant_id=tenant_id, company_id=company_id, receipt_id=document_id,
+                document_number=document_number, description=description,
+                observation=observation, version=1, updated_at=updated_at,
+            )
+            self._session.add(metadata)
+        else:
+            metadata.document_number = document_number
+            metadata.description = description
+            metadata.observation = observation
+            metadata.version += 1
+            metadata.updated_at = updated_at
+        self._session.flush()
+        return self.get_document(tenant_id, company_id, document_id)
 
     def document_counts(self, tenant_id: UUID, company_id: UUID) -> tuple[int, int, int]:
         received = int(self._session.scalar(select(func.count()).select_from(ArtifactReceiptModel).where(
@@ -560,7 +629,10 @@ class SqlAlchemyOperationalQueryRepository:
 
     def list_proposal_journeys(
         self, tenant_id: UUID, company_id: UUID, *, offset: int, limit: int,
-        status: str | None,
+        status: str | None, created_from: date | None = None,
+        created_to: date | None = None, account: str | None = None,
+        source: str | None = None, document: str | None = None,
+        rule: str | None = None,
     ) -> tuple[tuple[Journey, ...], int]:
         proposal_statuses = (
             'PENDING_APPROVAL', 'APPROVED', 'REJECTED',
@@ -580,12 +652,28 @@ class SqlAlchemyOperationalQueryRepository:
         ]
         if status:
             filters.append(JourneyCheckpointModel.status == status)
+        if created_from:
+            filters.append(JourneyCheckpointModel.accounting_date_index >= created_from)
+        if created_to:
+            filters.append(JourneyCheckpointModel.accounting_date_index <= created_to)
+        if account:
+            filters.append(JourneyCheckpointModel.account_search.ilike(f'%{account.strip().lower()}%'))
+        if source:
+            filters.append(JourneyCheckpointModel.source_search == source)
+        if rule:
+            filters.append(JourneyCheckpointModel.rule_search.ilike(f'%{rule.strip()}%'))
+        if document:
+            filters.append(FiscalDocumentModel.document_number.ilike(f'%{document.strip()}%'))
         current = select(JourneyCheckpointModel).join(
             latest, and_(
                 latest.c.journey_id == JourneyCheckpointModel.journey_id,
                 latest.c.latest_version == JourneyCheckpointModel.version,
             ),
-        ).where(*filters)
+        ).outerjoin(FiscalDocumentModel, and_(
+            FiscalDocumentModel.tenant_id == JourneyCheckpointModel.tenant_id,
+            FiscalDocumentModel.company_id == JourneyCheckpointModel.company_id,
+            FiscalDocumentModel.id == JourneyCheckpointModel.fiscal_document_id,
+        )).where(*filters)
         total = int(self._session.scalar(
             select(func.count()).select_from(current.subquery()),
         ) or 0)

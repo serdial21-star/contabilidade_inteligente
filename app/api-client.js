@@ -21,7 +21,14 @@
       if (response.status === 403) throw new ApiError('FORBIDDEN', 403);
       if (response.status === 423) throw new ApiError('RESOURCE_LOCKED', 423);
       if (response.status >= 500) throw new ApiError('SERVER_TEMPORARY_FAILURE', response.status);
-      if (!response.ok) throw new ApiError('REQUEST_FAILED', response.status);
+      if (!response.ok) {
+        let code = 'REQUEST_FAILED';
+        try {
+          const payload = await response.json();
+          if (typeof payload?.detail === 'string' && /^[A-Z0-9_]+$/.test(payload.detail)) code = payload.detail;
+        } catch (_) { /* Corpo de erro opcional. */ }
+        throw new ApiError(code, response.status);
+      }
       if (response.status === 204) return null;
       try { return await response.json(); }
       catch (_) { throw new ApiError('INVALID_RESPONSE', response.status); }
@@ -34,6 +41,10 @@
       dashboardExceptions: (companyId) => request(`/operations/companies/${encodeURIComponent(companyId)}/exceptions?limit=50`),
       dashboardActivity: (companyId) => request(`/operations/companies/${encodeURIComponent(companyId)}/audit-events?limit=10`),
       company: (companyId) => request(`/operations/companies/${encodeURIComponent(companyId)}`),
+      bankAccounts: (companyId) => request(`/operations/companies/${encodeURIComponent(companyId)}/bank-accounts`),
+      createBankAccount: (companyId, payload) => request(`/operations/companies/${encodeURIComponent(companyId)}/bank-accounts`, {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(payload)}),
+      updateBankAccount: (companyId, accountId, payload) => request(`/operations/companies/${encodeURIComponent(companyId)}/bank-accounts/${encodeURIComponent(accountId)}`, {method: 'PUT', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(payload)}),
+      updateBankAccountStatus: (companyId, accountId, status) => request(`/operations/companies/${encodeURIComponent(companyId)}/bank-accounts/${encodeURIComponent(accountId)}/status`, {method: 'PATCH', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({status})}),
       documents: (companyId, filters = {}) => {
         const query = new URLSearchParams();
         Object.entries(filters).forEach(([key, value]) => {
@@ -42,6 +53,7 @@
         return request(`/operations/companies/${encodeURIComponent(companyId)}/documents?${query}`);
       },
       document: (companyId, documentId) => request(`/operations/companies/${encodeURIComponent(companyId)}/documents/${encodeURIComponent(documentId)}`),
+      updateDocumentMetadata: (companyId, documentId, payload) => request(`/operations/companies/${encodeURIComponent(companyId)}/documents/${encodeURIComponent(documentId)}/metadata`, {method: 'PUT', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(payload)}),
       documentSummary: (companyId) => request(`/operations/companies/${encodeURIComponent(companyId)}/documents/summary`),
       fiscalDocuments: (companyId, filters = {}) => request(`/operations/companies/${encodeURIComponent(companyId)}/fiscal-documents?${queryString(filters)}`),
       fiscalDocument: (companyId, id) => request(`/operations/companies/${encodeURIComponent(companyId)}/fiscal-documents/${encodeURIComponent(id)}`),

@@ -1,15 +1,16 @@
 ﻿"""Checkpoints append-only do coordenador, com hash e concorrência otimista."""
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from hashlib import sha256
 import json
 from typing import Any
 from uuid import UUID, uuid4
 
 from pydantic import TypeAdapter
-from sqlalchemy import ForeignKeyConstraint, Index, JSON, String, UniqueConstraint, Uuid, event, select
+from sqlalchemy import Date, ForeignKeyConstraint, Index, JSON, String, Text, UniqueConstraint, Uuid, event, select
 from sqlalchemy.orm import Mapped, Session, mapped_column
 
 from serdial21.bootstrap.database import Base, UTCDateTime
+from serdial21.modules.catalog.adapters.outbound.persistence.models import ProductionCatalogVersionModel
 from serdial21.modules.workflow.application.journey import Journey, JourneyConflictError
 
 CODEC = TypeAdapter(Journey)
@@ -25,6 +26,7 @@ class JourneyCheckpointModel(Base):
         ForeignKeyConstraint(['tenant_id', 'company_id', 'fiscal_document_id'],
                              ['fiscal_documents.tenant_id', 'fiscal_documents.company_id', 'fiscal_documents.id']),
         Index('ix_nfe_journey_export', 'tenant_id', 'company_id', 'export_batch_id'),
+        Index('ix_nfe_journey_search_date', 'tenant_id', 'company_id', 'accounting_date_index'),
         {'mysql_charset': 'utf8mb4', 'mysql_collate': 'utf8mb4_unicode_ci'},
     )
     id: Mapped[UUID] = mapped_column(Uuid(), primary_key=True, default=uuid4)
@@ -40,6 +42,10 @@ class JourneyCheckpointModel(Base):
     snapshot: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
     snapshot_hash: Mapped[str] = mapped_column(String(64), nullable=False)
     created_at: Mapped[datetime] = mapped_column(UTCDateTime(), nullable=False)
+    account_search: Mapped[str | None] = mapped_column(Text())
+    rule_search: Mapped[str | None] = mapped_column(String(255))
+    source_search: Mapped[str | None] = mapped_column(String(100))
+    accounting_date_index: Mapped[date | None] = mapped_column(Date())
 
 
 def snapshot_hash(snapshot: dict[str, Any]) -> str:
@@ -96,8 +102,39 @@ class SqlAlchemyJourneyRepository:
             export_batch_id=journey.batch.id if journey.batch else None,
             status=journey.status, snapshot=snapshot, snapshot_hash=snapshot_hash(snapshot),
             created_at=datetime.now(UTC),
+            account_search=_account_search(journey),
+            rule_search=_rule_search(self._session, journey),
+            source_search=journey.sources[0].source_type if journey.sources else None,
+            accounting_date_index=journey.revision.accounting_date if journey.revision else None,
         ))
         # A constraint da versão decide corridas entre sessões. IntegrityError
         # invalida a UoW; o chamador deve fazer rollback e reler antes de retry.
         self._session.flush()
+
+
+def _account_search(journey: Journey) -> str | None:
+    if journey.plan is None or not journey.lines:
+        return None
+    used = {line.account_version_id for line in journey.lines}
+    value = ' '.join(
+        f'{account.code} {account.name}' for account in journey.plan.accounts
+        if account.id in used
+    ).strip().lower()
+    return value or None
+
+
+def _rule_search(session: Session, journey: Journey) -> str | None:
+    if not journey.evaluation or not journey.evaluation.proposal:
+        return None
+    rule_id = str(journey.evaluation.proposal.get('rule_version_id') or '')
+    names: list[str] = []
+    versions = session.scalars(select(ProductionCatalogVersionModel).where(
+        ProductionCatalogVersionModel.tenant_id == journey.tenant_id,
+        ProductionCatalogVersionModel.company_id == journey.company_id,
+    ))
+    for version in versions:
+        for rule in version.content.get('rules', ()):
+            if str(rule.get('id')) == rule_id and rule.get('name'):
+                names.append(str(rule['name']))
+    return ' '.join((rule_id, *names)).strip().lower() or None
 

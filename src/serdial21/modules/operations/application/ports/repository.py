@@ -36,6 +36,10 @@ class DocumentRecord(Protocol):
     processing_status: str
     error_code: str | None
     received_at: datetime
+    document_number: str | None
+    description: str | None
+    observation: str | None
+    metadata_version: int | None
 
 
 class FiscalRecord(Protocol):
@@ -156,6 +160,12 @@ class OperationalQueryRepository(Protocol):
         self, tenant_id: UUID, company_id: UUID, document_id: UUID,
     ) -> DocumentRecord | None: ...
 
+    def update_document_metadata(
+        self, tenant_id: UUID, company_id: UUID, document_id: UUID, *,
+        document_number: str | None, description: str | None,
+        observation: str | None, updated_at: datetime,
+    ) -> DocumentRecord | None: ...
+
     def list_document_issues(
         self, tenant_id: UUID, company_id: UUID, artifact_id: UUID,
     ) -> tuple[ValidationIssue, ...]: ...
@@ -217,7 +227,10 @@ class OperationalQueryRepository(Protocol):
 
     def list_proposal_journeys(
         self, tenant_id: UUID, company_id: UUID, *, offset: int, limit: int,
-        status: str | None,
+        status: str | None, created_from: date | None = None,
+        created_to: date | None = None, account: str | None = None,
+        source: str | None = None, document: str | None = None,
+        rule: str | None = None,
     ) -> tuple[tuple[Journey, ...], int]: ...
 
     def published_catalog(

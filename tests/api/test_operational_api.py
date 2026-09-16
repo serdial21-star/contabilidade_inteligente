@@ -27,6 +27,8 @@ from serdial21.modules.audit.adapters.outbound.persistence.models import AuditEv
 from serdial21.modules.audit.adapters.outbound.persistence.repositories import SqlAlchemyAuditRepository
 from serdial21.modules.audit.application.services.audit import AuditRecord, AuditService
 from serdial21.modules.audit.domain.entities import AuditOrigin
+from serdial21.modules.banking.adapters.outbound.persistence.models import BankAccountModel
+from serdial21.modules.banking.application.services.ofx_importer import _account_identity
 from serdial21.modules.catalog.adapters.outbound.persistence.repositories import SqlAlchemyProductionCatalogRepository
 from serdial21.modules.catalog.application.services.governance import CatalogGovernanceService
 from serdial21.modules.catalog.domain.entities import (
@@ -208,6 +210,13 @@ def operational(tmp_path: Path) -> OperationalFixture:
                     tax_identifier='99999999000199', timezone='UTC', currency_code='BRL',
                     status='active', valid_from=datetime.now(UTC) - timedelta(days=1),
                 ),
+                BankAccountModel(
+                    id=uuid4(), tenant_id=tenant, company_id=company,
+                    bank_id='001', branch_id='1', account_number='0001',
+                    account_type='CHECKING', currency_code='BRL',
+                    external_identity=_account_identity('001', '1', '0001', 'CHECKING'),
+                    created_at=datetime.now(UTC),
+                ),
             ])
             session.flush()
             session.add_all([
@@ -284,6 +293,93 @@ def _nfe_params() -> dict[str, str]:
         'period_end': '2026-09-30',
         'approval_expires_at': (datetime.now(UTC) + timedelta(days=1)).isoformat(),
     }
+
+
+def _set_company_tax_identifier(operational: OperationalFixture, value: str) -> None:
+    session_factory = operational.client.app.state.database.session_factory
+    assert session_factory is not None
+    with session_scope(session_factory) as session:
+        with audit_scope(session, AuditContext(
+            uuid4(), AuditOrigin.AUTOMATION, operational.proposer,
+            reason='synthetic ownership test setup',
+        )):
+            company = session.scalar(select(CompanyModel).where(
+                CompanyModel.tenant_id == operational.tenant,
+                CompanyModel.id == operational.company,
+            ))
+            assert company is not None
+            company.tax_identifier = value
+            session.flush()
+
+
+def test_nfe_ownership_direction_and_xml_accounting_date_default(
+    operational: OperationalFixture,
+) -> None:
+    params = _nfe_params()
+    params.pop('accounting_date')
+    emitted = operational.client.post(
+        f'/api/v1/operations/companies/{operational.company}/imports/nfe',
+        params=params, content=NFE.read_bytes(), headers=operational.headers(
+            'proposer', content_type='application/xml', filename='outgoing.xml',
+            key='nfe-outgoing-default-date',
+        ),
+    )
+    assert emitted.status_code == 202, emitted.text
+    listing = operational.client.get(
+        f'/api/v1/operations/companies/{operational.company}/fiscal-documents',
+        headers=operational.headers('proposer'),
+    )
+    assert listing.json()['items'][0]['direction'] == 'SAIDA'
+    review = operational.client.get(
+        f"/api/v1/operations/companies/{operational.company}/reviews/{emitted.json()['resource_id']}",
+        headers=operational.headers('accountant'),
+    )
+    assert review.json()['summary']['accounting_date'] == '2026-09-04'
+
+
+def test_nfe_recipient_is_allowed_and_unrelated_company_fails_closed(
+    operational: OperationalFixture,
+) -> None:
+    _set_company_tax_identifier(operational, '98.765.432/0001-98')
+    incoming = operational.client.post(
+        f'/api/v1/operations/companies/{operational.company}/imports/nfe',
+        params=_nfe_params(), content=NFE.read_bytes(), headers=operational.headers(
+            'proposer', content_type='application/xml', filename='incoming.xml',
+            key='nfe-incoming',
+        ),
+    )
+    assert incoming.status_code == 202, incoming.text
+    listing = operational.client.get(
+        f'/api/v1/operations/companies/{operational.company}/fiscal-documents',
+        headers=operational.headers('proposer'),
+    )
+    assert listing.json()['items'][0]['direction'] == 'ENTRADA'
+
+    _set_company_tax_identifier(operational, '11.111.111/0001-11')
+    mismatch = operational.client.post(
+        f'/api/v1/operations/companies/{operational.company}/imports/nfe',
+        params=_nfe_params(), content=NFE.read_bytes(), headers=operational.headers(
+            'proposer', content_type='application/xml', filename='unrelated.xml',
+            key='nfe-unrelated',
+        ),
+    )
+    assert mismatch.status_code == 422
+    assert mismatch.json() == {'detail': 'NFE_COMPANY_MISMATCH'}
+
+
+def test_nfe_missing_authoritative_company_cnpj_fails_closed(
+    operational: OperationalFixture,
+) -> None:
+    _set_company_tax_identifier(operational, '')
+    response = operational.client.post(
+        f'/api/v1/operations/companies/{operational.company}/imports/nfe',
+        params=_nfe_params(), content=NFE.read_bytes(), headers=operational.headers(
+            'proposer', content_type='application/xml', filename='missing-company-cnpj.xml',
+            key='nfe-company-tax-gap',
+        ),
+    )
+    assert response.status_code == 422
+    assert response.json() == {'detail': 'COMPANY_TAX_ID_GAP'}
 
 
 def test_authenticated_nfe_review_and_approval_e2e(operational: OperationalFixture) -> None:
@@ -603,11 +699,30 @@ def test_accounting_intelligence_projects_exact_proposal_rule_and_evidence(
     summary = listing.json()['items'][0]
     assert summary['journey_id'] == journey_id
     assert summary['rule_name'] == 'NF-e rule'
+    assert summary['document_number'] is not None
+    assert summary['debit_accounts'] == ['1.1 · Debit account']
+    assert summary['credit_accounts'] == ['3.1 · Credit account']
     assert Decimal(summary['total_debit']) == Decimal('100.00')
     assert Decimal(summary['total_credit']) == Decimal('100.00')
     assert summary['balanced'] is True
     assert summary['status'] == 'PENDING_APPROVAL'
     assert 'tenant_id' not in summary
+    for filters in (
+        {'account': 'Debit account'}, {'source': 'FiscalDocument'},
+        {'document': summary['document_number']}, {'rule': 'NF-e rule'},
+        {'created_from': '2026-09-04', 'created_to': '2026-09-04'},
+    ):
+        filtered = operational.client.get(
+            f'/api/v1/operations/companies/{operational.company}/accounting-proposals',
+            params=filters, headers=operational.headers('accountant'),
+        )
+        assert filtered.status_code == 200, filtered.text
+        assert filtered.json()['total'] == 1
+    no_match = operational.client.get(
+        f'/api/v1/operations/companies/{operational.company}/accounting-proposals',
+        params={'account': 'inexistente'}, headers=operational.headers('accountant'),
+    )
+    assert no_match.status_code == 200 and no_match.json()['total'] == 0
 
     detail = operational.client.get(
         f'/api/v1/operations/companies/{operational.company}/accounting-proposals/{journey_id}',
@@ -1035,3 +1150,97 @@ def test_nfe_import_rejects_cross_tenant_and_unknown_company_uniformly(
     )
     assert cross_tenant.status_code == unknown.status_code == 403
     assert cross_tenant.json() == unknown.json() == {'detail': 'access denied'}
+
+
+def test_bank_account_master_is_scoped_audited_and_controls_ofx_matching(
+    operational: OperationalFixture,
+) -> None:
+    base = f'/api/v1/operations/companies/{operational.company}'
+    payload = {
+        'bank_code': '237', 'bank_name': 'Banco de teste', 'branch': '123',
+        'account_number': '98765', 'account_type': 'CHECKING',
+        'nickname': 'Operacional', 'currency_code': 'BRL',
+    }
+    created = operational.client.post(
+        f'{base}/bank-accounts', json=payload, headers=operational.headers('proposer'),
+    )
+    assert created.status_code == 201, created.text
+    account = created.json()
+    assert account['branch_masked'].endswith('3')
+    assert '123' not in account['branch_masked']
+    assert account['account_masked'].endswith('65')
+    assert '98765' not in account['account_masked']
+    assert operational.client.get(
+        f'{base}/bank-accounts', headers=operational.headers('proposer'),
+    ).status_code == 200
+    denied = operational.client.get(
+        f'/api/v1/operations/companies/{operational.other_company}/bank-accounts',
+        headers=operational.headers('proposer'),
+    )
+    assert denied.status_code == 403
+
+    updated = operational.client.put(
+        f"{base}/bank-accounts/{account['id']}",
+        json={**payload, 'account_number': None, 'nickname': 'Principal'},
+        headers=operational.headers('proposer'),
+    )
+    assert updated.status_code == 200 and updated.json()['nickname'] == 'Principal'
+    inactive = operational.client.patch(
+        f"{base}/bank-accounts/{account['id']}/status", json={'status': 'INACTIVE'},
+        headers=operational.headers('proposer'),
+    )
+    assert inactive.status_code == 200 and inactive.json()['status'] == 'INACTIVE'
+    custom_ofx = OFX.replace(b'<BANKID>001</BANKID>', b'<BANKID>237</BANKID>').replace(
+        b'<BRANCHID>1</BRANCHID>', b'<BRANCHID>123</BRANCHID>',
+    ).replace(b'<ACCTID>0001</ACCTID>', b'<ACCTID>98765</ACCTID>')
+    rejected = operational.client.post(
+        f'{base}/imports/ofx', content=custom_ofx,
+        headers=operational.headers('proposer', content_type='application/x-ofx',
+                                    filename='inactive.ofx', key='inactive-bank-account'),
+    )
+    assert rejected.status_code == 202
+    assert rejected.json()['status'] == 'QUARANTINED'
+    operational.client.patch(
+        f"{base}/bank-accounts/{account['id']}/status", json={'status': 'ACTIVE'},
+        headers=operational.headers('proposer'),
+    )
+    accepted = operational.client.post(
+        f'{base}/imports/ofx', content=custom_ofx,
+        headers=operational.headers('proposer', content_type='application/x-ofx',
+                                    filename='active.ofx', key='active-bank-account'),
+    )
+    assert accepted.status_code == 202, accepted.text
+
+
+def test_document_metadata_is_persistent_searchable_and_scoped(
+    operational: OperationalFixture,
+) -> None:
+    base = f'/api/v1/operations/companies/{operational.company}'
+    imported = operational.client.post(
+        f'{base}/imports/nfe', params=_nfe_params(), content=NFE.read_bytes(),
+        headers=operational.headers('proposer', content_type='application/xml',
+                                    filename='metadata.xml', key='metadata-document'),
+    )
+    assert imported.status_code == 202, imported.text
+    listing = operational.client.get(
+        f'{base}/documents', headers=operational.headers('proposer'),
+    ).json()
+    receipt = next(item for item in listing['items'] if item['filename'] == 'metadata.xml')
+    payload = {'document_number': 'DOC-42', 'description': 'Documento de teste',
+               'observation': 'Conferir classificação'}
+    saved = operational.client.put(
+        f"{base}/documents/{receipt['id']}/metadata", json=payload,
+        headers=operational.headers('proposer'),
+    )
+    assert saved.status_code == 200, saved.text
+    assert saved.json()['metadata_version'] == 1
+    found = operational.client.get(
+        f'{base}/documents', params={'search': 'DOC-42'},
+        headers=operational.headers('proposer'),
+    ).json()
+    assert found['total'] == 1 and found['items'][0]['description'] == payload['description']
+    cross = operational.client.put(
+        f"/api/v1/operations/companies/{operational.other_company}/documents/{receipt['id']}/metadata",
+        json=payload, headers=operational.headers('proposer'),
+    )
+    assert cross.status_code == 403

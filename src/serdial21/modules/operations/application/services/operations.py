@@ -1,19 +1,24 @@
 '''Orquestra contratos operacionais sem mover regras dos domínios de origem.'''
 
-from dataclasses import dataclass
-from datetime import date, datetime
+from dataclasses import dataclass, replace
+from datetime import UTC, date, datetime
 from decimal import Decimal
 from hashlib import sha256
-from uuid import UUID
+from uuid import UUID, uuid4
 
 from serdial21.modules.access_control.application.services.authorization import (
     AuthorizationRequest, AuthorizationService,
 )
 from serdial21.modules.access_control.domain.permissions import PermissionCode
-from serdial21.modules.audit.application.services.audit import AuditService
+from serdial21.modules.audit.application.services.audit import AuditRecord, AuditService
 from serdial21.modules.audit.domain.entities import AuditOrigin
 from serdial21.modules.banking.application.services.ofx_importer import (
-    OfxImportRequest, OfxImportResult, OfxImportService,
+    OfxImportRequest, OfxImportResult, OfxImportService, _account_identity,
+)
+from serdial21.modules.banking.application.ports.repository import BankingRepository
+from serdial21.modules.banking.domain.entities import BankAccount
+from serdial21.modules.fiscal_documents.application.ports.parser import (
+    FiscalXmlParseError, NFe55Parser,
 )
 from serdial21.modules.intake_documents.application.services.intake import (
     DocumentIntakeService, IntakeContext, StartBatchRequest,
@@ -39,13 +44,21 @@ class OperationalUnavailableError(LookupError):
     '''Ausente e fora do escopo são indistinguíveis.'''
 
 
+class CompanyTaxIdentifierGapError(ValueError):
+    code = 'COMPANY_TAX_ID_GAP'
+
+
+class NFeCompanyMismatchError(ValueError):
+    code = 'NFE_COMPANY_MISMATCH'
+
+
 @dataclass(frozen=True, slots=True)
 class NFeImportCommand:
     tenant_id: UUID
     company_id: UUID
     actor_id: UUID
     idempotency_key: str
-    accounting_date: date
+    accounting_date: date | None
     period_start: date
     period_end: date
     approval_expires_at: datetime
@@ -63,6 +76,35 @@ class OfxImportCommand:
     content: bytes
     filename: str
     correlation_id: UUID
+
+
+@dataclass(frozen=True, slots=True)
+class BankAccountCommand:
+    tenant_id: UUID
+    company_id: UUID
+    actor_id: UUID
+    correlation_id: UUID
+    bank_code: str
+    bank_name: str | None
+    branch: str | None
+    account_number: str | None
+    account_type: str | None
+    nickname: str | None
+    currency_code: str = 'BRL'
+
+
+@dataclass(frozen=True, slots=True)
+class BankAccountView:
+    id: UUID
+    bank_code: str
+    bank_name: str | None
+    branch_masked: str
+    account_masked: str
+    account_type: str | None
+    nickname: str | None
+    status: str
+    created_at: datetime
+    updated_at: datetime | None
 
 
 @dataclass(frozen=True, slots=True)
@@ -123,8 +165,11 @@ class AccountingProposalSummary:
     source_type: str
     source_id: UUID
     source_document_receipt_id: UUID | None
+    document_number: str | None
     rule_version_id: UUID
     rule_name: str | None
+    debit_accounts: tuple[str, ...]
+    credit_accounts: tuple[str, ...]
     total_debit: Decimal
     total_credit: Decimal
     balanced: bool
@@ -290,6 +335,10 @@ class DocumentView:
     processing_status: str
     error_code: str | None
     received_at: datetime
+    document_number: str | None
+    description: str | None
+    observation: str | None
+    metadata_version: int | None
 
 
 @dataclass(frozen=True, slots=True)
@@ -343,6 +392,7 @@ class FiscalDocumentView:
     protocol_status_reason: str | None
     created_at: datetime
     document_receipt_id: UUID | None
+    direction: str | None
 
 
 @dataclass(frozen=True, slots=True)
@@ -436,6 +486,7 @@ class OperationalService:
         self, repository: OperationalQueryRepository,
         authorization: AuthorizationService, intake: DocumentIntakeService,
         nfe: NFeToDominioService, ofx: OfxImportService, audit: AuditService,
+        nfe_parser: NFe55Parser, banking: BankingRepository,
     ) -> None:
         self._repository = repository
         self._authorization = authorization
@@ -443,6 +494,8 @@ class OperationalService:
         self._nfe = nfe
         self._ofx = ofx
         self._audit = audit
+        self._nfe_parser = nfe_parser
+        self._banking = banking
         self._traceability = DecisionLineService(repository, authorization, audit)
 
     def company(
@@ -495,6 +548,106 @@ class OperationalService:
             tenant_id, company_id, row.artifact_id,
         ))
 
+    def update_document_metadata(
+        self, tenant_id: UUID, company_id: UUID, actor_id: UUID,
+        correlation_id: UUID, document_id: UUID, *, document_number: str | None,
+        description: str | None, observation: str | None,
+    ) -> DocumentView:
+        self._require(tenant_id, company_id, actor_id, 'company.manage')
+        before = self._repository.get_document(tenant_id, company_id, document_id)
+        if before is None:
+            raise OperationalUnavailableError()
+        clean = tuple(_optional_text(value) for value in (document_number, description, observation))
+        row = self._repository.update_document_metadata(
+            tenant_id, company_id, document_id, document_number=clean[0],
+            description=clean[1], observation=clean[2], updated_at=datetime.now(UTC),
+        )
+        if row is None:
+            raise OperationalUnavailableError()
+        self._audit.record(AuditRecord(
+            tenant_id=tenant_id, company_id=company_id, actor_id=actor_id,
+            origin=AuditOrigin.HUMAN, module='documents', action='document.metadata.updated',
+            subject_type='ArtifactReceipt', subject_id=document_id,
+            subject_version=row.metadata_version, before={'version': before.metadata_version},
+            after={'version': row.metadata_version, 'has_number': bool(row.document_number),
+                   'has_description': bool(row.description), 'has_observation': bool(row.observation)},
+            reason=None, correlation_id=correlation_id, causation_id=None,
+        ))
+        return _document_view(row)
+
+    def bank_accounts(self, tenant_id: UUID, company_id: UUID, actor_id: UUID) -> tuple[BankAccountView, ...]:
+        self._require(tenant_id, company_id, actor_id, 'company.read')
+        return tuple(_bank_account_view(item) for item in self._banking.list_accounts(tenant_id, company_id))
+
+    def create_bank_account(self, command: BankAccountCommand) -> BankAccountView:
+        self._require(command.tenant_id, command.company_id, command.actor_id, 'company.manage')
+        if self._repository.get_company(command.tenant_id, command.company_id) is None:
+            raise OperationalUnavailableError()
+        values = _bank_values(command)
+        identity = _account_identity(values[0], values[2], values[3], values[4])
+        if self._banking.find_account_any(command.tenant_id, command.company_id, identity) is not None:
+            raise OperationalConflictError('bank account already registered')
+        now = datetime.now(UTC)
+        account = BankAccount(uuid4(), command.tenant_id, command.company_id,
+            values[0], values[2], values[3], values[4], values[6], identity, now,
+            values[1], values[5], 'ACTIVE', now)
+        self._banking.add_account(account)
+        self._audit_bank_change(command, account, 'bank_account.created')
+        return _bank_account_view(account)
+
+    def update_bank_account(self, command: BankAccountCommand, account_id: UUID) -> BankAccountView:
+        self._require(command.tenant_id, command.company_id, command.actor_id, 'company.manage')
+        current = self._banking.get_account(command.tenant_id, command.company_id, account_id)
+        if current is None:
+            raise OperationalUnavailableError()
+        values = _bank_values(
+            command, existing_branch=current.branch_id,
+            existing_account_number=current.account_number,
+        )
+        identity = _account_identity(values[0], values[2], values[3], values[4])
+        duplicate = self._banking.find_account_any(command.tenant_id, command.company_id, identity)
+        if duplicate is not None and duplicate.id != account_id:
+            raise OperationalConflictError('bank account already registered')
+        updated = replace(current, bank_id=values[0], bank_name=values[1], branch_id=values[2],
+            account_number=values[3], account_type=values[4], nickname=values[5],
+            currency_code=values[6], external_identity=identity, updated_at=datetime.now(UTC))
+        self._banking.update_account(updated)
+        self._audit_bank_change(command, updated, 'bank_account.updated')
+        return _bank_account_view(updated)
+
+    def set_bank_account_status(
+        self, tenant_id: UUID, company_id: UUID, actor_id: UUID,
+        correlation_id: UUID, account_id: UUID, status: str,
+    ) -> BankAccountView:
+        self._require(tenant_id, company_id, actor_id, 'company.manage')
+        current = self._banking.get_account(tenant_id, company_id, account_id)
+        if current is None:
+            raise OperationalUnavailableError()
+        if status not in {'ACTIVE', 'INACTIVE'}:
+            raise ValueError('invalid bank account status')
+        if current.status == status:
+            return _bank_account_view(current)
+        updated = replace(current, status=status, updated_at=datetime.now(UTC))
+        self._banking.update_account(updated)
+        command = BankAccountCommand(tenant_id, company_id, actor_id, correlation_id,
+            current.bank_id or '', current.bank_name, current.branch_id or '',
+            current.account_number, current.account_type, current.nickname,
+            current.currency_code or 'BRL')
+        action = 'bank_account.activated' if status == 'ACTIVE' else 'bank_account.deactivated'
+        self._audit_bank_change(command, updated, action)
+        return _bank_account_view(updated)
+
+    def _audit_bank_change(self, command: BankAccountCommand, account: BankAccount, action: str) -> None:
+        self._audit.record(AuditRecord(
+            tenant_id=command.tenant_id, company_id=command.company_id,
+            actor_id=command.actor_id, origin=AuditOrigin.HUMAN, module='banking',
+            action=action, subject_type='BankAccount', subject_id=account.id,
+            subject_version=None, before=None,
+            after={'bank_code': account.bank_id, 'branch_masked': _masked(account.branch_id, visible=2),
+                   'account_masked': _masked(account.account_number, visible=4), 'status': account.status},
+            reason=None, correlation_id=command.correlation_id, causation_id=None,
+        ))
+
     def document_summary(
         self, tenant_id: UUID, company_id: UUID, actor_id: UUID,
     ) -> DocumentSummary:
@@ -514,7 +667,13 @@ class OperationalService:
             tenant_id, company_id, offset=offset, limit=limit, search=search,
             status=status, issued_from=issued_from, issued_to=issued_to,
         )
-        return FiscalPage(tuple(_fiscal_view(row) for row in rows), total, offset, limit)
+        company = self._repository.get_company(tenant_id, company_id)
+        if company is None:
+            raise OperationalUnavailableError()
+        return FiscalPage(
+            tuple(_fiscal_view(row, company.tax_identifier) for row in rows),
+            total, offset, limit,
+        )
 
     def fiscal_document(
         self, tenant_id: UUID, company_id: UUID, actor_id: UUID,
@@ -527,8 +686,11 @@ class OperationalService:
         items, total = self._repository.list_fiscal_items(
             tenant_id, company_id, fiscal_document_id, limit=item_limit,
         )
+        company = self._repository.get_company(tenant_id, company_id)
+        if company is None:
+            raise OperationalUnavailableError()
         return FiscalDetail(
-            _fiscal_view(row), tuple(FiscalItemView(
+            _fiscal_view(row, company.tax_identifier), tuple(FiscalItemView(
                 item.id, item.sequence, item.product_code, item.description,
                 item.ncm, item.cfop, item.commercial_unit, item.quantity,
                 item.unit_value, item.gross_total, item.discount_total,
@@ -573,6 +735,29 @@ class OperationalService:
         ))
 
     def import_nfe(self, command: NFeImportCommand) -> Journey:
+        self._require(command.tenant_id, command.company_id, command.actor_id, 'journal.propose')
+        company = self._repository.get_company(command.tenant_id, command.company_id)
+        if company is None:
+            raise OperationalUnavailableError()
+        company_tax_id = _digits(company.tax_identifier)
+        if len(company_tax_id) != 14:
+            raise CompanyTaxIdentifierGapError('authoritative company CNPJ required')
+        try:
+            parsed = self._nfe_parser.parse(command.content)
+        except FiscalXmlParseError:
+            if command.accounting_date is None:
+                raise ValueError('accounting date unavailable for invalid XML') from None
+        else:
+            if company_tax_id not in {
+                _digits(parsed.issuer_tax_id), _digits(parsed.recipient_tax_id),
+            }:
+                raise NFeCompanyMismatchError('NF-e does not belong to selected company')
+            if command.accounting_date is None:
+                fiscal_at = parsed.issued_at or parsed.movement_at
+                if fiscal_at is None:
+                    raise ValueError('authoritative fiscal date required')
+                command = replace(command, accounting_date=fiscal_at.date())
+        assert command.accounting_date is not None
         return self._nfe.prepare(JourneyCommand(
             command.tenant_id, command.company_id, command.actor_id,
             command.idempotency_key, command.accounting_date,
@@ -652,10 +837,17 @@ class OperationalService:
     def accounting_proposals(
         self, tenant_id: UUID, company_id: UUID, actor_id: UUID, *,
         offset: int, limit: int, status: str | None = None,
+        created_from: date | None = None, created_to: date | None = None,
+        account: str | None = None, source: str | None = None,
+        document: str | None = None, rule: str | None = None,
     ) -> AccountingProposalPage:
         self._require(tenant_id, company_id, actor_id, 'journal.read')
+        if created_from is not None and created_to is not None and created_from > created_to:
+            raise ValueError('invalid date range')
         rows, total = self._repository.list_proposal_journeys(
             tenant_id, company_id, offset=offset, limit=limit, status=status,
+            created_from=created_from, created_to=created_to,
+            account=account, source=source, document=document, rule=rule,
         )
         return AccountingProposalPage(tuple(
             self._proposal_summary(tenant_id, company_id, journey) for journey in rows
@@ -755,13 +947,23 @@ class OperationalService:
             tenant_id, company_id, source.source_id,
         ) if source.source_type == 'FiscalDocument' else None
         rule_id = UUID(journey.evaluation.proposal['rule_version_id'])
+        accounts = {item.id: item for item in journey.plan.accounts}
         return AccountingProposalSummary(
             journey.id, journey.company_id, journey.version, journey.status,
             journey.proposal.id, journey.revision.id, journey.revision_hash,
             journey.revision.accounting_date,
             source.source_type, source.source_id,
-            fiscal.receipt_id if fiscal else None, rule_id,
+            fiscal.receipt_id if fiscal else None,
+            fiscal.document_number if fiscal else None, rule_id,
             self._repository.rule_name(tenant_id, company_id, rule_id),
+            tuple(dict.fromkeys(
+                f'{accounts[line.account_version_id].code} · {accounts[line.account_version_id].name}'
+                for line in journey.lines if line.debit != Decimal('0')
+            )),
+            tuple(dict.fromkeys(
+                f'{accounts[line.account_version_id].code} · {accounts[line.account_version_id].name}'
+                for line in journey.lines if line.credit != Decimal('0')
+            )),
             sum((line.debit for line in journey.lines), Decimal('0')),
             sum((line.credit for line in journey.lines), Decimal('0')),
             sum((line.debit for line in journey.lines), Decimal('0'))
@@ -943,10 +1145,42 @@ def _document_view(row: object) -> DocumentView:
         row.id, row.company_id, row.batch_id, row.filename, row.media_type,
         row.size_bytes, row.source, row.channel, row.receipt_result,
         row.processing_status, row.error_code, row.received_at,
+        row.document_number, row.description, row.observation, row.metadata_version,
     )
 
 
-def _fiscal_view(row: object) -> FiscalDocumentView:
+def _optional_text(value: str | None) -> str | None:
+    clean = value.strip() if value else ''
+    return clean or None
+
+
+def _bank_values(
+    command: BankAccountCommand, *, existing_branch: str | None = None,
+    existing_account_number: str | None = None,
+) -> tuple[str, str | None, str, str, str | None, str | None, str]:
+    bank = command.bank_code.strip()
+    branch = (command.branch or existing_branch or '').strip()
+    account = (command.account_number or existing_account_number or '').strip()
+    if not bank or not branch or not account:
+        raise ValueError('bank, branch and account required')
+    return (bank, _optional_text(command.bank_name), branch, account,
+            _optional_text(command.account_type), _optional_text(command.nickname),
+            command.currency_code.strip().upper() or 'BRL')
+
+
+def _bank_account_view(account: BankAccount) -> BankAccountView:
+    return BankAccountView(account.id, account.bank_id or '', account.bank_name,
+        _masked(account.branch_id, visible=2) or '••••',
+        _masked(account.account_number, visible=4) or '••••',
+        account.account_type, account.nickname, account.status,
+        account.created_at, account.updated_at)
+
+
+def _fiscal_view(row: object, company_tax_identifier: str | None = None) -> FiscalDocumentView:
+    company_tax_id = _digits(company_tax_identifier)
+    direction = ('SAIDA' if company_tax_id and company_tax_id == _digits(row.issuer_tax_id)
+                 else 'ENTRADA' if company_tax_id and company_tax_id == _digits(row.recipient_tax_id)
+                 else None)
     return FiscalDocumentView(
         row.id, row.company_id, row.access_key, row.model, row.schema_version,
         row.series, row.document_number, row.operation_nature,
@@ -955,7 +1189,7 @@ def _fiscal_view(row: object) -> FiscalDocumentView:
         row.products_total, row.freight_total, row.insurance_total,
         row.discount_total, row.other_total, row.tax_total, row.invoice_total,
         row.observed_status, row.protocol_status_code,
-        row.protocol_status_reason, row.created_at, row.receipt_id,
+        row.protocol_status_reason, row.created_at, row.receipt_id, direction,
     )
 
 
@@ -966,6 +1200,10 @@ def _statement_view(row: object) -> BankStatementView:
         row.start_date, row.end_date, row.opening_balance, row.closing_balance,
         row.currency_code, row.sign_policy, row.created_at, row.receipt_id,
     )
+
+
+def _digits(value: str | None) -> str:
+    return ''.join(character for character in (value or '') if character.isdigit())
 
 
 def _masked(value: str | None, *, visible: int) -> str | None:

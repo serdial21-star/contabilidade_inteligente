@@ -13,6 +13,11 @@
       documents: (id, filters) => apiClient.documents(id, filters),
       document: (companyId, documentId) => apiClient.document(companyId, documentId),
       summary: (id) => apiClient.documentSummary(id),
+      updateDocumentMetadata: (companyId, documentId, payload) => apiClient.updateDocumentMetadata(companyId, documentId, payload),
+      bankAccounts: (id) => apiClient.bankAccounts(id),
+      createBankAccount: (id, payload) => apiClient.createBankAccount(id, payload),
+      updateBankAccount: (companyId, accountId, payload) => apiClient.updateBankAccount(companyId, accountId, payload),
+      setBankAccountStatus: (companyId, accountId, status) => apiClient.updateBankAccountStatus(companyId, accountId, status),
       decisionLine: (companyId, rootType, id) => apiClient.decisionLine(companyId, rootType, id),
     });
     return Object.freeze({
@@ -25,6 +30,11 @@
       documents: provider.documents,
       document: provider.document,
       summary: provider.summary,
+      updateDocumentMetadata: provider.updateDocumentMetadata,
+      bankAccounts: provider.bankAccounts,
+      createBankAccount: provider.createBankAccount,
+      updateBankAccount: provider.updateBankAccount,
+      setBankAccountStatus: provider.setBankAccountStatus,
       decisionLine: provider.decisionLine,
     });
   }

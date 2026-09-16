@@ -1,12 +1,14 @@
 '''Regressão do OFX: sinal de origem e deduplicação entre extratos.'''
 
 from dataclasses import dataclass
+from datetime import UTC, datetime
 from hashlib import sha256
 from types import SimpleNamespace
 from uuid import UUID, uuid4
 
 from serdial21.modules.banking.adapters.inbound.ofx import SafeOfxParser
 from serdial21.modules.banking.application.services.ofx_importer import (
+    _account_identity,
     OfxImportRequest,
     OfxImportService,
 )
@@ -106,6 +108,11 @@ def test_ofx_preserves_sign_and_deduplicates_fitid_across_statements() -> None:
     tenant_id, company_id = uuid4(), uuid4()
     context = IntakeContext(tenant_id, company_id, uuid4(), AuditOrigin.HUMAN, uuid4())
     repository = Repository()
+    repository.add_account(BankAccount(
+        uuid4(), tenant_id, company_id, '001', '1234', '000123',
+        'CHECKING', 'BRL', _account_identity('001', '1234', '000123', 'CHECKING'),
+        datetime.now(UTC),
+    ))
     service = OfxImportService(Intake(), SafeOfxParser(), repository, Audit([]))
     first = service.import_ofx(context, OfxImportRequest(uuid4(), OFX, 'first.ofx'))
     second = service.import_ofx(context, OfxImportRequest(uuid4(), OFX + b'\n', 'second.ofx'))
@@ -114,3 +121,38 @@ def test_ofx_preserves_sign_and_deduplicates_fitid_across_statements() -> None:
     assert second.imported_transactions == 0
     assert second.duplicate_transactions == 1
     assert len(repository.transactions) == 1
+
+
+def test_ofx_without_registered_company_account_is_quarantined() -> None:
+    tenant_id, company_id = uuid4(), uuid4()
+    context = IntakeContext(tenant_id, company_id, uuid4(), AuditOrigin.HUMAN, uuid4())
+    repository = Repository()
+    audit = Audit([])
+
+    result = OfxImportService(Intake(), SafeOfxParser(), repository, audit).import_ofx(
+        context, OfxImportRequest(uuid4(), OFX, 'unregistered.ofx'),
+    )
+
+    assert result.status == 'QUARANTINED'
+    assert result.issue_codes == ('COMPANY_BANK_ACCOUNT_NOT_REGISTERED',)
+    assert repository.accounts == []
+    assert repository.statements == []
+    assert repository.transactions == []
+    assert getattr(audit.records[0], 'action') == 'ofx.rejected_account_mismatch'
+
+
+def test_ofx_account_registered_for_another_company_does_not_authorize_import() -> None:
+    tenant_id, company_id = uuid4(), uuid4()
+    repository = Repository()
+    repository.add_account(BankAccount(
+        uuid4(), tenant_id, uuid4(), '001', '1234', '000123', 'CHECKING',
+        'BRL', _account_identity('001', '1234', '000123', 'CHECKING'),
+        datetime.now(UTC),
+    ))
+    context = IntakeContext(tenant_id, company_id, uuid4(), AuditOrigin.HUMAN, uuid4())
+
+    result = OfxImportService(Intake(), SafeOfxParser(), repository, Audit([])).import_ofx(
+        context, OfxImportRequest(uuid4(), OFX, 'cross-company.ofx'),
+    )
+
+    assert result.status == 'QUARANTINED'

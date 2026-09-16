@@ -50,6 +50,14 @@ def test_rule_and_mapping_views_are_read_only_and_explanatory() -> None:
     assert 'rule-builder' not in app
 
 
+def test_accounting_queue_and_chart_offer_professional_search_fields() -> None:
+    app = source('app.js')
+    for marker in ('name="account"', 'name="source"', 'name="document"',
+                   'name="rule"', 'Data contábil de', 'catalog-account-search',
+                   'debit_accounts', 'credit_accounts'):
+        assert marker in app
+
+
 def test_phase08_state_is_invalidated_on_company_change_and_logout() -> None:
     app = source('app.js')
     assert 'accountingRequest += 1; accountingModel = null' in app

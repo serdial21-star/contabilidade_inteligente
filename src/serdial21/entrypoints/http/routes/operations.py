@@ -22,6 +22,7 @@ from serdial21.modules.intake_documents.application.services.intake import (
 )
 from serdial21.modules.locks.domain.entities import AccountLockedError
 from serdial21.modules.operations.application.services.operations import (
+    BankAccountCommand, CompanyTaxIdentifierGapError, NFeCompanyMismatchError,
     NFeImportCommand, OfxImportCommand, OperationalConflictError,
     OperationalUnavailableError,
 )
@@ -181,6 +182,44 @@ class DocumentResponse(BaseModel):
     processing_status: str
     error_code: str | None
     received_at: datetime
+    document_number: str | None
+    description: str | None
+    observation: str | None
+    metadata_version: int | None
+
+
+class DocumentMetadataRequest(BaseModel):
+    document_number: str | None = Field(default=None, max_length=100)
+    description: str | None = Field(default=None, max_length=500)
+    observation: str | None = Field(default=None, max_length=1000)
+
+
+class BankAccountRequest(BaseModel):
+    bank_code: str = Field(min_length=1, max_length=40)
+    bank_name: str | None = Field(default=None, max_length=120)
+    branch: str | None = Field(default=None, max_length=40)
+    account_number: str | None = Field(default=None, max_length=100)
+    account_type: str | None = Field(default=None, max_length=30)
+    nickname: str | None = Field(default=None, max_length=120)
+    currency_code: str = Field(default='BRL', min_length=3, max_length=10)
+
+
+class BankAccountStatusRequest(BaseModel):
+    status: Literal['ACTIVE', 'INACTIVE']
+
+
+class BankAccountResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: UUID
+    bank_code: str
+    bank_name: str | None
+    branch_masked: str
+    account_masked: str
+    account_type: str | None
+    nickname: str | None
+    status: str
+    created_at: datetime
+    updated_at: datetime | None
 
 
 class DocumentPageResponse(BaseModel):
@@ -232,6 +271,7 @@ class FiscalDocumentResponse(BaseModel):
     protocol_status_reason: str | None
     created_at: datetime
     document_receipt_id: UUID | None
+    direction: str | None
 
 
 class FiscalItemResponse(BaseModel):
@@ -333,8 +373,11 @@ class AccountingProposalSummaryResponse(BaseModel):
     source_type: str
     source_id: UUID
     source_document_receipt_id: UUID | None
+    document_number: str | None
     rule_version_id: UUID
     rule_name: str | None
+    debit_accounts: list[str]
+    credit_accounts: list[str]
     total_debit: Decimal
     total_credit: Decimal
     balanced: bool
@@ -467,6 +510,70 @@ def company_detail(
     return CompanyResponse.model_validate(item)
 
 
+def _bank_command(
+    company_id: UUID, payload: BankAccountRequest,
+    principal: AuthenticatedPrincipal, request: Request,
+) -> BankAccountCommand:
+    return BankAccountCommand(
+        principal.identity.tenant_id, company_id, principal.user_id,
+        UUID(request.state.correlation_id), payload.bank_code, payload.bank_name,
+        payload.branch, payload.account_number, payload.account_type,
+        payload.nickname, payload.currency_code,
+    )
+
+
+@router.get('/bank-accounts', response_model=list[BankAccountResponse])
+def bank_accounts(company_id: UUID, request: Request, principal: PrincipalDependency,
+                  session: SessionDependency) -> list[BankAccountResponse]:
+    try:
+        items = create_operational_runtime(session, request.app.state.settings).bank_accounts(
+            principal.identity.tenant_id, company_id, principal.user_id,
+        )
+    except Exception as error:
+        _map_error(session, error)
+    return [BankAccountResponse.model_validate(item) for item in items]
+
+
+@router.post('/bank-accounts', response_model=BankAccountResponse, status_code=201)
+def create_bank_account(company_id: UUID, payload: BankAccountRequest, request: Request,
+                        principal: PrincipalDependency, session: SessionDependency) -> BankAccountResponse:
+    try:
+        item = create_operational_runtime(session, request.app.state.settings).create_bank_account(
+            _bank_command(company_id, payload, principal, request),
+        )
+    except Exception as error:
+        _map_error(session, error)
+    return BankAccountResponse.model_validate(item)
+
+
+@router.put('/bank-accounts/{account_id}', response_model=BankAccountResponse)
+def update_bank_account(company_id: UUID, account_id: UUID, payload: BankAccountRequest,
+                        request: Request, principal: PrincipalDependency,
+                        session: SessionDependency) -> BankAccountResponse:
+    try:
+        item = create_operational_runtime(session, request.app.state.settings).update_bank_account(
+            _bank_command(company_id, payload, principal, request), account_id,
+        )
+    except Exception as error:
+        _map_error(session, error)
+    return BankAccountResponse.model_validate(item)
+
+
+@router.patch('/bank-accounts/{account_id}/status', response_model=BankAccountResponse)
+def update_bank_account_status(company_id: UUID, account_id: UUID,
+                               payload: BankAccountStatusRequest, request: Request,
+                               principal: PrincipalDependency,
+                               session: SessionDependency) -> BankAccountResponse:
+    try:
+        item = create_operational_runtime(session, request.app.state.settings).set_bank_account_status(
+            principal.identity.tenant_id, company_id, principal.user_id,
+            UUID(request.state.correlation_id), account_id, payload.status,
+        )
+    except Exception as error:
+        _map_error(session, error)
+    return BankAccountResponse.model_validate(item)
+
+
 @router.get('/documents', response_model=DocumentPageResponse)
 def documents(
     company_id: UUID, request: Request, principal: PrincipalDependency,
@@ -522,6 +629,23 @@ def document_detail(
         fiscal_document_id=item.fiscal_document_id,
         bank_statement_id=item.bank_statement_id,
     )
+
+
+@router.put('/documents/{document_id}/metadata', response_model=DocumentResponse)
+def update_document_metadata(
+    company_id: UUID, document_id: UUID, payload: DocumentMetadataRequest,
+    request: Request, principal: PrincipalDependency, session: SessionDependency,
+) -> DocumentResponse:
+    try:
+        item = create_operational_runtime(session, request.app.state.settings).update_document_metadata(
+            principal.identity.tenant_id, company_id, principal.user_id,
+            UUID(request.state.correlation_id), document_id,
+            document_number=payload.document_number, description=payload.description,
+            observation=payload.observation,
+        )
+    except Exception as error:
+        _map_error(session, error)
+    return DocumentResponse.model_validate(item)
 
 
 @router.get('/fiscal-documents', response_model=FiscalPageResponse)
@@ -624,11 +748,18 @@ def accounting_proposals(
                 'BLOCKED_FOR_HOMOLOGATION', 'SUPERSEDED'] | None,
         Query(alias='status'),
     ] = None,
+    created_from: date | None = None, created_to: date | None = None,
+    account: Annotated[str | None, Query(min_length=1, max_length=100)] = None,
+    source: Annotated[str | None, Query(min_length=1, max_length=100)] = None,
+    document: Annotated[str | None, Query(min_length=1, max_length=100)] = None,
+    rule: Annotated[str | None, Query(min_length=1, max_length=100)] = None,
 ) -> AccountingProposalPageResponse:
     try:
         page = create_operational_runtime(session, request.app.state.settings).accounting_proposals(
             principal.identity.tenant_id, company_id, principal.user_id,
             offset=offset, limit=limit, status=proposal_status,
+            created_from=created_from, created_to=created_to,
+            account=account, source=source, document=document, rule=rule,
         )
     except Exception as error:
         _map_error(session, error)
@@ -734,9 +865,10 @@ def accounting_account_detail(
 async def import_nfe(
     company_id: UUID, request: Request, principal: PrincipalDependency,
     session: SessionDependency, idempotency_key: IdempotencyKey,
-    filename: Filename, accounting_date: Annotated[date, Query()],
-    period_start: Annotated[date, Query()], period_end: Annotated[date, Query()],
+    filename: Filename, period_start: Annotated[date, Query()],
+    period_end: Annotated[date, Query()],
     approval_expires_at: Annotated[datetime, Query()],
+    accounting_date: Annotated[date | None, Query()] = None,
 ) -> ImportResponse:
     _validate_file(filename, '.xml')
     _validate_media(request, {'application/xml', 'text/xml'})
@@ -959,6 +1091,9 @@ def _map_error(session: Session, error: Exception) -> None:
         raise HTTPException(status_code=403, detail='access denied') from None
     if isinstance(error, PermissionError):
         raise HTTPException(status_code=403, detail='access denied') from None
+    if isinstance(error, (CompanyTaxIdentifierGapError, NFeCompanyMismatchError)):
+        session.rollback()
+        raise HTTPException(status_code=422, detail=error.code) from None
     if isinstance(error, (OperationalUnavailableError, JourneyUnavailableError,
                           DecisionLineUnavailableError,
                           IntakeResourceUnavailableError)):

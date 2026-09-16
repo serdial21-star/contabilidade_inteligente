@@ -73,6 +73,50 @@ class OfxImportService:
             return OfxImportResult('QUARANTINED', upload.artifact_id, upload.receipt_id, run.id, (), (), 0, 0, (error.code,))
 
         self._intake.require_access(context)
+        accounts: list[BankAccount] = []
+        for item in parsed.statements:
+            external_identity = _account_identity(
+                item.bank_id, item.branch_id, item.account_number, item.account_type,
+            )
+            account = self._repository.find_account(
+                context.tenant_id, context.company_id, external_identity,
+            )
+            legacy_identity = _legacy_account_identity(
+                item.bank_id, item.branch_id, item.account_number, item.account_type,
+            )
+            if account is None and legacy_identity != external_identity:
+                account = self._repository.find_account(
+                    context.tenant_id, context.company_id, legacy_identity,
+                )
+            if account is None:
+                run = self._intake.record_transformation(context, TransformationRequest(
+                    artifact_id=upload.artifact_id, previous_run_id=None,
+                    parser_name=self._parser.parser_name,
+                    parser_version=self._parser.parser_version,
+                    schema_version=parsed.schema_version, output_hash=None,
+                    status='FAILED'))
+                code = 'COMPANY_BANK_ACCOUNT_NOT_REGISTERED'
+                self._intake.add_validation_issue(context, ValidationIssueRequest(
+                    transformation_run_id=run.id, code=code, severity='ERROR',
+                    field_path='statement.account', rule_reference=parsed.schema_version,
+                    message='OFX account is not registered for selected company',
+                    resolution_status='QUARANTINED'))
+                self._audit.record(AuditRecord(
+                    tenant_id=context.tenant_id, company_id=context.company_id,
+                    actor_id=context.actor_id, origin=context.origin, module='banking',
+                    action='ofx.rejected_account_mismatch',
+                    subject_type='TransformationRun', subject_id=run.id,
+                    subject_version=None, before=None,
+                    after={'schema_version': parsed.schema_version, 'reason': code},
+                    reason=None, correlation_id=context.correlation_id,
+                    causation_id=context.causation_id))
+                self._record_metrics(started, 'failure')
+                return OfxImportResult(
+                    'QUARANTINED', upload.artifact_id, upload.receipt_id, run.id,
+                    (), (), 0, 0, (code,),
+                )
+            accounts.append(account)
+
         run = self._intake.record_transformation(context, TransformationRequest(
             artifact_id=upload.artifact_id, previous_run_id=None, parser_name=self._parser.parser_name,
             parser_version=self._parser.parser_version, schema_version=parsed.schema_version,
@@ -83,14 +127,8 @@ class OfxImportService:
         statement_ids: list[UUID] = []
         imported = duplicates = 0
         now = self._now()
-        for item in parsed.statements:
+        for item, account in zip(parsed.statements, accounts, strict=True):
             external_identity = _account_identity(item.bank_id, item.branch_id, item.account_number, item.account_type)
-            account = self._repository.find_account(context.tenant_id, context.company_id, external_identity)
-            if account is None:
-                account = BankAccount(self._id_factory(), context.tenant_id, context.company_id, item.bank_id,
-                    item.branch_id, item.account_number, item.account_type, item.currency_code,
-                    external_identity, now)
-                self._repository.add_account(account)
             account_ids.append(account.id)
             statement = self._repository.find_statement_by_artifact(context.tenant_id, context.company_id, account.id, upload.artifact_id)
             if statement is None:
@@ -143,7 +181,18 @@ class OfxImportService:
 
 
 def _account_identity(bank: str | None, branch: str | None, account: str, account_type: str | None) -> str:
+    return '|'.join((
+        _normalized_identifier(bank), _normalized_identifier(branch),
+        _normalized_identifier(account), (account_type or '').strip().upper(),
+    ))
+
+
+def _legacy_account_identity(bank: str | None, branch: str | None, account: str, account_type: str | None) -> str:
     return '|'.join((bank or '', branch or '', account, account_type or ''))
+
+
+def _normalized_identifier(value: str | None) -> str:
+    return ''.join(character for character in (value or '').strip().upper() if character.isalnum())
 
 
 def _fingerprint(value: object) -> str:

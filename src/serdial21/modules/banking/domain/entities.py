@@ -18,6 +18,10 @@ class BankAccount:
     currency_code: str | None
     external_identity: str
     created_at: datetime
+    bank_name: str | None = None
+    nickname: str | None = None
+    status: str = 'ACTIVE'
+    updated_at: datetime | None = None
 
 
 @dataclass(frozen=True, slots=True)
