@@ -56,6 +56,18 @@ def test_cross_tenant_search_returns_no_data_and_is_denied():
     tenant, company, actor, correlation, request, _, search, _, _ = setup()
     with pytest.raises(LookupError): search.execute(uuid4(), company, request.id, SubjectLocator('email', 'x@example.invalid'), actor, correlation)
 
+def test_cross_company_search_and_report_return_no_data_and_are_denied():
+    tenant, _, actor, correlation, request, events, search, authorization, audit = setup()
+    other_company = uuid4()
+    locator = SubjectLocator('email', 'privacy-test-unique@example.invalid')
+    with pytest.raises(LookupError):
+        search.execute(tenant, other_company, request.id, locator, actor, correlation)
+    with pytest.raises(LookupError):
+        GenerateDSRAccessReport(search, authorization, audit).execute(
+            tenant, other_company, request.id, locator, actor, correlation
+        )
+    assert not any(event.action in {'dsr.search_executed', 'dsr.report_generated'} for event in events.events)
+
 def test_report_requires_both_permissions_is_memory_only_and_audited():
     tenant, company, actor, correlation, request, events, search, authorization, audit = setup()
     report = GenerateDSRAccessReport(search, authorization, audit).execute(tenant, company, request.id, SubjectLocator('email', 'privacy-test-unique@example.invalid'), actor, correlation)

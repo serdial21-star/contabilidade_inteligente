@@ -45,3 +45,8 @@ sem copiar payload sensível.
 Falha de AuditEvent em caminho decisório é condição crítica porque efeito e
 auditoria devem ser atômicos. Falha de agregador de logs/métricas/alertas é
 best-effort e deve ser reparada, mas não autoriza ignorar falha de auditoria.
+
+Incidentes com possível exposição de dado pessoal ou empresarial seguem também
+o [playbook de privacidade](privacy/PRIVACY_INCIDENT_PLAYBOOK.md). Engenharia
+preserva fatos e evidências; a qualificação do incidente, destinatários e prazo
+de qualquer notificação permanecem `LEGAL_REVIEW_REQUIRED`.

@@ -48,7 +48,7 @@ class SearchDataSubjectData:
  def execute(self,tenant_id,company_id,request_id,locator,actor_id,correlation_id)->DataSubjectAccessReport:
   self._authorization.require(AuthorizationRequest(tenant_id,actor_id,PermissionCode('privacy.dsr.search'),company_id))
   request=self._repo.get_dsr(tenant_id,request_id)
-  if request is None:raise PrivacyUnavailableError()
+  if request is None or request.company_id!=company_id:raise PrivacyUnavailableError()
   if request.status is not DsrStatus.IN_REVIEW:raise PermissionError('identity verification required')
   results=self._registry.search(locator,tenant_id);records=tuple(r for result in results for r in result.records);manual=sum(x.status is SourceStatus.MANUAL_SOURCE for x in results);not_connected=sum(x.status is SourceStatus.NOT_CONNECTED for x in results)
   manifest=DSRSearchManifest(len(results),sum(x.status is SourceStatus.SEARCHED for x in results),manual,not_connected,len(records),tuple(sorted({x.category for x in records})),datetime.now(UTC),'PARTIAL_WITH_MANUAL_SOURCES' if manual or not_connected else 'COMPLETE')

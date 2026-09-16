@@ -22,7 +22,8 @@
 | DEPENDENCIES | lock/hashes reproduzíveis para build de produção | CONFIG_REQUIRED |
 | DEPLOYMENT | contratos de observabilidade, alerta e recuperação Phase 12 | READY |
 | DEPLOYMENT | agregador, transporte real, backup externo cifrado e drill MariaDB final | INFRA_REQUIRED |
-| DEPLOYMENT | privacidade/legal Phase 13 e UAT Phase 14 | BLOCKER |
+| DEPLOYMENT | controles técnicos de privacidade Phase 13 | READY |
+| DEPLOYMENT | revisão jurídica/contratual humana e UAT Phase 14 | BLOCKER |
 | DEPLOYMENT | real data e exposição externa formalmente aprovados | BLOCKER |
 
 Resultado atual: aplicação pronta para configurar infraestrutura de homologação, mas `APPLICATION EXTERNAL EXPOSURE = NO_GO`.

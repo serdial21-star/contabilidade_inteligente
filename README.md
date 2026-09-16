@@ -1,5 +1,20 @@
 # Serdial21 Contabilidade Inteligente
 
+## Phase 13 — LGPD + Legal Gates
+
+A prontidão técnica de privacidade foi revisada sem declarar conformidade
+jurídica. O módulo existente de retenção, Legal Hold e DSR foi reutilizado; a
+fronteira de empresa das ações DSR e da liberação de hold foi reforçada. O
+inventário, os fluxos, a retenção, os fornecedores, os riscos e os insumos para
+ROPA/RIPD e documentos jurídicos estão em
+[docs/privacy](docs/privacy/PHASE_13_TECHNICAL_ASSESSMENT.md) e
+[docs/legal](docs/legal/LGPD_LEGAL_REVIEW_CHECKLIST.md).
+
+`TECHNICAL_PRIVACY_GATE = PASS` não significa conformidade legal. Os gates
+jurídico e contratual permanecem pendentes de aprovação humana. Dados reais,
+exposição externa, IdP de produção e execução da migration 0012 continuam
+bloqueados; System A permanece adiado e a integração Domínio não está ativa.
+
 ## Phase 12 — Observability + Recovery
 
 A aplicação agora emite logs JSON sanitizados com request/correlation IDs,

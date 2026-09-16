@@ -2,7 +2,7 @@ from datetime import UTC, datetime, timedelta
 from uuid import uuid4
 import pytest
 from serdial21.modules.audit.application.services.audit import AuditService
-from serdial21.modules.privacy.application.services import DataSubjectRequestService, DestructiveRetentionDenied, LegalHoldService, RetentionDecisionService, RetentionRunner
+from serdial21.modules.privacy.application.services import DataSubjectRequestService, DestructiveRetentionDenied, LegalHoldService, PrivacyUnavailableError, RetentionDecisionService, RetentionRunner
 from serdial21.modules.privacy.domain.entities import ApprovalStatus, RetentionCandidate, RetentionDecision, RetentionPolicy
 
 class Repo:
@@ -26,7 +26,7 @@ def test_hold_blocks_then_release_re_evaluates():
  repo.add_policy(RetentionPolicy(uuid4(),t,'USER',1,'CREATED','PENDING','NONE',ApprovalStatus.APPROVED,None,True));service=RetentionDecisionService(repo,AuditService(aud),clock=lambda:now);candidate=RetentionCandidate(t,c,'User',r,'USER',now-timedelta(days=2))
  hold=LegalHoldService(repo,AuditService(aud),clock=lambda:now).create(t,c,'User',r,'ticket',a,co)
  assert service.evaluate(candidate,actor_id=a,correlation_id=co).decision is RetentionDecision.LEGAL_HOLD
- LegalHoldService(repo,AuditService(aud),clock=lambda:now).release(t,hold.id,a,co)
+ LegalHoldService(repo,AuditService(aud),clock=lambda:now).release(t,c,hold.id,a,co)
  assert service.evaluate(candidate,actor_id=a,correlation_id=co).decision is RetentionDecision.ELIGIBLE_FOR_RETENTION_ACTION
  assert len(aud.events)>=4
 def test_pending_and_destructive_are_fail_closed():
@@ -34,9 +34,18 @@ def test_pending_and_destructive_are_fail_closed():
  assert service.evaluate(x,actor_id=a,correlation_id=co).decision is RetentionDecision.PENDING_POLICY_APPROVAL
  with pytest.raises(DestructiveRetentionDenied):RetentionRunner(service,dry_run=False)
 def test_dsr_requires_identity_and_is_tenant_scoped():
- t,a,co=uuid4(),uuid4(),uuid4();repo=Repo();s=DataSubjectRequestService(repo,AuditService(AuditRepo()))
- request=s.create(t,None,'person@example.test',a,co)
- with pytest.raises(ValueError):s.complete(t,request.id,a,co)
- assert s.verify_identity(t,request.id,a,co).status.value=='IN_REVIEW'
- assert s.complete(t,request.id,a,co).status.value=='COMPLETED'
+ t,c,a,co=uuid4(),uuid4(),uuid4(),uuid4();repo=Repo();s=DataSubjectRequestService(repo,AuditService(AuditRepo()))
+ request=s.create(t,c,'person@example.test',a,co)
+ with pytest.raises(ValueError):s.complete(t,c,request.id,a,co)
+ assert s.verify_identity(t,c,request.id,a,co).status.value=='IN_REVIEW'
+ assert s.complete(t,c,request.id,a,co).status.value=='COMPLETED'
  assert repo.get_dsr(uuid4(),request.id) is None
+
+def test_hold_release_and_dsr_actions_deny_cross_company_scope():
+ t,c,other,a,co=uuid4(),uuid4(),uuid4(),uuid4(),uuid4();repo=Repo();audit=AuditService(AuditRepo())
+ hold_service=LegalHoldService(repo,audit);hold=hold_service.create(t,c,'User',uuid4(),'ticket',a,co)
+ with pytest.raises(PrivacyUnavailableError):hold_service.release(t,other,hold.id,a,co)
+ dsr=DataSubjectRequestService(repo,audit);request=dsr.create(t,c,'person@example.test',a,co)
+ with pytest.raises(PrivacyUnavailableError):dsr.verify_identity(t,other,request.id,a,co)
+ dsr.verify_identity(t,c,request.id,a,co)
+ with pytest.raises(PrivacyUnavailableError):dsr.complete(t,other,request.id,a,co)

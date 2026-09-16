@@ -65,3 +65,20 @@ Reproduza código pelo release, banco por backup protegido, configuração pelo
 provedor de secrets, IdP por configuração aprovada e monitoramento por IaC ou
 runbook. Restore de object storage precisa reconciliar hashes e referências com
 o banco. Multi-região não é requisito atual.
+
+## Reconciliação de privacidade após restore
+
+Antes de qualquer reabertura, o responsável por dados deve comparar o ponto do
+backup com o registro autorizado de ações posteriores e reavaliar, no mínimo:
+
+1. Legal Holds criados, liberados ou com escopo alterado;
+2. DSRs recebidos, verificados, concluídos ou negados;
+3. decisões de retenção e eventuais tombstones;
+4. revogações de acesso e mudanças de CompanyAccess;
+5. expiração prevista para cópias e object storage.
+
+Registrar a reconciliação por referência e status, sem copiar conteúdo pessoal
+para logs. Divergência, ausência de fonte pós-backup ou dúvida sobre hold impede
+o cutover e exige Privacy/Security e revisão jurídica quando aplicável. A
+automação dessa reconciliação ainda não existe; não declarar dado eliminado nem
+reativar execução destrutiva até o fechamento formal da lacuna.

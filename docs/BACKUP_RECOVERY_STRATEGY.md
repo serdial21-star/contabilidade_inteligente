@@ -54,3 +54,21 @@ O procedimento MariaDB detalhado e os guards adicionais permanecem em
 [BACKUP_RESTORE_RUNBOOK.md](BACKUP_RESTORE_RUNBOOK.md). Object storage ainda
 precisa de backend/infra para snapshot e restore; isso é bloqueador antes de
 dados reais.
+
+## Privacidade, retenção e acesso ao backup
+
+- acesso ao destino deve ser restrito, segregado e auditável;
+- transporte e armazenamento cifrados são requisitos de produção, ainda
+  dependentes de fornecedor e gestão de chaves comprovados;
+- expiração deve seguir política aprovada e ser suspensa por Legal Hold
+  aplicável; os períodos permanecem `LEGAL_REVIEW_REQUIRED`;
+- não se faz mutação cirúrgica de backup histórico somente para atender uma
+  ação sobre o dado ativo;
+- a restauração nunca conclui uma ação de privacidade por si só: antes do
+  cutover, devem ser reconciliados holds, decisões de retenção, tombstones e
+  ações DSR posteriores ao ponto restaurado.
+
+Não existe hoje um ledger externo durável capaz de reaplicar automaticamente
+essas ações após um restore. Portanto,
+`PRIVACY_RESTORE_RECONCILIATION_GAP = DOCUMENTED_GAP`; eliminação material
+permanece desabilitada e dados reais continuam `NO_GO`.

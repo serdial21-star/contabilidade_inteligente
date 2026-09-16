@@ -30,10 +30,10 @@ class AuthorizedPrivacyActions:
         return self._holds.create(tenant_id, company_id, resource_type, resource_id, reason, actor_id, correlation_id)
     def release_hold(self, tenant_id, company_id, hold_id, actor_id, correlation_id):
         self._require(tenant_id, company_id, actor_id, 'privacy.legal_hold.manage')
-        return self._holds.release(tenant_id, hold_id, actor_id, correlation_id)
+        return self._holds.release(tenant_id, company_id, hold_id, actor_id, correlation_id)
     def verify_dsr(self, tenant_id, company_id, request_id, actor_id, correlation_id):
         self._require(tenant_id, company_id, actor_id, 'privacy.dsr.manage')
-        return self._dsr.verify_identity(tenant_id, request_id, actor_id, correlation_id)
+        return self._dsr.verify_identity(tenant_id, company_id, request_id, actor_id, correlation_id)
     def _require(self, tenant_id, company_id, actor_id, permission):
         self._authorization.require(AuthorizationRequest(tenant_id, actor_id, PermissionCode(permission), company_id))
 
@@ -77,9 +77,9 @@ class LegalHoldService:
     def create(self, tenant_id, company_id, resource_type, resource_id, reason_reference, actor_id, correlation_id):
         hold = new_hold(tenant_id, company_id, resource_type, resource_id, reason_reference, actor_id, self._clock())
         self._repo.add_hold(hold); self._audit.record(AuditRecord(tenant_id, company_id, actor_id, AuditOrigin.HUMAN, 'privacy', 'legal_hold.created', 'LegalHold', hold.id, None, None, {'resource_type': resource_type, 'resource_id': str(resource_id) if resource_id else None}, None, correlation_id)); return hold
-    def release(self, tenant_id, hold_id, actor_id, correlation_id):
+    def release(self, tenant_id, company_id, hold_id, actor_id, correlation_id):
         hold = self._repo.get_hold(tenant_id, hold_id)
-        if hold is None: raise PrivacyUnavailableError()
+        if hold is None or hold.company_id != company_id: raise PrivacyUnavailableError()
         released = hold.release(actor_id, self._clock()); self._repo.save_hold(released)
         self._audit.record(AuditRecord(tenant_id, released.company_id, actor_id, AuditOrigin.HUMAN, 'privacy', 'legal_hold.released', 'LegalHold', hold_id, None, None, {'status': 'RELEASED'}, None, correlation_id)); return released
 
@@ -91,11 +91,11 @@ class DataSubjectRequestService:
         if not identifier.strip(): raise ValueError('subject identifier is required')
         request = DataSubjectRequest(uuid4(), tenant_id, company_id, sha256(identifier.encode()).hexdigest(), DsrStatus.IDENTITY_PENDING, self._clock(), actor_id)
         self._repo.add_dsr(request); self._audit.record(AuditRecord(tenant_id, company_id, actor_id, AuditOrigin.HUMAN, 'privacy', 'dsr.received', 'DataSubjectRequest', request.id, None, None, {'status': request.status.value}, None, correlation_id)); return request
-    def verify_identity(self, tenant_id, request_id, actor_id, correlation_id):
-        request = self._get(tenant_id, request_id); updated = request.verify_identity(actor_id); self._repo.save_dsr(updated); self._audit.record(AuditRecord(tenant_id, updated.company_id, actor_id, AuditOrigin.HUMAN, 'privacy', 'dsr.identity_verified', 'DataSubjectRequest', request_id, None, None, {'status': updated.status.value}, None, correlation_id)); return updated
-    def complete(self, tenant_id, request_id, actor_id, correlation_id):
-        request = self._get(tenant_id, request_id); updated = request.complete(self._clock()); self._repo.save_dsr(updated); self._audit.record(AuditRecord(tenant_id, updated.company_id, actor_id, AuditOrigin.HUMAN, 'privacy', 'dsr.completed', 'DataSubjectRequest', request_id, None, None, {'status': updated.status.value}, None, correlation_id)); return updated
-    def _get(self, tenant_id, request_id):
+    def verify_identity(self, tenant_id, company_id, request_id, actor_id, correlation_id):
+        request = self._get(tenant_id, company_id, request_id); updated = request.verify_identity(actor_id); self._repo.save_dsr(updated); self._audit.record(AuditRecord(tenant_id, updated.company_id, actor_id, AuditOrigin.HUMAN, 'privacy', 'dsr.identity_verified', 'DataSubjectRequest', request_id, None, None, {'status': updated.status.value}, None, correlation_id)); return updated
+    def complete(self, tenant_id, company_id, request_id, actor_id, correlation_id):
+        request = self._get(tenant_id, company_id, request_id); updated = request.complete(self._clock()); self._repo.save_dsr(updated); self._audit.record(AuditRecord(tenant_id, updated.company_id, actor_id, AuditOrigin.HUMAN, 'privacy', 'dsr.completed', 'DataSubjectRequest', request_id, None, None, {'status': updated.status.value}, None, correlation_id)); return updated
+    def _get(self, tenant_id, company_id, request_id):
         request = self._repo.get_dsr(tenant_id, request_id)
-        if request is None: raise PrivacyUnavailableError()
+        if request is None or request.company_id != company_id: raise PrivacyUnavailableError()
         return request
