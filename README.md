@@ -1,5 +1,13 @@
 # Serdial21 Contabilidade Inteligente
 
+## Accounting Automation Core — incremento estrutural em desenvolvimento
+
+O domínio determinístico agora distingue evidência fiscal, intenção contábil e
+conta por empresa, com classificação por item, confiança explícita, histórico
+reutilizável somente por decisão humana, máscara configurável e proposta mista
+balanceada. A migration 0014 adiciona a persistência necessária. API, UI e UAT
+humana ainda estão parciais; isso não autoriza dados reais nem postagem externa.
+
 ## Phase 14 — Integrated QA + UAT
 
 A QA integrada sintética validou os fluxos suportados de autenticação, Minha
@@ -119,6 +127,17 @@ OBJECT_STORAGE_PATH define o diretório local de desenvolvimento; o valor
 padrão .serdial21-storage permanece ignorado pelo Git.
 
 ## Executar
+
+Para testar a interface local em modo sintético no Windows, use o inicializador
+padronizado na raiz do projeto:
+
+    .\INICIAR_SERDIAL21.cmd
+
+Ele abre `http://127.0.0.1:8080/app/` automaticamente e não exige banco, API ou
+login real. Mantenha a janela aberta durante o uso. Consulte o
+[guia de inicialização local](docs/LOCAL_STARTUP.md) para diagnóstico.
+
+Para executar a API separadamente (desenvolvimento técnico):
 
     uvicorn serdial21.main:app --reload
 

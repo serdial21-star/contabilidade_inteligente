@@ -16,6 +16,9 @@ from serdial21.bootstrap.settings import AppSettings
 from serdial21.entrypoints.http.dependencies.database import get_db_session
 from serdial21.entrypoints.http.dependencies.identity import get_authenticated_principal
 from serdial21.modules.access_control.application.services.authorization import AccessDeniedError
+from serdial21.modules.accounting.application.services.classification import (
+    ClassificationUnavailableError, ReviewClassificationCommand,
+)
 from serdial21.modules.identity.domain.entities import AuthenticatedPrincipal
 from serdial21.modules.intake_documents.application.services.intake import (
     IntakeResourceUnavailableError, UploadTooLargeError,
@@ -477,6 +480,51 @@ class AccountingMappingResponse(BaseModel):
     target_account_name: str
 
 
+class ItemClassificationEvidenceResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    kind: str
+    intent: str
+    weight: int
+    explanation: str
+    reference_id: UUID | None
+
+
+class ItemClassificationSummaryResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: UUID
+    fiscal_document_id: UUID
+    fiscal_item_id: UUID
+    item_description: str
+    selected_intent: str
+    classification_category: str | None
+    confidence_level: str
+    status: str
+    version: int
+    created_at: datetime
+
+
+class ItemClassificationPageResponse(BaseModel):
+    items: list[ItemClassificationSummaryResponse]
+    total: int
+    offset: int
+    limit: int
+
+
+class ItemClassificationDetailResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    summary: ItemClassificationSummaryResponse
+    evidence: list[ItemClassificationEvidenceResponse]
+    alternatives: list[str]
+    document_number: str | None
+    issuer_name: str | None
+
+
+class ItemClassificationDecisionRequest(BaseModel):
+    final_intent: str = Field(min_length=1, max_length=64)
+    decision_type: str = Field(min_length=1, max_length=32)
+    apply_scope: str = Field(min_length=1, max_length=32)
+
+
 class AccountingCatalogResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
     version_id: UUID
@@ -861,6 +909,62 @@ def accounting_account_detail(
     return AccountingAccountResponse.model_validate(item)
 
 
+@router.get('/item-classifications', response_model=ItemClassificationPageResponse)
+def item_classifications(
+    company_id: UUID, request: Request, principal: PrincipalDependency,
+    session: SessionDependency, offset: Annotated[int, Query(ge=0)] = 0,
+    limit: Annotated[int, Query(ge=1, le=100)] = 25,
+) -> ItemClassificationPageResponse:
+    try:
+        page = create_operational_runtime(session, request.app.state.settings).item_classifications(
+            principal.identity.tenant_id, company_id, principal.user_id,
+            offset=offset, limit=limit,
+        )
+    except Exception as error:
+        _map_error(session, error)
+    return ItemClassificationPageResponse(
+        items=[ItemClassificationSummaryResponse.model_validate(item) for item in page.items],
+        total=page.total, offset=page.offset, limit=page.limit,
+    )
+
+
+@router.get(
+    '/item-classifications/{classification_id}', response_model=ItemClassificationDetailResponse,
+)
+def item_classification_detail(
+    company_id: UUID, classification_id: UUID, request: Request,
+    principal: PrincipalDependency, session: SessionDependency,
+) -> ItemClassificationDetailResponse:
+    try:
+        item = create_operational_runtime(session, request.app.state.settings).item_classification(
+            principal.identity.tenant_id, company_id, principal.user_id, classification_id,
+        )
+    except Exception as error:
+        _map_error(session, error)
+    return ItemClassificationDetailResponse.model_validate(item)
+
+
+@router.post(
+    '/item-classifications/{classification_id}/decide',
+    response_model=ItemClassificationSummaryResponse,
+)
+def decide_item_classification(
+    company_id: UUID, classification_id: UUID, payload: ItemClassificationDecisionRequest,
+    request: Request, principal: PrincipalDependency, session: SessionDependency,
+) -> ItemClassificationSummaryResponse:
+    try:
+        summary = create_operational_runtime(session, request.app.state.settings).decide_item_classification(
+            ReviewClassificationCommand(
+                principal.identity.tenant_id, company_id, principal.user_id, classification_id,
+                payload.final_intent, payload.decision_type, payload.apply_scope,
+                UUID(request.state.correlation_id),
+            ),
+        )
+    except Exception as error:
+        _map_error(session, error)
+    return ItemClassificationSummaryResponse.model_validate(summary)
+
+
 @router.post('/imports/nfe', response_model=ImportResponse, status_code=202)
 async def import_nfe(
     company_id: UUID, request: Request, principal: PrincipalDependency,
@@ -1096,7 +1200,8 @@ def _map_error(session: Session, error: Exception) -> None:
         raise HTTPException(status_code=422, detail=error.code) from None
     if isinstance(error, (OperationalUnavailableError, JourneyUnavailableError,
                           DecisionLineUnavailableError,
-                          IntakeResourceUnavailableError)):
+                          IntakeResourceUnavailableError,
+                          ClassificationUnavailableError)):
         raise HTTPException(status_code=404, detail='resource unavailable') from None
     if isinstance(error, (OperationalConflictError, JourneyConflictError,
                           JourneyNotReadyError, IntegrityError)):

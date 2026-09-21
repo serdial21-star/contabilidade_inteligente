@@ -9,7 +9,7 @@ from uuid import UUID,uuid4
 class AccountingRule: id:UUID;tenant_id:UUID;company_id:UUID;name:str
 @dataclass(frozen=True,slots=True)
 class AccountingRuleVersion:
- id:UUID;tenant_id:UUID;company_id:UUID;rule_id:UUID;version_no:int;scope:str;conditions:tuple[tuple[str,str,str],...];priority:int;debit_account_version_id:UUID;credit_account_version_id:UUID;valid_from:date;valid_to:date|None;status:str;automation_level:str;approved:bool;tests_passed:bool
+ id:UUID;tenant_id:UUID;company_id:UUID;rule_id:UUID;version_no:int;scope:str;conditions:tuple[tuple[str,str,str],...];priority:int;debit_account_version_id:UUID;credit_account_version_id:UUID;valid_from:date;valid_to:date|None;status:str;automation_level:str;approved:bool;tests_passed:bool;governance_scope:str='COMPANY';intent:str|None=None;classification_category:str|None=None;confidence_override:str|None=None
  def publish(self):
   if self.status!='IN_REVIEW' or not self.approved or not self.tests_passed:raise ValueError('regra não pode ser publicada')
   return AccountingRuleVersion(**(asdict(self)|{'status':'PUBLISHED'}))

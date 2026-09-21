@@ -32,6 +32,28 @@ class JournalLine:
 class JournalLineDimension: id:UUID;line_id:UUID;dimension_id:UUID;amount:Decimal
 @dataclass(frozen=True,slots=True)
 class JournalEntrySourceLink: id:UUID;tenant_id:UUID;company_id:UUID;entry_id:UUID;source_type:str;source_id:UUID;role:str
+@dataclass(frozen=True,slots=True)
+class JournalLineSourceLink: id:UUID;tenant_id:UUID;company_id:UUID;line_id:UUID;source_item_id:UUID;amount:Decimal
+@dataclass(frozen=True,slots=True)
+class ItemAccountingAllocation:
+ source_item_id:UUID;account_version_id:UUID;amount:Decimal;accounting_intent:str
+
+def build_mixed_item_lines(revision:JournalEntryRevision,allocations:tuple[ItemAccountingAllocation,...],credit_account_version_id:UUID,accounts:tuple[AccountVersion,...])->tuple[tuple[JournalLine,...],tuple[JournalLineSourceLink,...]]:
+ if not allocations: raise ValueError('proposta por item exige classificações')
+ grouped:dict[UUID,Decimal]={}
+ for allocation in allocations:
+  if allocation.amount<=0: raise ValueError('valor de item deve ser positivo')
+  grouped[allocation.account_version_id]=grouped.get(allocation.account_version_id,Decimal('0'))+allocation.amount
+ total=sum(grouped.values(),Decimal('0'))
+ lines=[];links=[];line_by_account={}
+ for account_id,amount in grouped.items():
+  line=JournalLine(uuid4(),revision.tenant_id,revision.company_id,revision.ledger_id,revision.id,account_id,amount,Decimal('0'))
+  lines.append(line);line_by_account[account_id]=line
+ credit=JournalLine(uuid4(),revision.tenant_id,revision.company_id,revision.ledger_id,revision.id,credit_account_version_id,Decimal('0'),total);lines.append(credit)
+ for allocation in allocations:
+  links.append(JournalLineSourceLink(uuid4(),revision.tenant_id,revision.company_id,line_by_account[allocation.account_version_id].id,allocation.source_item_id,allocation.amount))
+ validate_revision(revision,tuple(lines),accounts,(JournalEntrySourceLink(uuid4(),revision.tenant_id,revision.company_id,revision.entry_id,'FiscalDocumentItem',allocations[0].source_item_id,'ORIGIN'),))
+ return tuple(lines),tuple(links)
 def validate_revision(revision:JournalEntryRevision,lines:tuple[JournalLine,...],accounts:tuple[AccountVersion,...],sources:tuple[JournalEntrySourceLink,...])->None:
  if not revision.period_start<=revision.accounting_date<=revision.period_end:raise ValueError('período contábil inválido')
  if not lines:raise ValueError('lançamento exige linhas')

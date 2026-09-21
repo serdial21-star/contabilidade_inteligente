@@ -6,12 +6,14 @@ from uuid import UUID
 
 from serdial21.modules.accounting.domain.entities import (
     AccountingProposal, JournalEntryRevision, JournalLine, JournalEntrySourceLink,
+    JournalLineSourceLink,
 )
 from serdial21.modules.chart_of_accounts.domain.entities import AccountVersion, Ledger
 from serdial21.modules.fiscal_documents.application.services.nfe55_importer import NFe55ImportResult
 from serdial21.modules.integrations.application.ports.connector import ConnectorConfiguration
 from serdial21.modules.integrations.domain.entities import ExportBatch
 from serdial21.modules.locks.domain.entities import AccountLock
+from serdial21.modules.mappings.domain.entities import MappingEntry, MappingVersion
 from serdial21.modules.rules.domain.entities import AccountingRuleVersion, RuleEvaluation, RuleSetRelease
 from serdial21.modules.workflow.domain.entities import (
     ApprovalDecision, ApprovalRequest, ApprovalStep, AuthorizedEffect,
@@ -58,6 +60,8 @@ class PreparationPlan:
     # Defaults preservam leitura de checkpoints anteriores à migration 0011.
     approval_role: str = 'CONTADOR'
     responsible_role: str = 'CONTADOR'
+    mapping_version: MappingVersion | None = None
+    mapping_entries: tuple[MappingEntry, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -90,6 +94,7 @@ class Journey:
     revision: JournalEntryRevision | None = None
     lines: tuple[JournalLine, ...] = ()
     sources: tuple[JournalEntrySourceLink, ...] = ()
+    line_sources: tuple[JournalLineSourceLink, ...] = ()
     revision_hash: str | None = None
     validation_status: str | None = None
     case: WorkflowCase | None = None

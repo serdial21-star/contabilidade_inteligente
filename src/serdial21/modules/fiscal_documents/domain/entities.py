@@ -74,6 +74,9 @@ class FiscalDocumentItem:
     other_total: Decimal | None
     included_in_total: bool | None
     created_at: datetime
+    gtin: str | None = None
+    cest: str | None = None
+    freight_total: Decimal | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -114,6 +117,9 @@ class ParsedFiscalItem:
     other_total: Decimal | None
     included_in_total: bool | None
     taxes: tuple[ParsedTaxDetail, ...]
+    gtin: str | None = None
+    cest: str | None = None
+    freight_total: Decimal | None = None
 
 
 @dataclass(frozen=True, slots=True)

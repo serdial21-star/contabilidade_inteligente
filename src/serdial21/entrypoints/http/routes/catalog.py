@@ -26,7 +26,7 @@ from serdial21.modules.catalog.adapters.outbound.persistence.repositories import
 )
 from serdial21.modules.catalog.application.services.governance import CatalogGovernanceService
 from serdial21.modules.catalog.domain.entities import (
-    AccountSpec, CatalogConflictError, CatalogSpec, CatalogUnavailableError,
+    AccountCodeMaskSpec, AccountSpec, CatalogConflictError, CatalogSpec, CatalogUnavailableError,
     MappingEntrySpec, RuleSpec, WorkflowSpec,
 )
 from serdial21.modules.identity.domain.entities import AuthenticatedPrincipal
@@ -56,6 +56,10 @@ class RuleInput(BaseModel):
     credit_account_key: str = Field(min_length=1, max_length=100)
     automation_level: str = Field(min_length=1, max_length=32)
     tests_passed: bool
+    governance_scope: str = Field(default='COMPANY', pattern='^(SYSTEM_TEMPLATE|OFFICE|COMPANY)$')
+    intent: str | None = Field(default=None, max_length=64)
+    classification_category: str | None = Field(default=None, max_length=100)
+    confidence_override: str | None = Field(default=None, pattern='^(HIGH|MEDIUM|LOW)$')
 
 
 class MappingInput(BaseModel):
@@ -66,6 +70,13 @@ class MappingInput(BaseModel):
     history_contains: str | None = Field(default=None, max_length=500)
     dimension_code: str | None = Field(default=None, max_length=100)
     canonical_entity: str | None = Field(default=None, max_length=100)
+    accounting_intent: str | None = Field(default=None, max_length=64)
+    classification_category: str | None = Field(default=None, max_length=100)
+
+
+class AccountCodeMaskInput(BaseModel):
+    widths: list[int] = Field(min_length=1, max_length=12)
+    separator: str = Field(default='.', min_length=1, max_length=1)
 
 
 class WorkflowInput(BaseModel):
@@ -90,6 +101,9 @@ class CatalogDraftRequest(BaseModel):
     decimal_places: int = Field(ge=0, le=6)
     valid_from: date
     valid_to: date | None = None
+    account_code_mask: AccountCodeMaskInput | None = None
+    template_scope: str = Field(default='COMPANY', pattern='^(SYSTEM|OFFICE|COMPANY)$')
+    business_segment: str | None = Field(default=None, max_length=32)
     reason: str = Field(min_length=1, max_length=500)
 
 
@@ -215,6 +229,10 @@ def _spec(payload: CatalogDraftRequest) -> CatalogSpec:
         WorkflowSpec(**payload.workflow.model_dump()),
         payload.amount_field, payload.decimal_places,
         payload.valid_from, payload.valid_to,
+        (AccountCodeMaskSpec(tuple(payload.account_code_mask.widths),
+                             payload.account_code_mask.separator)
+         if payload.account_code_mask else None),
+        payload.template_scope, payload.business_segment,
     )
 
 

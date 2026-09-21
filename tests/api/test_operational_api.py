@@ -10,7 +10,7 @@ from cryptography.hazmat.primitives.asymmetric import rsa
 from fastapi.testclient import TestClient
 import jwt
 import pytest
-from sqlalchemy import select
+from sqlalchemy import func, select
 
 from serdial21.bootstrap.application import create_app
 from serdial21.bootstrap.audit import AuditContext, audit_scope
@@ -23,6 +23,11 @@ from serdial21.modules.access_control.adapters.outbound.persistence.models impor
 )
 from serdial21.modules.access_control.adapters.outbound.persistence.repositories import SqlAlchemyAuthorizationRepository
 from serdial21.modules.access_control.application.services.authorization import AuthorizationService
+from serdial21.modules.accounting.adapters.outbound.persistence.models import CompanyAccountingProfileModel
+from serdial21.modules.accounting.adapters.outbound.persistence.repositories import (
+    SqlAlchemyAccountingClassificationRepository,
+)
+from serdial21.modules.accounting.domain.classification import ItemClassification
 from serdial21.modules.audit.adapters.outbound.persistence.models import AuditEventModel
 from serdial21.modules.audit.adapters.outbound.persistence.repositories import SqlAlchemyAuditRepository
 from serdial21.modules.audit.application.services.audit import AuditRecord, AuditService
@@ -34,6 +39,7 @@ from serdial21.modules.catalog.application.services.governance import CatalogGov
 from serdial21.modules.catalog.domain.entities import (
     AccountSpec, CatalogSpec, MappingEntrySpec, RuleSpec, WorkflowSpec,
 )
+from serdial21.modules.fiscal_documents.adapters.outbound.persistence.models import FiscalDocumentItemModel
 from serdial21.modules.identity.adapters.inbound.oidc import OidcJwtVerifier
 from serdial21.modules.locks.adapters.outbound.persistence.repositories import (
     SQLAlchemyAccountLockRepository,
@@ -234,6 +240,7 @@ def operational(tmp_path: Path) -> OperationalFixture:
             for code in (
                 'company.read', 'journal.propose', 'journal.read',
                 'journal.approve', 'audit.read', 'catalog.manage', 'catalog.review',
+                'accounting.classification.review',
             ):
                 permission = session.scalar(select(PermissionModel).where(
                     PermissionModel.code == code,
@@ -251,7 +258,8 @@ def operational(tmp_path: Path) -> OperationalFixture:
                         permission_id=permission.id,
                     ))
                 if code in {'company.read', 'journal.read', 'journal.approve',
-                            'audit.read', 'catalog.review'}:
+                            'audit.read', 'catalog.review',
+                            'accounting.classification.review'}:
                     session.add(RolePermissionModel(
                         tenant_id=tenant, role_id=role, permission_id=permission.id,
                     ))
@@ -312,6 +320,42 @@ def _set_company_tax_identifier(operational: OperationalFixture, value: str) -> 
             session.flush()
 
 
+def _seed_pending_item_classification(operational: OperationalFixture) -> tuple[UUID, str]:
+    imported = operational.client.post(
+        f'/api/v1/operations/companies/{operational.company}/imports/nfe',
+        params=_nfe_params(), content=NFE.read_bytes(), headers=operational.headers(
+            'proposer', content_type='application/xml',
+            filename='item-classification-queue.xml', key='item-classification-queue',
+        ),
+    )
+    assert imported.status_code == 202, imported.text
+    session_factory = operational.client.app.state.database.session_factory
+    assert session_factory is not None
+    with session_scope(session_factory) as session:
+        with audit_scope(session, AuditContext(
+            uuid4(), AuditOrigin.AUTOMATION, operational.proposer,
+            reason='item classification queue fixture',
+        )):
+            session.add(CompanyAccountingProfileModel(
+                tenant_id=operational.tenant, company_id=operational.company,
+                business_segment='OTHER', auto_proposal_confidence_threshold='HIGH',
+                version=1, updated_at=datetime.now(UTC),
+            ))
+            fiscal_item_id = session.scalar(select(FiscalDocumentItemModel.id).where(
+                FiscalDocumentItemModel.tenant_id == operational.tenant,
+                FiscalDocumentItemModel.company_id == operational.company,
+            ))
+            assert fiscal_item_id is not None
+            repository = SqlAlchemyAccountingClassificationRepository(session)
+            item = repository.get_item(operational.tenant, operational.company, fiscal_item_id)
+            assert item is not None
+            record = repository.add_classification(item, ItemClassification(
+                'UNCLASSIFIED', None, 'LOW', 'REVIEW_REQUIRED', (),
+            ), created_at=datetime.now(UTC))
+            session.flush()
+            return record.id, item.description
+
+
 def test_nfe_ownership_direction_and_xml_accounting_date_default(
     operational: OperationalFixture,
 ) -> None:
@@ -335,6 +379,25 @@ def test_nfe_ownership_direction_and_xml_accounting_date_default(
         headers=operational.headers('accountant'),
     )
     assert review.json()['summary']['accounting_date'] == '2026-09-04'
+
+
+def test_nfe_xml_date_outside_selected_period_is_rejected(
+    operational: OperationalFixture,
+) -> None:
+    params = _nfe_params()
+    params.pop('accounting_date')
+    params.update({'period_start': '2026-08-01', 'period_end': '2026-08-31'})
+
+    response = operational.client.post(
+        f'/api/v1/operations/companies/{operational.company}/imports/nfe',
+        params=params, content=NFE.read_bytes(), headers=operational.headers(
+            'proposer', content_type='application/xml', filename='september.xml',
+            key='nfe-outside-selected-period',
+        ),
+    )
+
+    assert response.status_code == 409
+    assert response.json() == {'detail': 'operation conflict'}
 
 
 def test_nfe_recipient_is_allowed_and_unrelated_company_fails_closed(
@@ -937,6 +1000,93 @@ def test_decision_line_derives_current_lock_without_inventing_attempt(
     assert len(blocks) == 1
     assert blocks[0]['evidence_kind'] == 'DOMAIN_DERIVED_EVENT'
     assert 'tentativa' not in blocks[0]['description'].lower()
+
+
+def test_item_classification_queue_lists_pending_item_and_is_tenant_scoped(
+    operational: OperationalFixture,
+) -> None:
+    classification_id, description = _seed_pending_item_classification(operational)
+    listing = operational.client.get(
+        f'/api/v1/operations/companies/{operational.company}/item-classifications',
+        headers=operational.headers('proposer'),
+    )
+    assert listing.status_code == 200, listing.text
+    assert listing.json()['total'] == 1
+    row = listing.json()['items'][0]
+    assert row['id'] == str(classification_id)
+    assert row['item_description'] == description
+    assert row['status'] == 'REVIEW_REQUIRED'
+
+    cross = operational.client.get(
+        f'/api/v1/operations/companies/{operational.other_company}/item-classifications',
+        headers=operational.headers('proposer'),
+    )
+    assert cross.status_code == 403
+    assert cross.json() == {'detail': 'access denied'}
+
+    unauthenticated = operational.client.get(
+        f'/api/v1/operations/companies/{operational.company}/item-classifications',
+    )
+    assert unauthenticated.status_code == 401
+
+
+def test_item_classification_detail_is_idor_safe(operational: OperationalFixture) -> None:
+    classification_id, _ = _seed_pending_item_classification(operational)
+    own = operational.client.get(
+        f'/api/v1/operations/companies/{operational.company}/item-classifications/{classification_id}',
+        headers=operational.headers('proposer'),
+    )
+    assert own.status_code == 200, own.text
+    assert own.json()['document_number'] is not None
+
+    unknown = operational.client.get(
+        f'/api/v1/operations/companies/{operational.company}/item-classifications/{uuid4()}',
+        headers=operational.headers('proposer'),
+    )
+    assert unknown.status_code == 404
+    assert unknown.json() == {'detail': 'resource unavailable'}
+
+    cross = operational.client.get(
+        f'/api/v1/operations/companies/{operational.other_company}/item-classifications/{classification_id}',
+        headers=operational.headers('proposer'),
+    )
+    assert cross.status_code == 403
+    assert cross.json() == {'detail': 'access denied'}
+
+
+def test_item_classification_decide_requires_permission_and_persists_audit(
+    operational: OperationalFixture,
+) -> None:
+    classification_id, _ = _seed_pending_item_classification(operational)
+    payload = {
+        'final_intent': 'PURCHASE_USE_CONSUMPTION',
+        'decision_type': 'CORRECTION', 'apply_scope': 'THIS_OCCURRENCE_ONLY',
+    }
+    denied = operational.client.post(
+        f'/api/v1/operations/companies/{operational.company}'
+        f'/item-classifications/{classification_id}/decide',
+        json=payload, headers=operational.headers('proposer'),
+    )
+    assert denied.status_code == 403
+    assert denied.json() == {'detail': 'access denied'}
+
+    decided = operational.client.post(
+        f'/api/v1/operations/companies/{operational.company}'
+        f'/item-classifications/{classification_id}/decide',
+        json=payload, headers=operational.headers('accountant'),
+    )
+    assert decided.status_code == 200, decided.text
+    body = decided.json()
+    assert body['status'] == 'REVIEWED'
+    assert body['selected_intent'] == 'PURCHASE_USE_CONSUMPTION'
+
+    session_factory = operational.client.app.state.database.session_factory
+    assert session_factory is not None
+    with session_scope(session_factory) as session:
+        assert session.scalar(select(func.count()).select_from(AuditEventModel).where(
+            AuditEventModel.subject_id == UUID(body['id']),
+            AuditEventModel.action == 'item_classification.reviewed',
+        )) == 1
 
 
 def test_accounting_proposal_and_catalog_idor_are_safe(

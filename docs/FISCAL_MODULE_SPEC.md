@@ -18,7 +18,29 @@ O backend revalida principal autenticado, tenant, `CompanyAccess`, permissão `j
 - a mesma chave de acesso NF-e com hash divergente entra no fluxo real de quarentena, sem sobrescrever evidência;
 - erros retornam classificação segura, sem XML bruto, caminho ou stack trace.
 
-O feedback de importação distingue sucesso, reentrega/duplicidade e atenção ou quarentena. Uma evidência em quarentena pode não gerar `FiscalDocument`; por isso continua visível na Central de Documentos e em suas issues, sem registro fiscal fictício.
+Antes do envio, a interface mantém uma lista revisável dos XML selecionados e
+permite remover individualmente um arquivo escolhido por engano. A expiração da
+revisão é informada somente como data; a borda converte o fim do dia escolhido
+para o timestamp exigido pelo contrato. A expiração continua obrigatória para
+que uma aprovação não permaneça válida indefinidamente.
+
+O contexto de trabalho preenche início e fim pela competência escolhida e
+calcula a revisão por uma política explícita: `data da importação + dias` ou
+`fim do período + dias`, entre 1 e 90. A primeira é o padrão para não gerar uma
+validade vencida ao trabalhar em competência histórica. Os três valores
+permanecem visíveis e ajustáveis no formulário. Sem data contábil manual, a
+interface lê somente a data de emissão do XML e bloqueia o envio se ela estiver
+fora do período; o arquivo permanece selecionado para correção. Uma data
+contábil manual dentro do período representa um ajuste consciente, nunca uma
+inferência. Essa pré-validação melhora o feedback, mas não substitui o parser
+seguro nem a invariante equivalente do backend.
+
+O feedback de importação distingue por nome de arquivo sucesso,
+reentrega/duplicidade, divergência de empresa e atenção ou quarentena. No modo
+sintético, o resultado declara que é uma simulação sem persistência; não cria
+uma NF-e fictícia na consulta. Uma evidência real em quarentena pode não gerar
+`FiscalDocument`; por isso continua visível na Central de Documentos e em suas
+issues, sem registro fiscal fictício.
 
 ## Consulta operacional
 

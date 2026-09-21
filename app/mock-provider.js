@@ -217,6 +217,37 @@
       ]),
     });
   }
+  let syntheticItemClassificationStatus = 'REVIEW_REQUIRED';
+  function syntheticItemClassificationSummary() {
+    return Object.freeze({
+      id: 'synthetic-item-classification-1', fiscal_document_id: 'synthetic-fiscal-1',
+      fiscal_item_id: 'synthetic-fiscal-item-1', item_description: 'Produto exclusivamente fictício',
+      selected_intent: 'PURCHASE_USE_CONSUMPTION', classification_category: 'OFFICE_SUPPLY',
+      confidence_level: syntheticItemClassificationStatus === 'REVIEWED' ? 'HIGH' : 'MEDIUM',
+      status: syntheticItemClassificationStatus,
+      version: syntheticItemClassificationStatus === 'REVIEWED' ? 2 : 1,
+      created_at: '2026-09-14T12:11:00Z',
+    });
+  }
+  async function listItemClassifications(companyId, filters = {}) {
+    const rows = companyId === 'synthetic-company-a' && syntheticItemClassificationStatus !== 'REVIEWED'
+      ? [syntheticItemClassificationSummary()] : [];
+    const offset = Number(filters.offset || 0), limit = Number(filters.limit || 10);
+    return {items: rows.slice(offset, offset + limit), total: rows.length, offset, limit};
+  }
+  async function syntheticItemClassification(companyId, id) {
+    if (companyId !== 'synthetic-company-a' || id !== 'synthetic-item-classification-1') throw Object.assign(new Error('REQUEST_FAILED'), {code: 'REQUEST_FAILED'});
+    return {
+      summary: syntheticItemClassificationSummary(),
+      evidence: [{kind: 'DESCRIPTION_MATCH', intent: 'PURCHASE_USE_CONSUMPTION', weight: 45, explanation: 'Categoria determinística de material de uso/consumo exclusivamente sintética.', reference_id: null}],
+      alternatives: [], document_number: '1001', issuer_name: 'Emitente Sintético',
+    };
+  }
+  async function syntheticItemClassificationDecision(companyId, id, decision) {
+    if (companyId !== 'synthetic-company-a' || id !== 'synthetic-item-classification-1' || syntheticItemClassificationStatus === 'REVIEWED') throw Object.assign(new Error('REQUEST_FAILED'), {code: 'OPERATION_CONFLICT'});
+    syntheticItemClassificationStatus = 'REVIEWED';
+    return {...syntheticItemClassificationSummary(), selected_intent: decision.finalIntent};
+  }
   async function listFiscal(companyId, filters = {}) {
     let rows = fiscal.filter((item) => item.company_id === companyId);
     const search = String(filters.search || '').toLocaleLowerCase('pt-BR');
@@ -294,5 +325,7 @@
     accountingCatalog: syntheticAccountingCatalog, accountingRule: syntheticAccountingRule,
     decideProposal: syntheticDecision,
     decisionLine,
+    itemClassifications: listItemClassifications, itemClassification: syntheticItemClassification,
+    decideItemClassification: syntheticItemClassificationDecision,
   });
 }(globalThis));

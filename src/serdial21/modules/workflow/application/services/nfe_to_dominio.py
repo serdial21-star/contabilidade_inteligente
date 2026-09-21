@@ -5,7 +5,7 @@ obrigatório em exceções. Nenhuma chamada de fornecedor ocorre aqui.
 """
 from collections.abc import Callable
 from dataclasses import asdict, replace
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from decimal import Decimal
 from hashlib import sha256
 import json
@@ -15,23 +15,28 @@ from serdial21.modules.access_control.application.services.authorization import 
     AccessDeniedError, AuthorizationRequest, AuthorizationService,
 )
 from serdial21.modules.access_control.domain.permissions import PermissionCode
+from serdial21.modules.accounting.application.services.classification import ClassifyFiscalItem
+from serdial21.modules.accounting.domain.classification import ItemEvidence
 from serdial21.modules.accounting.domain.entities import (
-    AccountingProposal, JournalEntryRevision, JournalLine, JournalEntrySourceLink, validate_revision,
+    AccountingProposal, ItemAccountingAllocation, JournalEntryRevision, JournalLine,
+    JournalEntrySourceLink, JournalLineSourceLink, build_mixed_item_lines, validate_revision,
 )
 from serdial21.modules.audit.application.services.audit import AuditRecord, AuditService
 from serdial21.modules.audit.domain.entities import AuditOrigin
 from serdial21.modules.fiscal_documents.application.ports.repository import FiscalDocumentRepository
 from serdial21.modules.fiscal_documents.application.services.nfe55_importer import NFe55ImportRequest, NFe55ImportService
+from serdial21.modules.fiscal_documents.domain.entities import FiscalDocument
 from serdial21.modules.integrations.application.ports.connector import ConnectorPort, ConnectorConfiguration, LayoutSpecificationRequiredError
 from serdial21.modules.integrations.domain.entities import ExportBatch
 from serdial21.modules.intake_documents.application.services.intake import DocumentIntakeService, IntakeContext, StartBatchRequest
 from serdial21.modules.locks.domain.entities import (
     EffectChannel, EffectContext, EffectOperation, validate_effect,
 )
+from serdial21.modules.mappings.domain.entities import MappingInput, simulate
 from serdial21.modules.rules.domain.entities import evaluate
 from serdial21.modules.workflow.application.journey import (
     Journey, JourneyCatalog, JourneyCommand, JourneyConflictError,
-    JourneyNotReadyError, JourneyRepository, JourneyUnavailableError,
+    JourneyNotReadyError, JourneyRepository, JourneyUnavailableError, PreparationPlan,
 )
 from serdial21.modules.workflow.domain.entities import (
     ApprovalRequest, ApprovalStep, AuthorizedEffect, WorkflowCase,
@@ -49,14 +54,27 @@ def revision_digest(journey: Journey) -> str:
         raise JourneyNotReadyError('revision required')
     # A transição de estado não muda o conteúdo aprovado.
     revision = replace(journey.revision, status='DRAFT')
-    return digest({
+    payload = {
         'revision': asdict(revision), 'lines': [asdict(line) for line in journey.lines],
         'sources': [asdict(source) for source in journey.sources],
         'source_hash': journey.imported.content_hash,
         'plan': asdict(journey.plan) if journey.plan else None,
         'evaluation': asdict(journey.evaluation) if journey.evaluation else None,
         'proposal': asdict(journey.proposal) if journey.proposal else None,
-    })
+    }
+    # Preserve hashes already issued for legacy, document-level proposals. Mixed-item
+    # proposals add their item provenance to the revision identity.
+    if journey.line_sources:
+        payload['line_sources'] = [asdict(link) for link in journey.line_sources]
+    return digest(payload)
+
+
+class _AccountMappingRequired(RuntimeError):
+    pass
+
+
+class _ItemReviewRequired(RuntimeError):
+    pass
 
 
 class NFeToDominioService:
@@ -65,6 +83,7 @@ class NFeToDominioService:
         authorization: AuthorizationService, intake: DocumentIntakeService,
         importer: NFe55ImportService, fiscal: FiscalDocumentRepository,
         audit: AuditService, connector: ConnectorPort,
+        classification: ClassifyFiscalItem | None = None,
         *, clock: Callable[[], datetime] | None = None,
         metrics: MetricsRegistry | None = None,
     ) -> None:
@@ -76,6 +95,7 @@ class NFeToDominioService:
         self._fiscal = fiscal
         self._audit = audit
         self._connector = connector
+        self._classification = classification
         self._clock = clock or (lambda: datetime.now(UTC))
         self._metrics = metrics or MetricsRegistry()
 
@@ -166,13 +186,35 @@ class NFeToDominioService:
             uuid4(), *scope, plan.ledger.id, uuid4(), 1, command.accounting_date,
             command.period_start, command.period_end, 'DRAFT', None,
         )
-        lines = tuple(JournalLine(
-            uuid4(), *scope, plan.ledger.id, revision.id,
-            UUID(evaluation.proposal[f'{side}_account_version_id']),
-            amount if side == 'debit' else Decimal(0), amount if side == 'credit' else Decimal(0),
-        ) for side in ('debit', 'credit'))
         sources = (JournalEntrySourceLink(uuid4(), *scope, revision.entry_id, 'FiscalDocument', document.id, 'ORIGIN'),)
-        journey = self._save(journey.advance(revision=revision, lines=lines, sources=sources, status='DRAFT'),
+        lines: tuple[JournalLine, ...]
+        line_sources: tuple[JournalLineSourceLink, ...] = ()
+        if self._item_automation_enabled(plan, *scope):
+            try:
+                lines, line_sources = self._mixed_item_lines(
+                    plan, revision, document, command.accounting_date,
+                    UUID(evaluation.proposal['credit_account_version_id']),
+                )
+            except _AccountMappingRequired:
+                return self._completed(self._save(
+                    journey.advance(status='ACCOUNT_MAPPING_REQUIRED'), command.actor_id,
+                    'journey.account_mapping_required',
+                ), started)
+            except _ItemReviewRequired:
+                return self._completed(self._save(
+                    journey.advance(status='PENDING_RULE'), command.actor_id,
+                    'journey.pending_rule',
+                ), started)
+        else:
+            lines = tuple(JournalLine(
+                uuid4(), *scope, plan.ledger.id, revision.id,
+                UUID(evaluation.proposal[f'{side}_account_version_id']),
+                amount if side == 'debit' else Decimal(0), amount if side == 'credit' else Decimal(0),
+            ) for side in ('debit', 'credit'))
+        journey = self._save(journey.advance(
+            revision=revision, lines=lines, sources=sources,
+            line_sources=line_sources, status='DRAFT',
+        ),
                              command.actor_id, 'journal_revision.created')
         self._validate(journey)
         self._check_locks(journey, EffectOperation.ALTER)
@@ -344,6 +386,60 @@ class NFeToDominioService:
                 account.valid_to is not None and account.valid_to < journey.revision.accounting_date
             ):
                 raise JourneyNotReadyError('account outside validity')
+
+    def _item_automation_enabled(
+        self, plan: PreparationPlan, tenant_id: UUID, company_id: UUID,
+    ) -> bool:
+        return bool(
+            self._classification is not None
+            and self._classification.is_configured(tenant_id, company_id)
+            and plan.mapping_version is not None
+            and any(entry.accounting_intent for entry in plan.mapping_entries)
+        )
+
+    def _mixed_item_lines(
+        self, plan: PreparationPlan, revision: JournalEntryRevision,
+        document: FiscalDocument, accounting_date: date,
+        credit_account_version_id: UUID,
+    ) -> tuple[tuple[JournalLine, ...], tuple[JournalLineSourceLink, ...]]:
+        assert self._classification is not None
+        assert plan.mapping_version is not None
+        items = self._fiscal.list_items(
+            revision.tenant_id, revision.company_id, document.id,
+        )
+        if not items:
+            raise _ItemReviewRequired()
+        allocations = []
+        for item in items:
+            if item.description is None or item.gross_total is None or item.gross_total <= 0:
+                raise _ItemReviewRequired()
+            evidence = ItemEvidence(
+                item.tenant_id, item.company_id, item.fiscal_document_id, item.id,
+                document.issuer_tax_id, item.product_code, item.gtin, item.description,
+                item.ncm, item.cfop, None, item.gross_total,
+            )
+            record = self._classification.execute(
+                revision.tenant_id, revision.company_id, evidence, plan.rules,
+                at=accounting_date,
+            )
+            if record.classification.status in {'REVIEW_REQUIRED', 'CONFLICTING_EVIDENCE'}:
+                raise _ItemReviewRequired()
+            mapped = simulate(
+                plan.mapping_version, plan.mapping_entries,
+                MappingInput(
+                    None, None, None, 'FiscalDocumentItem',
+                    record.classification.intent, record.classification.category,
+                ), plan.accounts, accounting_date,
+            )
+            if mapped.status != 'MATCHED' or mapped.account_version_id is None:
+                raise _AccountMappingRequired()
+            allocations.append(ItemAccountingAllocation(
+                item.id, mapped.account_version_id, item.gross_total,
+                record.classification.intent,
+            ))
+        return build_mixed_item_lines(
+            revision, tuple(allocations), credit_account_version_id, plan.accounts,
+        )
 
     def _check_locks(self, journey: Journey, operation: EffectOperation) -> None:
         if journey.revision is None or journey.plan is None:

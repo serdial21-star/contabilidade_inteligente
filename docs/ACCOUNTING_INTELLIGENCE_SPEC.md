@@ -1,5 +1,10 @@
 # Inteligência Contábil — Fase 08
 
+> Extensão estrutural: o domínio por item, intenções, confiança, perfil empresarial,
+> máscara e mappings semânticos está especificado em
+> `docs/accounting/ACCOUNTING_AUTOMATION_CORE.md`. A jornada legada desta fase
+> permanece compatível enquanto a nova orquestração/API/UI está `PARTIAL`.
+
 ## Escopo entregue
 
 A jornada operacional suportada é `NF-e 55 → regra determinística publicada → proposta → revisão profissional → aprovação ou rejeição`. O sistema contábil externo continua autoridade sobre escrituração, saldos e fechamento. OFX e `BankTransaction` permanecem somente como fontes financeiras importadas: não existe caso de uso seguro que gere proposta contábil a partir delas.

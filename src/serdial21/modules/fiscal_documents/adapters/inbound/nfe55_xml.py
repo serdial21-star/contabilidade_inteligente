@@ -397,12 +397,18 @@ def _parse_item(
     return ParsedFiscalItem(
         sequence=sequence,
         product_code=product_code,
+        gtin=_bounded(
+            _text(product, 'nfe:cEAN', namespace), 32, f'{item_path}.gtin', issues,
+        ),
         description=description,
         ncm=_bounded(
             _text(product, 'nfe:NCM', namespace),
             16,
             f'{item_path}.ncm',
             issues,
+        ),
+        cest=_bounded(
+            _text(product, 'nfe:CEST', namespace), 16, f'{item_path}.cest', issues,
         ),
         cfop=cfop,
         commercial_unit=_bounded(
@@ -429,6 +435,10 @@ def _parse_item(
         ),
         other_total=_decimal_field(
             product, 'nfe:vOutro', namespace, f'{item_path}.other', issues,
+            precision=20, scale=2, required=False,
+        ),
+        freight_total=_decimal_field(
+            product, 'nfe:vFrete', namespace, f'{item_path}.freight', issues,
             precision=20, scale=2, required=False,
         ),
         included_in_total=included,

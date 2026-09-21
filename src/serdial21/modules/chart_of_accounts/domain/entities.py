@@ -1,10 +1,28 @@
 '''Núcleo puro e versionado do plano de contas.''' 
 from dataclasses import dataclass, replace
 from datetime import date, datetime
+import re
 from uuid import UUID, uuid4
 
 NATURES = frozenset({'ASSET', 'LIABILITY', 'EQUITY', 'REVENUE', 'EXPENSE'})
 NORMAL_BALANCES = frozenset({'DEBIT', 'CREDIT'})
+
+@dataclass(frozen=True, slots=True)
+class AccountCodeMask:
+ id: UUID; tenant_id: UUID; company_id: UUID; widths: tuple[int,...]; separator: str; status: str='ACTIVE'
+ def validate(self)->None:
+  if not self.widths or any(width < 1 or width > 12 for width in self.widths): raise ValueError('segmentos da máscara inválidos')
+  if len(self.separator)!=1 or self.separator.isalnum(): raise ValueError('separador da máscara inválido')
+ def validate_code(self,code:str)->None:
+  self.validate();pattern='^'+re.escape(self.separator).join(fr'\d{{{width}}}' for width in self.widths)+'$'
+  if re.fullmatch(pattern,code) is None: raise ValueError('código fora da máscara')
+
+@dataclass(frozen=True, slots=True)
+class AccountPlanTemplate:
+ id: UUID; tenant_id: UUID|None; name: str; scope: str; business_segment: str|None; status: str
+ def validate(self)->None:
+  if self.scope not in {'SYSTEM','OFFICE'}: raise ValueError('escopo de template inválido')
+  if self.scope=='OFFICE' and self.tenant_id is None: raise ValueError('template de escritório exige tenant')
 
 @dataclass(frozen=True, slots=True)
 class Ledger:
@@ -51,5 +69,9 @@ def assert_unique_code(candidate:AccountVersion,versions:tuple[AccountVersion,..
  for existing in versions:
   if existing.account_id==candidate.account_id or existing.status!='PUBLISHED': continue
   if existing.tenant_id==candidate.tenant_id and existing.company_id==candidate.company_id and existing.code==candidate.code and _overlaps(candidate,existing): raise ValueError('código de conta duplicado na vigência')
+def assert_can_add_child(parent:AccountVersion,used_account_ids:set[UUID])->None:
+ if parent.account_id in used_account_ids or parent.id in used_account_ids: raise ValueError('conta analítica usada não pode virar sintética')
+ if parent.is_postable: raise ValueError('conta pai deve possuir nova versão não lançável')
+
 def _overlaps(a:AccountVersion,b:AccountVersion)->bool:
  return (a.valid_to is None or b.valid_from<=a.valid_to) and (b.valid_to is None or a.valid_from<=b.valid_to)

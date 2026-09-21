@@ -48,6 +48,13 @@ EXPECTED_TABLES = {
     'legal_holds',
     'data_subject_requests',
     'document_metadata',
+    'company_business_activities',
+    'company_accounting_profiles',
+    'counterparties',
+    'company_item_profiles',
+    'item_classifications',
+    'classification_evidence',
+    'classification_feedback',
 }
 
 
@@ -71,7 +78,7 @@ def test_upgrade_and_downgrade_initial_revision(
     try:
         command.upgrade(config, 'head')
         assert table_names(database_path) == EXPECTED_TABLES | {'alembic_version'}
-        assert permission_count(database_path) == 17
+        assert permission_count(database_path) == 22
         command.check(config)
 
         command.downgrade(config, 'base')

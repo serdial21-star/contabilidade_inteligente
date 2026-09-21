@@ -134,8 +134,10 @@ class SqlAlchemyFiscalDocumentRepository:
                 fiscal_document_id=item.fiscal_document_id,
                 sequence=item.sequence,
                 product_code=item.product_code,
+                gtin=item.gtin,
                 description=item.description,
                 ncm=item.ncm,
+                cest=item.cest,
                 cfop=item.cfop,
                 commercial_unit=item.commercial_unit,
                 quantity=item.quantity,
@@ -143,6 +145,7 @@ class SqlAlchemyFiscalDocumentRepository:
                 gross_total=item.gross_total,
                 discount_total=item.discount_total,
                 other_total=item.other_total,
+                freight_total=item.freight_total,
                 included_in_total=item.included_in_total,
                 created_at=item.created_at,
             )
@@ -164,6 +167,16 @@ class SqlAlchemyFiscalDocumentRepository:
             )
             for tax in taxes
         ])
+
+    def list_items(
+        self, tenant_id: UUID, company_id: UUID, fiscal_document_id: UUID,
+    ) -> tuple[FiscalDocumentItem, ...]:
+        models = self._session.scalars(select(FiscalDocumentItemModel).where(
+            FiscalDocumentItemModel.tenant_id == tenant_id,
+            FiscalDocumentItemModel.company_id == company_id,
+            FiscalDocumentItemModel.fiscal_document_id == fiscal_document_id,
+        ).order_by(FiscalDocumentItemModel.sequence))
+        return tuple(_item(model) for model in models)
 
 
 def _canonical(model: CanonicalRecordModel) -> CanonicalRecord:
@@ -214,4 +227,17 @@ def _document(model: FiscalDocumentModel) -> FiscalDocument:
         protocol_status_code=model.protocol_status_code,
         protocol_status_reason=model.protocol_status_reason,
         created_at=model.created_at,
+    )
+
+
+def _item(model: FiscalDocumentItemModel) -> FiscalDocumentItem:
+    return FiscalDocumentItem(
+        id=model.id, tenant_id=model.tenant_id, company_id=model.company_id,
+        fiscal_document_id=model.fiscal_document_id, sequence=model.sequence,
+        product_code=model.product_code, description=model.description, ncm=model.ncm,
+        cfop=model.cfop, commercial_unit=model.commercial_unit,
+        quantity=model.quantity, unit_value=model.unit_value, gross_total=model.gross_total,
+        discount_total=model.discount_total, other_total=model.other_total,
+        included_in_total=model.included_in_total, created_at=model.created_at,
+        gtin=model.gtin, cest=model.cest, freight_total=model.freight_total,
     )

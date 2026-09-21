@@ -421,8 +421,10 @@ class NFe55ImportService:
                 fiscal_document_id=document_id,
                 sequence=parsed_item.sequence,
                 product_code=parsed_item.product_code,
+                gtin=parsed_item.gtin,
                 description=parsed_item.description,
                 ncm=parsed_item.ncm,
+                cest=parsed_item.cest,
                 cfop=parsed_item.cfop,
                 commercial_unit=parsed_item.commercial_unit,
                 quantity=parsed_item.quantity,
@@ -430,6 +432,7 @@ class NFe55ImportService:
                 gross_total=parsed_item.gross_total,
                 discount_total=parsed_item.discount_total,
                 other_total=parsed_item.other_total,
+                freight_total=parsed_item.freight_total,
                 included_in_total=parsed_item.included_in_total,
                 created_at=now,
             ))

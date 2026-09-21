@@ -40,7 +40,7 @@ def test_fiscal_ui_has_required_contract_fields_and_safe_rendering() -> None:
     app = source('app.js')
     for marker in (
         'nfe-import-form', 'accounting_date', 'period_start', 'period_end',
-        'approval_expires_at', 'fiscal-filter-form', 'open-fiscal',
+        'approval_expiry_date', 'fiscal-filter-form', 'open-fiscal',
         'Nenhuma NF-e encontrada.', 'detail.item_count', 'fiscal-page',
     ):
         assert marker in app
@@ -81,13 +81,32 @@ def test_import_feedback_and_accessibility_states_are_explicit() -> None:
     for marker in (
         'Importando arquivo…', 'Documento já recebido anteriormente',
         'Importação requer atenção', 'aria-live="polite"', 'role="status"',
-        'type="file"', '<th>Valor</th>',
+        'type="file"', '<th>Valor</th>', 'remove-nfe-file',
+        'Resultado por arquivo', 'simulação sem persistência',
+        'Preenchida automaticamente:', 'PERIOD_MISMATCH',
+        'Sem data contábil manual, XML fora do período é recusado',
     ):
         assert marker in app
     css = source('app-shell.css')
     assert '.amount.credit' in css
     assert '.amount.debit' in css
     assert '@media(max-width:800px)' in css
+
+
+def test_nfe_selection_can_be_reviewed_before_upload() -> None:
+    app = source('app.js')
+    assert 'let pendingNfeFiles = [];' in app
+    assert 'Você poderá conferir e remover arquivos antes de importar.' in app
+    assert "const files = isNfe ? [...pendingNfeFiles]" in app
+    assert 'pendingNfeFiles.splice(index, 1)' in app
+
+
+def test_nfe_period_is_checked_against_xml_before_import() -> None:
+    app = source('app.js')
+    assert "getElementsByTagNameNS('*', 'dhEmi')" in app
+    assert 'inspection.issuedDate < values.period_start' in app
+    assert 'retryFiles.push(file)' in app
+    assert 'Ajuste o contexto ou informe conscientemente outra data contábil.' in app
 
 
 def test_synthetic_examples_are_explicitly_fictitious() -> None:

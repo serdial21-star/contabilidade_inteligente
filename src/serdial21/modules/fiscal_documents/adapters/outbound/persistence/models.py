@@ -169,6 +169,10 @@ class FiscalDocumentItemModel(Base):
             ['fiscal_documents.tenant_id', 'fiscal_documents.company_id', 'fiscal_documents.id'],
             name='fk_fiscal_document_items_scope_document',
         ),
+        Index(
+            'ix_fiscal_items_product_identity', 'tenant_id', 'company_id',
+            'product_code', 'gtin', 'ncm',
+        ),
         TABLE_OPTIONS,
     )
 
@@ -178,8 +182,10 @@ class FiscalDocumentItemModel(Base):
     fiscal_document_id: Mapped[UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
     sequence: Mapped[int] = mapped_column(BigInteger, nullable=False)
     product_code: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    gtin: Mapped[str | None] = mapped_column(String(32), nullable=True)
     description: Mapped[str | None] = mapped_column(String(255), nullable=True)
     ncm: Mapped[str | None] = mapped_column(String(16), nullable=True)
+    cest: Mapped[str | None] = mapped_column(String(16), nullable=True)
     cfop: Mapped[str | None] = mapped_column(String(8), nullable=True)
     commercial_unit: Mapped[str | None] = mapped_column(String(10), nullable=True)
     quantity: Mapped[Decimal | None] = mapped_column(Numeric(20, 6), nullable=True)
@@ -187,6 +193,7 @@ class FiscalDocumentItemModel(Base):
     gross_total: Mapped[Decimal | None] = mapped_column(Numeric(20, 2), nullable=True)
     discount_total: Mapped[Decimal | None] = mapped_column(Numeric(20, 2), nullable=True)
     other_total: Mapped[Decimal | None] = mapped_column(Numeric(20, 2), nullable=True)
+    freight_total: Mapped[Decimal | None] = mapped_column(Numeric(20, 2), nullable=True)
     included_in_total: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         UTCDateTime(), nullable=False, server_default=func.current_timestamp()

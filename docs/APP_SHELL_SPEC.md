@@ -25,7 +25,23 @@ Estados: `BOOTING`, `UNAUTHENTICATED`, `AUTHENTICATING`, `AUTHENTICATED`, `SESSI
 
 ## Contexto e navegação
 
-O shell contém sidebar, topbar, conteúdo, escritório/tenant atual, seletor de empresas autorizadas e menu do usuário. Cada empresa traz permissões resolvidas pelo backend; trocar empresa recalcula a navegação com a projeção daquela empresa. IDs na UI não concedem acesso. `UI VISIBILITY != SECURITY AUTHORIZATION` permanece regra obrigatória.
+O shell contém sidebar, topbar, conteúdo, escritório/tenant atual, seletor de
+empresas autorizadas, competência de trabalho e menu do usuário. Na entrada, o
+usuário pode confirmar empresa, competência mensal, quantidade de dias para a
+revisão e se o prazo parte da data da importação ou do fim do período. A data da
+importação é o padrão seguro para competências históricas. Uma preferência
+permite não abrir novamente esse diálogo; o contexto continua acessível no topo
+e no menu do usuário.
+
+Somente o ID opaco da empresa, `YYYY-MM`, a opção de abertura e a quantidade de
+dias são mantidos localmente. Empresa salva é sempre intersectada com as
+empresas retornadas pelo contexto autenticado. Nenhum nome, CNPJ, XML, valor,
+token ou permissão é persistido. Essa conveniência preenche formulários, mas
+não concede acesso nem cria regra oficial: cada operação envia datas explícitas
+e o backend revalida período, bloqueios, `CompanyAccess` e permissões. Cada
+empresa traz permissões resolvidas pelo backend; trocar empresa recalcula a
+navegação com a projeção daquela empresa. IDs na UI não concedem acesso.
+`UI VISIBILITY != SECURITY AUTHORIZATION` permanece regra obrigatória.
 
 Minha Visão, Operação, Fiscal, Financeiro, Contábil, Clientes, Obrigações, Governança e Administração usam o mapa de permissões aprovado. Módulos posteriores permanecem desabilitados ou em placeholder controlado. Agregados reais não foram implementados.
 

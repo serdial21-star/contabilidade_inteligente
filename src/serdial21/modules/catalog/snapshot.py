@@ -7,10 +7,12 @@ from typing import Any
 from uuid import UUID, uuid4
 
 from serdial21.modules.chart_of_accounts.domain.entities import (
-    AccountVersion, Ledger, assert_hierarchy_acyclic, assert_unique_code,
+    AccountCodeMask, AccountVersion, Ledger, assert_hierarchy_acyclic, assert_unique_code,
 )
+from serdial21.modules.accounting.domain.classification import ACCOUNTING_INTENTS
 from serdial21.modules.catalog.domain.entities import CatalogSpec
 from serdial21.modules.rules.domain.entities import AccountingRuleVersion, RuleSetRelease
+from serdial21.modules.mappings.domain.entities import MappingEntry, MappingVersion
 from serdial21.modules.workflow.application.journey import PostingPolicy, PreparationPlan
 from serdial21.modules.workflow.domain.entities import WorkflowVersion
 
@@ -78,6 +80,9 @@ def compile_snapshot(
             'valid_to': spec.valid_to.isoformat() if spec.valid_to else None,
             'status': 'DRAFT', 'automation_level': item.automation_level,
             'approved': False, 'tests_passed': item.tests_passed,
+            'governance_scope': item.governance_scope, 'intent': item.intent,
+            'classification_category': item.classification_category,
+            'confidence_override': item.confidence_override,
         })
 
     prior = previous or {}
@@ -120,6 +125,8 @@ def compile_snapshot(
                 'history_contains': item.history_contains,
                 'dimension_code': item.dimension_code,
                 'canonical_entity': item.canonical_entity,
+                'accounting_intent': item.accounting_intent,
+                'classification_category': item.classification_category,
                 'target_account_version_id': account_versions[item.target_account_key],
                 'valid_from': spec.valid_from.isoformat(),
                 'valid_to': spec.valid_to.isoformat() if spec.valid_to else None,
@@ -138,6 +145,12 @@ def compile_snapshot(
             'amount_field': spec.amount_field,
             'decimal_places': spec.decimal_places,
         },
+        'account_code_mask': ({
+            'widths': list(spec.account_code_mask.widths),
+            'separator': spec.account_code_mask.separator,
+        } if spec.account_code_mask else None),
+        'template_scope': spec.template_scope,
+        'business_segment': spec.business_segment,
     }
     return content
 
@@ -180,10 +193,28 @@ def preparation_plan(
         UUID(item['credit_account_version_id']), date.fromisoformat(item['valid_from']),
         _date(item['valid_to']), item['status'], item['automation_level'],
         bool(item['approved']), bool(item['tests_passed']),
+        item.get('governance_scope', 'COMPANY'), item.get('intent'),
+        item.get('classification_category'), item.get('confidence_override'),
     ) for item in rule_data)
     release_data = content['rule_release']
     workflow_data = content['workflow']
     posting_data = content['posting']
+    mapping_data = content['mapping']
+    mapping_version = MappingVersion(
+        UUID(mapping_data['id']), tenant_id, company_id,
+        UUID(mapping_data['mapping_set_id']), int(mapping_data['version_no']),
+        mapping_data['status'], date.fromisoformat(mapping_data['valid_from']),
+        _date(mapping_data['valid_to']),
+    )
+    mapping_entries = tuple(MappingEntry(
+        UUID(item['id']), tenant_id, company_id, mapping_version.id,
+        int(item['priority']), item.get('external_code'), item.get('history_contains'),
+        item.get('dimension_code'), item.get('canonical_entity'),
+        UUID(item['target_account_version_id']) if item.get('target_account_version_id') else None,
+        item.get('target_dimension_code'), date.fromisoformat(item['valid_from']),
+        _date(item.get('valid_to')), item.get('accounting_intent'),
+        item.get('classification_category'),
+    ) for item in mapping_data['entries'])
     return PreparationPlan(
         RuleSetRelease(
             UUID(release_data['id']), tenant_id, company_id, release_data['name'],
@@ -209,6 +240,8 @@ def preparation_plan(
         _account_groups(accounts),
         workflow_data['approval_role'],
         workflow_data['responsible_role'],
+        mapping_version,
+        mapping_entries,
     )
 
 
@@ -236,15 +269,32 @@ def _validate_spec(spec: CatalogSpec) -> None:
     for rule in spec.rules:
         if rule.debit_account_key not in account_keys or rule.credit_account_key not in account_keys:
             raise ValueError('regra referencia conta inexistente')
-        if any(operator not in {'EQ', 'CONTAINS'} for _, operator, _ in rule.conditions):
+        if any(operator not in {'EQ', 'CONTAINS', 'PREFIX', 'GTE', 'LTE'}
+               for _, operator, _ in rule.conditions):
             raise ValueError('operador DSL não permitido')
         signature = (rule.priority, rule.conditions)
         if signature in collisions:
             raise ValueError('regras ambíguas com mesma prioridade e condições')
         collisions.add(signature)
+        if rule.governance_scope not in {'SYSTEM_TEMPLATE', 'OFFICE', 'COMPANY'}:
+            raise ValueError('escopo de regra inválido')
+        if rule.intent is not None and rule.intent not in ACCOUNTING_INTENTS:
+            raise ValueError('intenção contábil inválida')
+        if rule.confidence_override not in {None, 'HIGH', 'MEDIUM', 'LOW'}:
+            raise ValueError('confiança explícita inválida')
+    if spec.account_code_mask:
+        mask = AccountCodeMask(uuid4(), UUID(int=0), UUID(int=0),
+                               spec.account_code_mask.widths, spec.account_code_mask.separator)
+        for account in spec.accounts:
+            mask.validate_code(account.code)
+    if spec.template_scope not in {'SYSTEM', 'OFFICE', 'COMPANY'}:
+        raise ValueError('escopo de catálogo inválido')
     mapping_keys = [item.key for item in spec.mappings]
     if len(mapping_keys) != len(set(mapping_keys)):
         raise ValueError('chaves de mapping duplicadas')
+    if any(item.accounting_intent is not None and item.accounting_intent not in ACCOUNTING_INTENTS
+           for item in spec.mappings):
+        raise ValueError('mapping referencia intenção inválida')
     if any(item.target_account_key not in account_keys for item in spec.mappings):
         raise ValueError('mapping referencia conta inexistente')
 

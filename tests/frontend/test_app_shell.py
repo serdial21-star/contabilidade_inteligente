@@ -80,6 +80,15 @@ def test_password_and_token_are_not_persisted_or_logged() -> None:
     assert 'access_token' not in re.sub(r"tokens\.access_token", '', source('oidc-client.js'))
 
 
+def test_work_context_preference_is_minimized_and_loaded_before_application() -> None:
+    html = source('index.html')
+    assert html.index('work-context.js') < html.index('app.js')
+    preference = source('work-context.js')
+    assert "STORAGE_KEY = 's21.work-context.v1'" in preference
+    for forbidden in ('tax_identifier', 'accessToken', 'filename', 'invoice', 'amount'):
+        assert forbidden not in preference
+
+
 def test_synthetic_provider_is_explicit_and_has_no_token() -> None:
     provider = source('mock-provider.js')
     config = source('config.js')

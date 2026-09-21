@@ -31,6 +31,12 @@ _METRIC_LABELS: dict[str, frozenset[str]] = {
     'accounting_decision_total': frozenset({'decision'}),
     'account_lock_block_total': frozenset(),
     'audit_write_failure_total': frozenset(),
+    'items_classified_total': frozenset(),
+    'items_auto_classified_total': frozenset(),
+    'items_review_required_total': frozenset(),
+    'classification_conflict_total': frozenset(),
+    'classification_corrected_total': frozenset(),
+    'account_mapping_missing_total': frozenset(),
     # Métricas legadas mantidas para compatibilidade durante o piloto.
     'imports_total': frozenset(),
     'errors_total': frozenset(),

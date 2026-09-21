@@ -10,6 +10,12 @@ from serdial21.modules.access_control.application.services.authorization import 
     AuthorizationRequest, AuthorizationService,
 )
 from serdial21.modules.access_control.domain.permissions import PermissionCode
+from serdial21.modules.accounting.application.ports.repository import (
+    AccountingClassificationRepository, ClassificationRecord,
+)
+from serdial21.modules.accounting.application.services.classification import (
+    ReviewClassificationCommand, ReviewItemClassification,
+)
 from serdial21.modules.audit.application.services.audit import AuditRecord, AuditService
 from serdial21.modules.audit.domain.entities import AuditOrigin
 from serdial21.modules.banking.application.services.ofx_importer import (
@@ -242,6 +248,46 @@ class AccountingProposalDetail:
     lines: tuple[ReviewLineView, ...]
     sources: tuple[AccountingSourceEvidence, ...]
     active_locks: tuple[AccountingLockView, ...]
+
+
+@dataclass(frozen=True, slots=True)
+class ItemClassificationEvidenceView:
+    kind: str
+    intent: str
+    weight: int
+    explanation: str
+    reference_id: UUID | None
+
+
+@dataclass(frozen=True, slots=True)
+class ItemClassificationSummary:
+    id: UUID
+    fiscal_document_id: UUID
+    fiscal_item_id: UUID
+    item_description: str
+    selected_intent: str
+    classification_category: str | None
+    confidence_level: str
+    status: str
+    version: int
+    created_at: datetime
+
+
+@dataclass(frozen=True, slots=True)
+class ItemClassificationPage:
+    items: tuple[ItemClassificationSummary, ...]
+    total: int
+    offset: int
+    limit: int
+
+
+@dataclass(frozen=True, slots=True)
+class ItemClassificationDetail:
+    summary: ItemClassificationSummary
+    evidence: tuple[ItemClassificationEvidenceView, ...]
+    alternatives: tuple[str, ...]
+    document_number: str | None
+    issuer_name: str | None
 
 
 @dataclass(frozen=True, slots=True)
@@ -487,6 +533,8 @@ class OperationalService:
         authorization: AuthorizationService, intake: DocumentIntakeService,
         nfe: NFeToDominioService, ofx: OfxImportService, audit: AuditService,
         nfe_parser: NFe55Parser, banking: BankingRepository,
+        classification: AccountingClassificationRepository,
+        review_classification: ReviewItemClassification,
     ) -> None:
         self._repository = repository
         self._authorization = authorization
@@ -496,6 +544,8 @@ class OperationalService:
         self._audit = audit
         self._nfe_parser = nfe_parser
         self._banking = banking
+        self._classification = classification
+        self._review_classification = review_classification
         self._traceability = DecisionLineService(repository, authorization, audit)
 
     def company(
@@ -919,6 +969,59 @@ class OperationalService:
         if item is None:
             raise OperationalUnavailableError()
         return item
+
+    def item_classifications(
+        self, tenant_id: UUID, company_id: UUID, actor_id: UUID, *,
+        offset: int, limit: int,
+    ) -> ItemClassificationPage:
+        self._require(tenant_id, company_id, actor_id, 'journal.read')
+        records, total = self._classification.list_pending(
+            tenant_id, company_id, offset=offset, limit=limit,
+        )
+        return ItemClassificationPage(
+            tuple(self._item_classification_summary(tenant_id, company_id, record)
+                  for record in records),
+            total, offset, limit,
+        )
+
+    def item_classification(
+        self, tenant_id: UUID, company_id: UUID, actor_id: UUID,
+        classification_id: UUID,
+    ) -> ItemClassificationDetail:
+        self._require(tenant_id, company_id, actor_id, 'journal.read')
+        record = self._classification.get_classification(tenant_id, company_id, classification_id)
+        if record is None:
+            raise OperationalUnavailableError()
+        fiscal = self._repository.get_fiscal_document(
+            tenant_id, company_id, record.fiscal_document_id,
+        )
+        return ItemClassificationDetail(
+            self._item_classification_summary(tenant_id, company_id, record),
+            tuple(ItemClassificationEvidenceView(
+                item.kind, item.intent, item.weight, item.explanation, item.reference_id,
+            ) for item in record.classification.evidence),
+            record.classification.alternatives,
+            fiscal.document_number if fiscal else None,
+            fiscal.issuer_name if fiscal else None,
+        )
+
+    def decide_item_classification(
+        self, command: ReviewClassificationCommand,
+    ) -> ItemClassificationSummary:
+        record = self._review_classification.execute(command)
+        return self._item_classification_summary(command.tenant_id, command.company_id, record)
+
+    def _item_classification_summary(
+        self, tenant_id: UUID, company_id: UUID, record: ClassificationRecord,
+    ) -> ItemClassificationSummary:
+        item = self._classification.get_item(tenant_id, company_id, record.fiscal_item_id)
+        return ItemClassificationSummary(
+            record.id, record.fiscal_document_id, record.fiscal_item_id,
+            item.description if item else 'Item indisponível',
+            record.classification.intent, record.classification.category,
+            record.classification.confidence_level, record.classification.status,
+            record.version, record.created_at,
+        )
 
     def proposal_activity(
         self, tenant_id: UUID, company_id: UUID, actor_id: UUID, journey_id: UUID,

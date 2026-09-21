@@ -26,3 +26,7 @@ class FiscalDocumentRepository(Protocol):
         items: tuple[FiscalDocumentItem, ...],
         taxes: tuple[TaxDetail, ...],
     ) -> None: ...
+
+    def list_items(
+        self, tenant_id: UUID, company_id: UUID, fiscal_document_id: UUID,
+    ) -> tuple[FiscalDocumentItem, ...]: ...

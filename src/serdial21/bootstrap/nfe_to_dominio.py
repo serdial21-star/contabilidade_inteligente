@@ -10,6 +10,10 @@ from serdial21.modules.access_control.adapters.outbound.persistence.repositories
 from serdial21.modules.access_control.application.services.authorization import AuthorizationService
 from serdial21.modules.audit.adapters.outbound.persistence.repositories import SqlAlchemyAuditRepository
 from serdial21.modules.audit.application.services.audit import AuditService
+from serdial21.modules.accounting.adapters.outbound.persistence.repositories import (
+    SqlAlchemyAccountingClassificationRepository,
+)
+from serdial21.modules.accounting.application.services.classification import ClassifyFiscalItem
 from serdial21.modules.catalog.adapters.outbound.persistence.repositories import SqlAlchemyJourneyCatalog
 from serdial21.modules.fiscal_documents.adapters.outbound.persistence.repositories import SqlAlchemyFiscalDocumentRepository
 from serdial21.modules.integrations.adapters.outbound.dominio import DominioConnector
@@ -30,6 +34,10 @@ def create_nfe_to_dominio_runtime(
         AuthorizationService(SqlAlchemyAuthorizationRepository(session)),
         nfe.intake, nfe.importer, SqlAlchemyFiscalDocumentRepository(session),
         AuditService(SqlAlchemyAuditRepository(session), clock=clock),
-        DominioConnector(), clock=clock, metrics=metrics,
+        DominioConnector(),
+        ClassifyFiscalItem(
+            SqlAlchemyAccountingClassificationRepository(session), clock=clock,
+        ),
+        clock=clock, metrics=metrics,
     )
 

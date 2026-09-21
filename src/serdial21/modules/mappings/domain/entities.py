@@ -22,13 +22,13 @@ class MappingVersion:
   return replace(self,id=uuid4(),version_no=self.version_no+1,status='DRAFT',**changes)
 @dataclass(frozen=True,slots=True)
 class MappingEntry:
- id:UUID;tenant_id:UUID;company_id:UUID;mapping_version_id:UUID;priority:int;external_code:str|None;history_contains:str|None;dimension_code:str|None;canonical_entity:str|None;target_account_version_id:UUID|None;target_dimension_code:str|None;valid_from:date;valid_to:date|None
+ id:UUID;tenant_id:UUID;company_id:UUID;mapping_version_id:UUID;priority:int;external_code:str|None;history_contains:str|None;dimension_code:str|None;canonical_entity:str|None;target_account_version_id:UUID|None;target_dimension_code:str|None;valid_from:date;valid_to:date|None;accounting_intent:str|None=None;classification_category:str|None=None
  def matches(self,input:'MappingInput',at:date)->bool:
   if at<self.valid_from or (self.valid_to and at>self.valid_to):return False
-  return ((not self.external_code or self.external_code==input.external_code) and (not self.history_contains or self.history_contains.casefold() in (input.history or '').casefold()) and (not self.dimension_code or self.dimension_code==input.dimension_code) and (not self.canonical_entity or self.canonical_entity==input.canonical_entity))
+  return ((not self.external_code or self.external_code==input.external_code) and (not self.history_contains or self.history_contains.casefold() in (input.history or '').casefold()) and (not self.dimension_code or self.dimension_code==input.dimension_code) and (not self.canonical_entity or self.canonical_entity==input.canonical_entity) and (not self.accounting_intent or self.accounting_intent==input.accounting_intent) and (not self.classification_category or self.classification_category==input.classification_category))
 @dataclass(frozen=True,slots=True)
 class MappingInput:
- external_code:str|None;history:str|None;dimension_code:str|None;canonical_entity:str|None
+ external_code:str|None;history:str|None;dimension_code:str|None;canonical_entity:str|None;accounting_intent:str|None=None;classification_category:str|None=None
 @dataclass(frozen=True,slots=True)
 class SimulationResult:
  status:str;entry_id:UUID|None;account_version_id:UUID|None;reason:str

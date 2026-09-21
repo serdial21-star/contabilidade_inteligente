@@ -31,6 +31,10 @@ class RuleSpec:
     credit_account_key: str
     automation_level: str
     tests_passed: bool
+    governance_scope: str = 'COMPANY'
+    intent: str | None = None
+    classification_category: str | None = None
+    confidence_override: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -42,6 +46,14 @@ class MappingEntrySpec:
     history_contains: str | None = None
     dimension_code: str | None = None
     canonical_entity: str | None = None
+    accounting_intent: str | None = None
+    classification_category: str | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class AccountCodeMaskSpec:
+    widths: tuple[int, ...]
+    separator: str = '.'
 
 
 @dataclass(frozen=True, slots=True)
@@ -67,6 +79,9 @@ class CatalogSpec:
     decimal_places: int
     valid_from: date
     valid_to: date | None
+    account_code_mask: AccountCodeMaskSpec | None = None
+    template_scope: str = 'COMPANY'
+    business_segment: str | None = None
 
 
 @dataclass(frozen=True, slots=True)

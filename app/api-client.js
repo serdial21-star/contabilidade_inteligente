@@ -76,6 +76,12 @@
         method: 'POST', headers: {'Content-Type': 'application/json', 'Idempotency-Key': root.crypto.randomUUID()},
         body: JSON.stringify({expected_version: summary.version, revision_id: summary.revision_id, revision_hash: summary.revision_hash}),
       }),
+      itemClassifications: (companyId, filters = {}) => request(`/operations/companies/${encodeURIComponent(companyId)}/item-classifications?${queryString(filters)}`),
+      itemClassification: (companyId, id) => request(`/operations/companies/${encodeURIComponent(companyId)}/item-classifications/${encodeURIComponent(id)}`),
+      decideItemClassification: (companyId, id, decision) => request(`/operations/companies/${encodeURIComponent(companyId)}/item-classifications/${encodeURIComponent(id)}/decide`, {
+        method: 'POST', headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({final_intent: decision.finalIntent, decision_type: decision.decisionType, apply_scope: decision.applyScope}),
+      }),
     });
   }
   function queryString(filters) {

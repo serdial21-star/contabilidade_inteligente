@@ -7,6 +7,10 @@ from serdial21.bootstrap.nfe_to_dominio import create_nfe_to_dominio_runtime
 from serdial21.bootstrap.settings import AppSettings
 from serdial21.modules.access_control.adapters.outbound.persistence.repositories import SqlAlchemyAuthorizationRepository
 from serdial21.modules.access_control.application.services.authorization import AuthorizationService
+from serdial21.modules.accounting.adapters.outbound.persistence.repositories import (
+    SqlAlchemyAccountingClassificationRepository,
+)
+from serdial21.modules.accounting.application.services.classification import ReviewItemClassification
 from serdial21.modules.audit.adapters.outbound.persistence.repositories import SqlAlchemyAuditRepository
 from serdial21.modules.audit.application.services.audit import AuditService
 from serdial21.modules.banking.adapters.inbound.ofx import SafeOfxParser
@@ -22,11 +26,13 @@ def create_operational_runtime(
     session: Session, settings: AppSettings, *, metrics: MetricsRegistry | None = None,
 ) -> OperationalService:
     nfe_runtime = create_nfe55_runtime(session, settings)
+    authorization = AuthorizationService(SqlAlchemyAuthorizationRepository(session))
     audit = AuditService(SqlAlchemyAuditRepository(session))
     banking = SqlAlchemyBankingRepository(session)
+    classification = SqlAlchemyAccountingClassificationRepository(session)
     return OperationalService(
         SqlAlchemyOperationalQueryRepository(session),
-        AuthorizationService(SqlAlchemyAuthorizationRepository(session)),
+        authorization,
         nfe_runtime.intake,
         create_nfe_to_dominio_runtime(session, settings, metrics=metrics),
         OfxImportService(
@@ -40,4 +46,6 @@ def create_operational_runtime(
             max_xml_elements=settings.nfe_max_xml_elements,
         ),
         banking,
+        classification,
+        ReviewItemClassification(classification, authorization, audit),
     )
