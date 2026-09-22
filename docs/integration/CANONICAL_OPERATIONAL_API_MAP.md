@@ -41,14 +41,15 @@ Base documentada: `https://n8n.serdial21.com/webhook`. A raiz pública do n8n re
 | `/admin/permissoes/funcionario/salvar` | POST | unversioned | `PermissoesManager.tsx` | `permissoes-funcionario` | Bearer admin | permission set → resultado | `NOT_VERIFIABLE` |
 | `/admin/permissoes/cliente` | POST | unversioned | `useClientPermissoes.ts` | não congelado | Bearer admin | cliente → permissões | `NOT_VERIFIABLE` |
 | `/admin/permissoes/cliente/salvar` | POST | unversioned | `PermissoesManager.tsx` | não congelado | Bearer admin | permission set → resultado | `NOT_VERIFIABLE` |
-| `/admin/tickets-v2` | POST | v2 | `AdminTickets.tsx` | `tickets-v2` | Bearer admin | filtros → tickets | `NOT_VERIFIABLE` |
+| `/admin/tickets` (unversioned) | GET/POST/PUT/DELETE | unversioned | `useTickets.ts` (órfão) | `admin/tickets` alegado | **nenhuma** — `VERIFIED_IN_AVAILABLE_CODE` (2026-09-21): nenhuma chamada `fetch` em `useTickets.ts` inclui header `Authorization` | criar/atualizar/excluir ticket → resultado | `VERIFIED_UNAUTHENTICATED_DEAD_CODE` (2026-09-21) — `AdminTickets.tsx` (página roteada) não importa `useTickets`, `TicketTable`, `TicketKanban` nem `TicketFormDialog`; todo esse subconjunto está órfão, escopo maior que o relatório de terceiros indicava. Candidato a remoção completa, não só a "não reutilizar" |
+| `/admin/tickets-v2` | POST | v2 | `AdminTickets.tsx` | `tickets-v2` | Bearer admin | filtros → tickets | `NOT_VERIFIABLE`; confirmado como caminho ativo da UI atual por revisão de terceiros (2026-09-21) |
 | `/admin/responder-ticket-v2` | POST | v2 | `AdminTickets.tsx` | `tickets-v2` | Bearer admin | ref/resposta → resultado | `NOT_VERIFIABLE` |
 | `/admin/documentos-v2` | POST | v2 | `AdminDocumentos.tsx` | `documentos-v2` | Bearer admin | filtros → inbox | `NOT_VERIFIABLE` |
 | `/admin/enviar-inbox` | POST | unversioned | documento admin | não congelado | Bearer admin | metadata/arquivo → receipt | `NOT_VERIFIABLE` |
-| `/admin/upload-documento-cliente` | POST FormData | unversioned | `AdminUploadDocumentosForm.tsx` | documentado como inexistente | Bearer admin | arquivo/cliente → receipt | `MISSING` documental; runtime requerido |
+| `/admin/upload-documento-cliente` | POST FormData | unversioned | `AdminUploadDocumentosForm.tsx:183` | documentado como inexistente | Bearer admin | arquivo/cliente → receipt | `MISSING`, confirmado por revisão de código de terceiros em 2026-09-21 (chamada existe no frontend, workflow n8n correspondente ainda não confirmado) |
 | `/admin/upload-documentos` | rota de tela, não webhook | — | route registry antigo | — | guard documentos | — | `LEGACY`/não é API |
-| `/admin/impostos` | POST | unversioned | `useImpostos.ts` | `impostos` | Bearer admin | filtros → impostos | `CONFLICTING` |
-| `/admin/impostos-v2` | POST | v2 | dossiê recente | `impostos-v2` alegado | Bearer admin | filtros → impostos | `CONFLICTING` |
+| `/admin/impostos` | POST | unversioned | `useImpostos.ts:110,145` (`useImpostosAdmin`, via proxy-webhook) | `impostos` | Bearer admin | filtros → impostos | `VERIFIED_IN_AVAILABLE_CODE` (2026-09-21): ativamente usado por `AdminImpostos.tsx` para listagem/ações |
+| `/admin/impostos-v2` | POST | v2 | `AdminImpostos.tsx:191` (fetch direto, fora do hook) | `impostos-v2` alegado | Bearer admin | filtros → impostos | `VERIFIED_IN_AVAILABLE_CODE` (2026-09-21): a MESMA página usa as duas versões simultaneamente para operações diferentes — não é migração em andamento, é um conflito real e atual, não apenas dossiê |
 | `/admin/novo-imposto` | POST | unversioned | `useImpostos.ts` | `impostos` | Bearer admin | imposto → ref | `CONFLICTING` |
 | `/admin/novo-imposto-v2` | POST | v2 | recomendação/dossiê | não comprovado | Bearer admin | imposto → ref | `CONFLICTING` |
 | `/admin/honorarios-v2` | POST | v2 | `AdminHonorarios.tsx` | `honorarios-v2` | Bearer admin | filtros → contratos | `NOT_VERIFIABLE` |
@@ -57,12 +58,12 @@ Base documentada: `https://n8n.serdial21.com/webhook`. A raiz pública do n8n re
 | `/admin/fiscal/upload-xml` | POST | unversioned | `AdminFiscal.tsx` | `fiscal-ia` | Bearer admin | XML → resultado | `NOT_VERIFIABLE` |
 | `/admin/fiscal/listar` | POST | unversioned | `AdminFiscal.tsx` | `fiscal-ia` | Bearer admin | filtros → lista | `NOT_VERIFIABLE` |
 | `/admin/fiscal/conferir` | POST | unversioned | `AdminFiscal.tsx` | `fiscal-ia` | Bearer admin | ref/ação → resultado | `NOT_VERIFIABLE` |
-| `/admin-kanban-v3` | POST | v3 | `useTasks.ts` | `kanban-v3` | Bearer admin | filtros → items | `CONFLICTING` contract set |
+| `/admin-kanban-v3` | POST | v3 | `useTasks.ts:94-97` | `kanban-v3` | Bearer admin | filtros → items | `CONFLICTING` contract set; chamada confirmada ativa por revisão de terceiros 2026-09-21, simultânea a `create/update-v5` (não é migração sequencial) |
 | `/admin-create-item-v3` | POST | v3 | diagnóstico antigo | `create-v3` alegado | Bearer admin | item → ref | `LEGACY` provável |
-| `/admin-create-item-v5` | POST | v5 | `useTasks.ts` documentado | `create-v5` | Bearer admin | item → ref | `CONFLICTING` — não verificado |
-| `/admin-update-item-v1` | POST | v1 | dossiê técnico | `update-v1` | Bearer admin | item/status → resultado | `CONFLICTING` — persistência não provada |
-| `/admin-update-item-v5` | POST | v5 | dossiê recente | `update-v5` alegado | Bearer admin | item/status → resultado | `CONFLICTING` — persistência não provada |
-| `/admin-delete-item-v3` | POST | v3 | `useTasks.ts` documentado | `delete-v3` | Bearer admin | item ref → resultado | `NOT_VERIFIABLE` |
+| `/admin-create-item-v5` | POST | v5 | `useTasks.ts:94-97` | `create-v5` | Bearer admin | item → ref | `CONFLICTING` — chamada de frontend confirmada 2026-09-21; persistência/efeito no workflow ainda não verificado |
+| `/admin-update-item-v1` | POST | v1 | dossiê técnico | `update-v1` | Bearer admin | item/status → resultado | `CONFLICTING` — persistência não provada; não é o caminho chamado pelo frontend atual (ver v5) |
+| `/admin-update-item-v5` | POST | v5 | `useTasks.ts:94-97` | `update-v5` | Bearer admin | item/status → resultado | `CONFLICTING` — chamada de frontend confirmada 2026-09-21; persistência ainda **não provada** (CHP-12 permanece `CONFIRMED_BLOCKER`) |
+| `/admin-delete-item-v3` | POST | v3 | `useTasks.ts:94-97` | `delete-v3` | Bearer admin | item ref → resultado | `NOT_VERIFIABLE`; chamada confirmada ativa por revisão de terceiros 2026-09-21 |
 | `/admin/atalhos` | POST | unversioned | `useAtalhos.ts` | `atalhos` | Bearer admin | filtros → atalhos | `NOT_VERIFIABLE` |
 | `/admin-clientes-options-v1` | POST | v1 | `useOptionsAPI.ts` | `options-v1` | Bearer admin | busca → options | `NOT_VERIFIABLE` |
 | `/admin-funcionarios-options-v1` | POST | v1 | `useOptionsAPI.ts` | `options-v1` | Bearer admin | busca → options | `NOT_VERIFIABLE` |
@@ -71,6 +72,14 @@ Base documentada: `https://n8n.serdial21.com/webhook`. A raiz pública do n8n re
 ## Conflitos restantes
 
 Sete grupos permanecem sem resolução: dashboard v1/v2; agenda v1/v2; create v3/v5; update v1/v5 e persistência; impostos unversioned/v2; equipe/funcionários; `/cliente/*` versus `/portal/*`. Nenhuma nova versão deve ser criada. O freeze exige source tag do frontend, export dos workflows ativos e testes HOM.
+
+**Atualização 2026-09-21** (fonte: `docs/integration-input/RELATORIO_VARREDURA_LOVABLE_20260921.md`, revisão de código de terceiros do frontend + 3 Supabase Edge Functions): nenhum dos sete conflitos é resolvido por completo, porque "endpoint chamado pelo frontend hoje" não prova "workflow correto/persistente no n8n" — mas o relatório reduz a incerteza de qual versão está de fato em uso:
+- **create/update/delete de item (kanban):** confirmado que `useTasks.ts` chama simultaneamente `admin-kanban-v3`, `admin-delete-item-v3`, `admin-create-item-v5` e `admin-update-item-v5` — ou seja, v3 e v5 coexistem em produção, não é uma migração v3→v5 concluída. Isso é informação nova; nenhum dos três dossiês originais havia descrito coexistência.
+- **impostos:** ambos os caminhos (`useImpostos.ts` unversioned e `AdminImpostos.tsx` `-v2`) aparecem como chamados no código — o relatório não indica qual é morto, ao contrário do achado equivalente em tickets (abaixo). Conflito permanece `CONFLICTING`, agora com maior detalhe.
+- **tickets:** diferente dos demais, este conflito É esclarecido — o caminho unversioned (`useTickets.ts`) é código legado sem autenticação e a tela atual usa exclusivamente `-v2` (`AdminTickets.tsx`). Ver a linha `/admin/tickets` acima; candidato a decomissionamento formal no freeze, não apenas a "não reutilizar".
+- **dashboard v1/v2, agenda v1/v2, equipe/funcionários, `/cliente/*` vs `/portal/*`:** não cobertos pelo relatório; permanecem exatamente como antes.
+
+Nenhum destes itens libera o freeze (`CHP-03` continua `CONFIRMED_BLOCKER`); a evidência de código de terceiros não substitui o export dos workflows ativos exigido para fechar o inventário.
 
 ## Rotas de tela documentadas
 

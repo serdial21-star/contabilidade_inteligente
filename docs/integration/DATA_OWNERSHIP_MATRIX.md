@@ -59,6 +59,12 @@ CNPJ é identificador de correlação, não ID técnico imutável nem autorizaç
 | AI tools | `OUT_OF_SCOPE` | avaliar separadamente; sem autoridade |
 | Shortcuts | `KEEP_IN_OPERATIONAL` | UX local, sem contrato core |
 
+## Atualização 2026-09-21 — precondição de privacidade cross-system
+
+Fonte: `docs/integration-input/RELATORIO_VARREDURA_LOVABLE_20260921.md` (relatório de varredura de terceiros do frontend/Edge Functions do Sistema A). A linha `CROSS_SYSTEM_PRIVACY_WORKFLOW: FUTURE_DESIGN_REQUIRED` permanece válida, mas ganha uma precondição concreta a partir desta evidência: o Sistema A hoje libera acesso quando a permissão não chega (fail-open confirmado, ver `SYSTEM_A_SECURITY_GAPS.md` SG-03), registra corpo/resposta completos em log de navegador para honorários/impostos/tarefas/documentos, e expõe duas Edge Functions sem autenticação. Isso significa que qualquer dado originado no Sistema B (mesmo minimizado, conforme já exigido por `CONNECT_HUB_ARCHITECTURE.md`) chegaria hoje a uma superfície que não demonstra controle de acesso nem higiene de log.
+
+**Precondição registrada:** nenhum payload do Sistema B além de uma referência/status opaco (ex.: confirmação `TASK_CREATED`, projeção de status `ACCOUNTING_PROPOSAL_APPROVED`/`REJECTED`) deve ser enviado ao Sistema A antes de (a) SG-03 ser fechado com teste positivo e negativo de autorização fail-closed, e (b) o Sistema A parar de registrar corpo/resposta completos nos canais que carregarão campos originados no B. Isto é uma condição adicionada à leitura já vigente de `REAL DATA: NO_GO` na baseline do Sistema B — o gate cobre também dados do B chegando à A, não apenas dados reais entrando no B, porque um dado real "lavado" através do Sistema A quebraria a mesma garantia que o NO_GO já protege. Nenhuma alteração de código, contrato ou schema foi feita para registrar esta precondição.
+
 ## Módulos do Sistema B
 
 Companies integra cadastro sem virar CRM; Documents guarda evidência processada; Minha Visão, Fiscal, Financial, Accounting, Rules, Proposals, AccountLock, Audit e Decision Line permanecem no B. O conceito futuro de Client Portal torna-se redundante: deve ser substituído por integração/deep links/componentes autorizados no portal A, não por um segundo portal.

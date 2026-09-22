@@ -56,6 +56,20 @@ O MVP mínimo é Waves 1–5 após Wave 0. Wave 6 é posterior e não condiciona
 | Retries esgotados | owner do contrato | não cíclico | obrigatório + alerta | status seguro e ação operacional |
 | Assinatura/replay inválido | Security | não | incidente se recorrente | resposta genérica, sem detalhes |
 
+## Sequência recomendada a partir de 2026-09-21
+
+Estado nesta data: Phase 09A (arquitetura) `PASS`/`CONDITIONAL_GO`; Phase 09B (verificação runtime) `BLOCKED`/`NO_GO`, mas com o frontend do Sistema A já inspecionado em código-fonte real (ver `SYSTEM_A_RUNTIME_VERIFICATION.md`, atualização 2026-09-21 parte 2) — falta apenas o lado n8n/MySQL. Esta sequência não autoriza pular etapas nem substitui aprovação humana em cada gate.
+
+| Etapa | Objetivo | Owner | Depende de | Estimativa |
+| --- | --- | --- | --- | --- |
+| 0 | Corrigir os 5 achados GRAVE do Sistema A (autorização fail-open, Edge Functions sem auth, código órfão de tickets sem token) — incidente de produção, independente da integração | Dono/operador do Sistema A | nada; pode começar imediatamente | S/M |
+| 1 | Completar o "verification package" (`CONNECT_HUB_PREREQUISITES.md`): export dos workflows n8n ativos, schema real do MySQL (`clientes`/CNPJ, somente leitura, sem dados reais), ambiente de homologação isolado, teste de persistência do Kanban, confirmação de `logs_auditoria` | Dono/operador do Sistema A | Etapa 0 não é bloqueante, mas convém corrigir antes de expor o ambiente de homologação | L/XL |
+| 2 | Repetir a Phase 09B por completo com o pacote da Etapa 1; atualizar os documentos de `docs/integration/`; decisão humana explícita GO/NO_GO para o Connect Hub | Este repositório + dono do produto | Etapa 1 | M |
+| 3 | Wave 0 (contract freeze definitivo, guards/audit do A, threat model) + Wave 1 (fundação M2M: credencial de serviço, HMAC, envelope de evento, inbox/outbox, retry/DLQ, observabilidade em homologação) — primeiro código de integração | Este repositório + Sistema A | Etapa 2 = `PASS` | L/XL |
+| 4+ | Waves 2–6 já definidas na tabela "Ondas" acima (client sync → document intake → exceptions/tasks → decision visibility → publication) | Este repositório + Sistema A | Etapa 3 | conforme tabela |
+
+Em paralelo, a trilha própria do Sistema B (shell de produção, IdP de produção, gates de Phases 11–14 ainda pendentes) não depende de nenhuma etapa acima e pode continuar sem esperar o Sistema A.
+
 ## Gates de saída
 
 Homologação exige testes positivos/negativos de tenant/company, auth, replay, idempotência conflitante, concorrência, timeout/UNKNOWN, DLQ/replay, documento inválido, indisponibilidade bilateral e ausência de dados reais. Produção exige ainda Security 11, Observability 12, LGPD/Legal 13 e QA integrado 14.

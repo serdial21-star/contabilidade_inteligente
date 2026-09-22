@@ -159,3 +159,7 @@ Os artefatos de responsabilidade, ownership, identidade, documentos, Hub, versio
 **PHASE 09A — INTEGRATION READINESS: PASS**  
 **INTEGRATION: CONDITIONAL_GO**  
 **CONNECT HUB IMPLEMENTATION: READY_TO_PLAN**
+
+## Atualização 2026-09-21 — nova evidência, decisão inalterada
+
+Um relatório de varredura de código de terceiros do frontend/Edge Functions do Sistema A foi recebido (`docs/integration-input/RELATORIO_VARREDURA_LOVABLE_20260921.md`) — a primeira evidência de nível código-fonte disponível a este workspace. Ele fortalece, sem contradizer, o desenho arquitetural acima: confirma que tokens de navegador/autorização do Sistema A não podem ser tratados como confiáveis pelo B (consistente com a decisão já registrada de credencial M2M própria) e adiciona evidência positiva de fail-open onde antes havia apenas ausência de evidência. Não altera `DATABASE_OWNERSHIP_BOUNDARY`, `PORTAL REUSE` nem `ROADMAP_CHANGE`. O detalhamento está em `SYSTEM_A_SECURITY_GAPS.md`, `SYSTEM_A_RUNTIME_VERIFICATION.md`, `CONNECT_HUB_PREREQUISITES.md` e `CANONICAL_OPERATIONAL_API_MAP.md`. A Phase 09B permanece `BLOCKED`/`NO_GO`; esta atualização não a reabre nem a resolve.
