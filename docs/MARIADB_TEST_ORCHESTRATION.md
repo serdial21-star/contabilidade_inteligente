@@ -15,10 +15,24 @@ carrega exclusivamente `MARIADB_MIGRATION_DATABASE_URL`, exige
 `SERDIAL21_RUN_MARIADB_MIGRATION_TESTS=1` e recusa o mesmo nome de database do
 Runtime. Ambos validam MariaDB 11.8.x depois de conectar.
 
-Na tentativa de pre-flight da separação, a conexão do Migration Lab foi
-recusada antes de qualquer alteração de schema. Assim, a identidade do segundo
-banco e sua condição descartável ainda não foram comprovadas. Nenhum downgrade
-foi tentado no Runtime e nenhuma evidência de auditoria foi apagada.
+**Atualização de 2026-09-23:** a separação foi comprovada. `u621451815_serdial21_mig`
+(usuário `u621451815_serdial21_mapp`) está provisionado, alcançável e confirmado
+MariaDB 11.8.9. `tests/mariadb/test_migration_0014.py::test_accounting_automation_migration_cycle`
+rodou com `SERDIAL21_RUN_MARIADB_MIGRATION_TESTS=1` real e completou o ciclo
+`upgrade(HEAD) -> downgrade(0013) -> upgrade(HEAD)` sem erro, confirmando schema,
+FKs e índice esperados em cada etapa e devolvendo o banco ao HEAD (`20260916_0014`,
+46 tabelas). A identidade e a condição descartável do segundo banco estão, portanto,
+comprovadas para este ciclo. Nenhum downgrade foi tentado no Runtime e nenhuma
+evidência de auditoria foi apagada.
+
+Isso resolve a separação Runtime/Migration Lab para a migration 0014 especificamente.
+Os testes de diagnóstico mais antigos listados abaixo (`test_homologation.py`,
+`test_migration_0002_diagnosis.py`, `test_migration_0006_diagnosis.py`,
+`test_reset_to_base.py`) seguem apontando para o Runtime (`_hom`) segundo o
+inventário original desta página e não foram re-executados nesta atualização;
+o bloqueio por dados de auditoria acumulados descrito abaixo continua valendo
+para eles até serem migrados para usar `migration_engine`/Migration Lab como
+`test_migration_0014.py` já faz.
 
 ## Inventário de estados
 

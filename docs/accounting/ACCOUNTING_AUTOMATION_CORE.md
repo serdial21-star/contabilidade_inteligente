@@ -2,7 +2,7 @@
 
 O núcleo classifica `FiscalDocumentItem`, nunca apenas o documento. A sequência é item → evidências → intenção → confiança → mapping versionado → proposta → decisão humana. A automação pode preparar proposta, mas não aprova nem escritura.
 
-O motor determinístico existente foi estendido; não existe motor paralelo. Catálogos antigos continuam no fluxo documental legado. Estado: domínio, schema e cenários sintéticos `READY`; orquestração persistente/API/UI ainda `PARTIAL`.
+O motor determinístico existente foi estendido; não existe motor paralelo. Catálogos antigos continuam no fluxo documental legado. Estado em 2026-09-23: domínio, schema, orquestração persistente, API e UI de revisão por item `READY`. Migration 0014 validada em MariaDB 11.8.9 real (Migration Lab `u621451815_serdial21_mig`): ciclo `upgrade(HEAD) -> downgrade(0013) -> upgrade(HEAD)` completo sem erro (`tests/mariadb/test_migration_0014.py`). Pendências fora de código: vincular a permissão `accounting.classification.review` a um papel real (decisão do escritório, não do código) e UI de cadastro de `CompanyAccountingProfile`/CNAE, ainda não construída.
 
 ## Contrato da API de revisão por item (decidido em 2026-09-21, implementado em 2026-09-21)
 
