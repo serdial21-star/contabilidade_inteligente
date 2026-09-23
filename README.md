@@ -1,12 +1,20 @@
 # Serdial21 Contabilidade Inteligente
 
-## Accounting Automation Core — incremento estrutural em desenvolvimento
+> **Comece por aqui:** [Guia Mestre do Projeto](docs/PROJECT_MASTER_GUIDE.md) —
+> estado atual, como ver o sistema funcionando, como o trabalho com IA está
+> organizado e o que vem a seguir.
 
-O domínio determinístico agora distingue evidência fiscal, intenção contábil e
+## Accounting Automation Core — domínio, migration, API e UI concluídos
+
+O domínio determinístico distingue evidência fiscal, intenção contábil e
 conta por empresa, com classificação por item, confiança explícita, histórico
 reutilizável somente por decisão humana, máscara configurável e proposta mista
-balanceada. A migration 0014 adiciona a persistência necessária. API, UI e UAT
-humana ainda estão parciais; isso não autoriza dados reais nem postagem externa.
+balanceada. A migration 0014 foi validada em MariaDB real (upgrade/downgrade
+completo). API de revisão por item e UI da fila de pendências estão prontas.
+Ainda faltam: UI de cadastro de `CompanyAccountingProfile`, vínculo da
+permissão de revisão a um papel real e UAT humana — nada disso autoriza dados
+reais nem postagem externa. Detalhes em
+[docs/accounting/ACCOUNTING_AUTOMATION_CORE.md](docs/accounting/ACCOUNTING_AUTOMATION_CORE.md).
 
 ## Phase 14 — Integrated QA + UAT
 
@@ -163,6 +171,7 @@ DATABASE_URL no arquivo .env antes de executar:
 
 ## Documentação
 
+- [Guia Mestre do Projeto — comece por aqui](docs/PROJECT_MASTER_GUIDE.md)
 - [Baseline de productização — Phase 01, inventário, arquitetura, roadmap e gates](docs/PRODUCT_RELEASE_BASELINE.md)
 - [Site comercial — Phase 03, especificação e gates de pré-publicação](docs/MARKETING_SITE_SPEC.md)
 - [Shell do aplicativo — Phase 04, autenticação, sessão e navegação](docs/APP_SHELL_SPEC.md)
