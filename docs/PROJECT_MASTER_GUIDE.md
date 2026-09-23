@@ -84,9 +84,26 @@ o portal do Sistema A em vez de construir um segundo portal.
 
 Importante, e é regra do próprio projeto, não invenção minha: **terminar
 uma fase nunca autoriza a próxima automaticamente**. Cada fase exige pedido
-explícito seu. Por isso não vou começar a Fase 10 sozinho — ela depende de
-acesso/entendimento do Sistema A (que vive em outra hospedagem, outro
-código) e merece uma conversa de escopo antes de qualquer linha de código.
+explícito seu.
+
+**Atualização de 2026-09-23**: a Fase 10A (Connect Hub) já tem trabalho real
+em andamento, fora deste repositório — correções de segurança no Sistema A
+(login sem senha, acesso liberado por padrão, funções sem autenticação) já
+aplicadas, backend n8n revisado. O acompanhamento dia a dia disso vive num
+painel próprio, não neste repositório:
+[Ponte Serdial21](https://claude.ai/artifact/LjQX5XMa72tcDCQF7qTH36) — abra
+esse link para ver o checklist completo e o estado exato de cada item.
+
+Mas o gate formal continua **NO_GO**: `docs/integration/SYSTEM_A_INTEGRATION_READINESS_GATE.md`
+diz literalmente "Não iniciar Connect Hub, Phase 10 ou conexão com o Sistema
+B". Seis bloqueios confirmados (nenhum é código do Sistema B): contratos do
+n8n não congelados, nenhuma credencial própria entre os dois sistemas,
+documentos do Drive com link permanente em vez de temporário, idempotência
+de reenvio não demonstrada, nenhum ambiente de homologação isolado, e um
+achado sensível — o Sistema A grava o corpo completo de requisições de
+honorários/impostos/tarefas/documentos em log. Não vou escrever código de
+Connect Hub até isso fechar; detalhes e ordem sugerida no item "2-2" do
+painel acima.
 
 ## 5. Os bloqueios reais para produção não são de código
 
