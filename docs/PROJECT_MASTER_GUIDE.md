@@ -26,7 +26,15 @@ O Serdial21 é, na verdade, **dois sistemas que vão se conectar**:
   clientes, honorários, tickets, documentos, login de cliente/admin. Já
   existe e roda separadamente. O material de referência sobre ele está em
   `docs/integration-input/` (não é lixo nem sistema alheio — é o outro lado
-  da integração).
+  da integração). O código-fonte real (frontend Lovable/React + Edge
+  Functions Supabase) está disponível localmente em
+  `C:\Projetos\Sistema escritório\serdialconnect-hub-main` — **não é um
+  repositório git** (é um snapshot exportado do Lovable), então editar
+  arquivos ali não muda o sistema publicado. Para corrigir algo lá, o
+  caminho comprovado é: ler o código nesse caminho para diagnosticar com
+  precisão, gerar um prompt exato (arquivo/linha) e o Sergio cola no editor
+  do Lovable. Todo esse acompanhamento vive no painel
+  [Ponte Serdial21](https://claude.ai/artifact/LjQX5XMa72tcDCQF7qTH36).
 - **Sistema B** — **é este repositório** (Python/FastAPI). É o motor de
   inteligência contábil: recebe documentos fiscais e bancários, classifica,
   propõe lançamentos, exige decisão humana, audita tudo. O sistema contábil
