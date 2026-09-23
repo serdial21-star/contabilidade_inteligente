@@ -26,6 +26,10 @@ comprovadas para este ciclo. Nenhum downgrade foi tentado no Runtime e nenhuma
 evidência de auditoria foi apagada.
 
 Isso resolve a separação Runtime/Migration Lab para a migration 0014 especificamente.
+Em 2026-09-23, a migration `20260923_0015` também completou no mesmo Lab o ciclo
+`upgrade(0015) -> downgrade(0014) -> upgrade(0015)`, validando as três colunas
+nullable e o índice único tenant-aware de referência externa. O HEAD esperado
+do Migration Lab passa a ser `20260923_0015`.
 Os testes de diagnóstico mais antigos listados abaixo (`test_homologation.py`,
 `test_migration_0002_diagnosis.py`, `test_migration_0006_diagnosis.py`,
 `test_reset_to_base.py`) seguem apontando para o Runtime (`_hom`) segundo o

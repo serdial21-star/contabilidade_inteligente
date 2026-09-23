@@ -43,6 +43,9 @@ class Company:
     legal_name: str
     tax_identifier: str
     status: str
+    external_system: str | None = None
+    external_type: str | None = None
+    external_id: str | None = None
 
 
 @dataclass(frozen=True, slots=True)

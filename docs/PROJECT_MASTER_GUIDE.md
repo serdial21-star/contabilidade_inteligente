@@ -49,6 +49,17 @@ documento real nem exposição pública autorizada.
 
 ## 3. Estado atual — o que já está pronto
 
+Em 2026-09-23 foi concluída uma preparação estritamente local para a futura
+correlação com o Sistema A: `Company` no Sistema B agora pode guardar e ler a
+tripla técnica opcional `external_system + external_type + external_id`. A
+migration `20260923_0015` é aditiva e foi validada no Migration Lab MariaDB em
+ciclo completo. A referência é única dentro do tenant e a leitura permanece
+protegida por tenant, empresa e `CompanyAccess`. CNPJ não autoriza acesso.
+
+Este incremento não inicia a Fase 10/10A: não existe conector, identidade M2M,
+chamada de rede, sincronização, correlação automática por CNPJ nem dado real.
+O gate formal de integração continua `NO_GO` pelos bloqueios restantes.
+
 Fundação (autenticação OIDC, tenant/empresa, catálogo operacional, auditoria
 transversal, importador de NF-e modelo 55) mais 14 fases numeradas concluídas
 e commitadas, cobrindo: shell autenticado do app, Minha Visão, empresas e

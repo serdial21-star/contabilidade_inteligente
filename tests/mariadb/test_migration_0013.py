@@ -187,6 +187,7 @@ def test_migration_0013_upgrade_backfill_downgrade_and_reupgrade(
                 connection.execute(delete(CompanyModel).where(CompanyModel.id == company_id))
                 connection.execute(delete(UserModel).where(UserModel.id == user_id))
                 connection.execute(delete(TenantModel).where(TenantModel.id == tenant_id))
+            command.upgrade(config, 'head')
         if original_url is None:
             os.environ.pop('DATABASE_URL', None)
         else:

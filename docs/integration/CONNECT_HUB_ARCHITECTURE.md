@@ -61,6 +61,11 @@ No MVP, cada direção usa credencial própria, armazenada em secret store/backe
 4. Zero matches permite onboarding conforme política aprovada; múltiplos matches ou CNPJ divergente vão para revisão manual.
 5. `CLIENT_DISABLED` não apaga dados do B e não contorna retenção/legal hold.
 
+Estado de implementação em 2026-09-23: o B já possui armazenamento e leitura
+tenant/company-aware da tripla opcional na entidade `Company`. Isso é apenas a
+fundação local; correlação, onboarding, revisão de ambiguidade, credencial M2M e
+qualquer tráfego entre sistemas continuam não implementados.
+
 ### Documento
 
 ```

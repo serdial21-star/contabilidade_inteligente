@@ -136,6 +136,11 @@ class CompanyModel(Base):
             'tax_identifier',
             name='uq_companies_tenant_tax_identifier',
         ),
+        Index(
+            'ux_companies_tenant_external_reference',
+            'tenant_id', 'external_system', 'external_type', 'external_id',
+            unique=True,
+        ),
         {
             'mysql_charset': 'utf8mb4',
             'mysql_collate': 'utf8mb4_unicode_ci',
@@ -154,6 +159,9 @@ class CompanyModel(Base):
     timezone: Mapped[str] = mapped_column(String(64), nullable=False)
     currency_code: Mapped[str] = mapped_column(String(3), nullable=False)
     status: Mapped[str] = mapped_column(String(32), nullable=False)
+    external_system: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    external_type: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    external_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
     valid_from: Mapped[datetime] = mapped_column(UTCDateTime(), nullable=False)
     valid_until: Mapped[datetime | None] = mapped_column(UTCDateTime(), nullable=True)
     created_at: Mapped[datetime] = mapped_column(

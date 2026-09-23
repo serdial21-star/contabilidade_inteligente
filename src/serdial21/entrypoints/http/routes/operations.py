@@ -169,6 +169,9 @@ class CompanyResponse(BaseModel):
     status: str
     timezone: str
     currency_code: str
+    external_system: str | None
+    external_type: str | None
+    external_id: str | None
 
 
 class DocumentResponse(BaseModel):

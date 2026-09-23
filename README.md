@@ -4,6 +4,14 @@
 > estado atual, como ver o sistema funcionando, como o trabalho com IA está
 > organizado e o que vem a seguir.
 
+## Referência externa de empresa — preparação sem conexão
+
+`Company` pode guardar e expor internamente a tripla técnica opcional
+`external_system + external_type + external_id`, sempre sob o escopo de tenant
+e empresa. A migration 0015 é aditiva e foi validada em MariaDB real. Não há
+conector, credencial, chamada de rede, sincronização ou correlação automática
+com o Sistema A; CNPJ continua sendo apenas chave de negócio auxiliar.
+
 ## Accounting Automation Core — domínio, migration, API e UI concluídos
 
 O domínio determinístico distingue evidência fiscal, intenção contábil e
@@ -198,4 +206,3 @@ DATABASE_URL no arquivo .env antes de executar:
 - [Identidade e segurança de tenant](docs/IDENTITY_AND_TENANT_SECURITY.md)
 - [Runbook de onboarding/offboarding](docs/RUNBOOK_ONBOARDING_OFFBOARDING.md)
 - [Governança do catálogo de produção](docs/PRODUCTION_CATALOG_GOVERNANCE.md)
-

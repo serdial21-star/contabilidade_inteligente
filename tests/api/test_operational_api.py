@@ -71,6 +71,7 @@ class OperationalFixture:
     settings: AppSettings
     tenant: UUID
     company: UUID
+    unassigned_company: UUID
     other_company: UUID
     proposer: UUID
     accountant: UUID
@@ -116,6 +117,8 @@ def _seed_authorized_actor(session: object) -> tuple[UUID, UUID, UUID]:
         CompanyModel(id=company, tenant_id=tenant, legal_name='Pilot company',
                      tax_identifier='12345678000195', timezone='America/Sao_Paulo',
                      currency_code='BRL', status='active',
+                     external_system='SERDIAL21_OPERATIONAL',
+                     external_type='CLIENT', external_id='client-000042',
                      valid_from=now - timedelta(days=1)),
         TenantMembershipModel(id=membership, tenant_id=tenant, user_id=actor,
                               status='active', relationship_type='employee',
@@ -193,7 +196,7 @@ def operational(tmp_path: Path) -> OperationalFixture:
         ))
         assert proposer_membership is not None and proposer_role is not None
         accountant, membership, role, access = uuid4(), uuid4(), uuid4(), uuid4()
-        other_tenant, other_company = uuid4(), uuid4()
+        unassigned_company, other_tenant, other_company = uuid4(), uuid4(), uuid4()
         with audit_scope(session, AuditContext(
             uuid4(), AuditOrigin.AUTOMATION, proposer, reason='operational API fixture',
         )):
@@ -212,9 +215,19 @@ def operational(tmp_path: Path) -> OperationalFixture:
                     revision=1,
                 ),
                 CompanyModel(
+                    id=unassigned_company, tenant_id=tenant,
+                    legal_name='Unassigned company', tax_identifier='88888888000188',
+                    timezone='America/Sao_Paulo', currency_code='BRL',
+                    status='active', external_system='SERDIAL21_OPERATIONAL',
+                    external_type='CLIENT', external_id='client-unassigned',
+                    valid_from=datetime.now(UTC) - timedelta(days=1),
+                ),
+                CompanyModel(
                     id=other_company, tenant_id=other_tenant, legal_name='Other company',
                     tax_identifier='99999999000199', timezone='UTC', currency_code='BRL',
-                    status='active', valid_from=datetime.now(UTC) - timedelta(days=1),
+                    status='active', external_system='SERDIAL21_OPERATIONAL',
+                    external_type='CLIENT', external_id='client-000042',
+                    valid_from=datetime.now(UTC) - timedelta(days=1),
                 ),
                 BankAccountModel(
                     id=uuid4(), tenant_id=tenant, company_id=company,
@@ -285,7 +298,7 @@ def operational(tmp_path: Path) -> OperationalFixture:
         )
 
     fixture = OperationalFixture(
-        TestClient(app), settings, tenant, company, other_company,
+        TestClient(app), settings, tenant, company, unassigned_company, other_company,
         proposer, accountant, private_key,
     )
     try:
@@ -601,7 +614,21 @@ def test_company_and_document_read_projections_are_scoped_and_minimized(
     )
     assert company.status_code == 200
     assert company.json()['legal_name'] == 'Pilot company'
+    assert company.json()['external_system'] == 'SERDIAL21_OPERATIONAL'
+    assert company.json()['external_type'] == 'CLIENT'
+    assert company.json()['external_id'] == 'client-000042'
     assert 'tenant_id' not in company.json()
+
+    for inaccessible_company in (
+        operational.unassigned_company,
+        operational.other_company,
+    ):
+        denied = operational.client.get(
+            f'/api/v1/operations/companies/{inaccessible_company}',
+            headers=operational.headers('proposer'),
+        )
+        assert denied.status_code == 403
+        assert denied.json() == {'detail': 'access denied'}
 
     page = operational.client.get(
         f'/api/v1/operations/companies/{operational.company}/documents',

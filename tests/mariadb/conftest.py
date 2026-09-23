@@ -21,7 +21,7 @@ from serdial21.bootstrap.settings import AppSettings
 RUNTIME_DATABASE = 'u621451815_serdial21_hom'
 MIGRATION_DATABASE = 'u621451815_serdial21_mig'
 MIGRATION_USER = 'u621451815_serdial21_mapp'
-MIGRATION_HEAD = '20260916_0014'
+MIGRATION_HEAD = '20260923_0015'
 _migration_lock = Lock()
 
 

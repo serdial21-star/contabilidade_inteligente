@@ -43,6 +43,9 @@ class SqlCompanyRecord:
     status: str
     timezone: str
     currency_code: str
+    external_system: str | None
+    external_type: str | None
+    external_id: str | None
 
 
 @dataclass(frozen=True, slots=True)
@@ -178,6 +181,7 @@ class SqlAlchemyOperationalQueryRepository:
         return SqlCompanyRecord(
             row.id, row.legal_name, row.trade_name, row.tax_identifier,
             row.status, row.timezone, row.currency_code,
+            row.external_system, row.external_type, row.external_id,
         )
 
     def list_documents(

@@ -79,6 +79,10 @@ def test_upgrade_and_downgrade_initial_revision(
         command.upgrade(config, 'head')
         assert table_names(database_path) == EXPECTED_TABLES | {'alembic_version'}
         assert permission_count(database_path) == 22
+        assert company_columns(database_path) >= {
+            'external_system', 'external_type', 'external_id',
+        }
+        assert 'ux_companies_tenant_external_reference' in company_indexes(database_path)
         command.check(config)
 
         command.downgrade(config, 'base')
@@ -100,3 +104,15 @@ def permission_count(database_path: Path) -> int:
         row = connection.execute('SELECT COUNT(*) FROM permissions').fetchone()
     assert row is not None
     return int(row[0])
+
+
+def company_columns(database_path: Path) -> set[str]:
+    with sqlite3.connect(database_path) as connection:
+        rows = connection.execute('PRAGMA table_info(companies)').fetchall()
+    return {str(row[1]) for row in rows}
+
+
+def company_indexes(database_path: Path) -> set[str]:
+    with sqlite3.connect(database_path) as connection:
+        rows = connection.execute('PRAGMA index_list(companies)').fetchall()
+    return {str(row[1]) for row in rows}
