@@ -5,6 +5,38 @@ CNPJ ou nome de cliente/funcionário consta aqui de propósito. Painel de
 acompanhamento (checklist): https://claude.ai/artifact/LjQX5XMa72tcDCQF7qTH36
 (etapa 5). Regras permanentes: `AGENTS.md`. Visão geral: `PROJECT_MASTER_GUIDE.md`.
 
+## 0. Atualização de 2026-09-24 (leia isto primeiro)
+
+Pivô estratégico do usuário: o Sistema B passa a ser **complemento comercial
+do Sistema A** (venda avulsa de A, ou A+B como incremento), vendido no futuro
+para **outros escritórios de contabilidade** (não só o Serdial21) — mas o
+Sistema A de hoje é 100% single-tenant (confirmado por grep: nenhuma coluna
+`tenant_id`/`escritorio_id` em `clientes`/`funcionarios`). Virar multi-tenant
+é um projeto à parte, muito maior, não iniciado. O login do Sistema B passa a
+ser feito **pelo login do Sistema A** (login único), via uma ponte de
+identidade — decisão registrada em
+[ADR 0014](adr/0014-ponte-login-sistema-a.md), que abre uma **exceção pontual
+e nomeada** ao gate `NO_GO` do Connect Hub (só para essa ponte de login, nada
+mais). Lado do Sistema B pronto e testado ponta a ponta contra a API e o banco
+`_dev` reais. Lado do Sistema A (duas Supabase Edge Functions + talvez um
+workflow n8n) **ainda não implementado** — especificação completa em
+[SISTEMA_A_LOGIN_BRIDGE_SPEC.md](integration/SISTEMA_A_LOGIN_BRIDGE_SPEC.md),
+incluindo um achado importante: assinar o token RS256 **não pode** acontecer
+num node de código do n8n (mesma trava de crypto do item 0b-3) — precisa ser
+numa Edge Function (Deno). O prompt para o Lovable criar o ícone/área de
+trabalho do Sistema B dentro do Sistema A fica para **depois** de a ponte
+existir (decisão do usuário), não foi escrito ainda.
+
+Trabalho novo desta atualização: `docs/adr/0014-ponte-login-sistema-a.md`,
+nota de exceção em `docs/integration/SYSTEM_A_INTEGRATION_READINESS_GATE.md`,
+`docs/integration/SISTEMA_A_LOGIN_BRIDGE_SPEC.md`, modo `authMode: 'bridge'`
+em `app/app.js`, `scripts/bootstrap_user_access.py`, e 8 testes novos
+(`tests/frontend/test_bridge_login.py`, `tests/integration/
+test_bootstrap_user_access.py`). Suíte completa: 498 passed, 20 skipped.
+Usuário de teste `dev-sergio` já provisionado no tenant Serdial21 do `_dev`
+com acesso às 3 empresas — confirmado por chamada real a `/api/v1/identity/me`
+com token do provedor de desenvolvimento.
+
 ## 1. Como retomar amanhã (5 minutos)
 
 1. `git status -sb` e `git log --oneline -3` na raiz. Esperado: árvore limpa
@@ -106,19 +138,21 @@ duas tabelas novas na lista de tabelas aprovadas.
    `docs/DEV_OIDC_PROVIDER.md`. Suíte completa: 490 passed, 20 skipped.
 2. **Trocar a senha do usuário `_app`** no hPanel e atualizar o `.env` — ainda
    pendente (confirmar se já foi feita; o `.env` mudou em disco entre sessões).
-3. **Criar o seu usuário no B:** `users` (issuer+subject do token = os mesmos
-   valores usados em `issue-token --subject ...` e `OIDC_ISSUER`),
-   participação ativa no tenant, papel com permissão de leitura,
-   `company_accesses` das 3 empresas; ligar cada membro da equipe ao seu
-   usuário. Próximo passo recomendado.
-4. **Subir a API real** (`uvicorn serdial21.main:app`) contra o `_dev`; `.env`
-   já tem OIDC_ISSUER/AUDIENCE/JWKS_URL — falta só rodar `dev_identity_provider.py
-   serve` em paralelo; `app/config.js` de `synthetic` para modo real; mesma
-   origem ou CORS. Hoje `INICIAR_SERDIAL21.cmd` só serve os arquivos estáticos
-   (dados fictícios).
-5. **Endpoint e tela da equipe** (a tabela existe e está preenchida; falta a leitura).
-6. **Decidir o provedor de login definitivo** (Fase 11) e como unir o login do A e do B.
-7. **Sistema A — padronizar CPF/CNPJ** (pedido do usuário para depois): os
+3. ~~Criar o seu usuário no B~~ — **feito em 24/09** (`scripts/
+   bootstrap_user_access.py`, ver seção 0). Rodar de novo quando o `sub`/`iss`
+   reais da ponte existirem.
+4. **Implementar o lado do Sistema A da ponte de login** — ver
+   `docs/integration/SISTEMA_A_LOGIN_BRIDGE_SPEC.md` (seção 0). Bloqueado em
+   mim (só leitura no repositório do Sistema A); depende do usuário/Lovable.
+5. **Ligar `app/config.js` local ao modo `bridge` para o primeiro teste visual
+   pelo navegador** (ainda não feito — só testado via `curl` direto na API).
+   Não commitar o `config.js` alterado; é só para teste local.
+6. **Endpoint e tela da equipe** (a tabela existe e está preenchida; falta a leitura).
+7. **Escrever o prompt do Lovable para o ícone/área de trabalho do Sistema B**
+   dentro do Sistema A — só depois do item 4 existir (decisão do usuário).
+8. **Decidir o provedor de login definitivo** (Fase 11) — agora relacionado à
+   ponte do item 4, não mais um provedor OIDC genérico solto.
+9. **Sistema A — padronizar CPF/CNPJ** (pedido do usuário para depois): os
    usuários entram por e-mail; o mesmo CPF aparece formatado de dois jeitos
    (duplicata 16/25), há cliente sem documento (26) e `clientes.responsavel`
    vazio em todos. Depois: reexportar CSVs e rodar os scripts (idempotentes).

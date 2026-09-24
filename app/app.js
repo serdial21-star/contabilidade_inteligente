@@ -1298,6 +1298,15 @@
       } else { session.unauthenticated(); renderLogin(); }
       return;
     }
+    if (config.authMode === 'bridge') {
+      const bridgeToken = routeParams().get('bridge');
+      if (!bridgeToken) { session.unauthenticated(); renderLogin('Abra esta tela a partir do Sistema A.'); return; }
+      history.replaceState(null, '', location.pathname); // token nunca fica na URL nem em histórico
+      session.authenticating(); renderLogin();
+      try { await bootstrapAuthenticated(bridgeToken); }
+      catch (_) { session.unauthenticated(); renderLogin('Não foi possível entrar. Abra novamente a partir do Sistema A.'); }
+      return;
+    }
     if (config.authMode !== 'oidc' || !oidcClient.isConfigured()) { session.unauthenticated(); renderLogin(); return; }
     if (!oidcClient.hasCallback()) { session.unauthenticated(); renderLogin(); return; }
     session.authenticating(); renderLogin();

@@ -1,5 +1,18 @@
 # System A Integration Readiness Gate
 
+## Atualização 2026-09-24 — exceção pontual e nomeada (ADR 0014)
+
+O veredito `NO_GO` abaixo **continua valendo integralmente** para sincronização
+de dados de negócio, workflows do n8n, credencial M2M genérica e qualquer
+outro item desta página. Por decisão explícita do usuário, registrada em
+[`docs/adr/0014-ponte-login-sistema-a.md`](../adr/0014-ponte-login-sistema-a.md),
+abre-se uma exceção estreita **somente** para uma ponte de identidade de
+login (Sistema A confere sua própria sessão de funcionário e emite um token
+OIDC de vida curta; o Sistema B verifica com o mecanismo que já existe). Essa
+ponte não sincroniza dado de cliente, não usa fila, não persiste nada em lote
+e é escopada a um único tenant fixo (Serdial21) — não é uma reabertura do
+Connect Hub, é uma exceção nomeada para uma peça específica.
+
 ## Resultado
 
 | Critério mínimo | Resultado | Evidência/pendência |
