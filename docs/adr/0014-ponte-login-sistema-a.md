@@ -27,11 +27,19 @@ com as empresas reais, sem segundo login. Detalhes completos, incluindo os
 dois problemas reais encontrados e corrigidos no caminho, na seção 0 de
 `docs/DOSSIE_SESSAO_2026-09-23.md`.
 
+**Item 5-15 concluído em 2026-09-24**: item de menu "Contabilidade
+Inteligente" no `AdminSidebar.tsx` do Sistema A, visível só para
+administrador, abre o Sistema B numa aba nova via a ponte. Testado com clique
+real na tela real (não simulado): funcionou. Endereço do Sistema B fica em
+`VITE_SISTEMA_B_URL` (padrão `http://127.0.0.1:8080/app/`, ainda sem
+publicação real — troca quando o Sistema B for hospedado de verdade). Sem
+iframe, sem embutir — respeita o `frame-ancestors 'none'` do Sistema B.
+
 Pendências que continuam abertas (não fazem parte do que este ADR autorizou):
-o ícone/área de trabalho no Sistema A (item 5-15, deliberadamente adiado), o
-provedor de identidade definitivo da Fase 11 (item 5-11), e qualquer
-sincronização de dados de negócio (continua fora do escopo — gate geral do
-Connect Hub permanece `NO_GO`).
+o provedor de identidade definitivo da Fase 11 (item 5-11), a publicação real
+do Sistema B (endereço além de `127.0.0.1`), e qualquer sincronização de
+dados de negócio (continua fora do escopo — gate geral do Connect Hub
+permanece `NO_GO`).
 
 ## Contexto
 

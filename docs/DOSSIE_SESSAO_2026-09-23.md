@@ -91,14 +91,40 @@ repetir o mesmo caminho de diagnóstico da próxima vez):**
   encerrados ao final da sessão — reabrir com os comandos da seção 8 quando
   for testar de novo.
 
+### 0.1.1 Ícone no Sistema A construído e testado com clique real (mesmo dia)
+
+O Lovable adicionou o item "Contabilidade Inteligente" em
+`src/components/layout/AdminSidebar.tsx` (Sistema A), visível só para
+cargo administrador, dentro do grupo "Administração". Ao clicar: abre uma aba
+em branco de imediato (evita bloqueio de pop-up), chama
+`sistema-b-bridge-token` pelo mesmo padrão já usado no projeto
+(`supabase.functions.invoke`, com `x-app-token` = `admin_auth_token`), e só
+então preenche a aba com `${VITE_SISTEMA_B_URL}#overview?bridge=<token>`.
+Token nunca é guardado. Endereço do Sistema B fica em `VITE_SISTEMA_B_URL`
+(`.env.example`), hoje com padrão `http://127.0.0.1:8080/app/` — sem endereço
+real ainda, porque o Sistema B só roda localmente.
+
+**Testado com clique real na tela real do Sistema A** (não simulado, não pelo
+console): funcionou — abriu o Sistema B autenticado, com as empresas reais.
+Isso fecha o item 5-15 e completa a fatia inteira da ponte de login.
+
+**Decisão mantida (não revista agora):** `app/config.js` do Sistema B
+continua com o padrão de fábrica `synthetic` — não virou `bridge` por
+padrão. Motivo: o ícone só funciona hoje com o Sistema B rodando localmente
+na mesma máquina; mudar o padrão do repositório agora tornaria a demonstração
+sintética inutilizável para qualquer pessoa sem o Sistema B rodando local.
+Essa troca de padrão fica para quando o Sistema B tiver um endereço real
+publicado — ver pendência na seção 0.2.
+
 ### 0.2 O que ficou registrado vs. o que precisa de decisão futura
 
 - `app/config.js` **voltou ao padrão commitado** (`synthetic`) ao final desta
-  sessão — o modo `bridge` não é (ainda) o padrão de fábrica do repositório.
-  Isso é proposital: o ícone/tela real no Sistema A (item 5-15) ainda não
-  existe, e mudar o padrão de fábrica é uma decisão própria, não algo a fazer
-  de passagem. Quando o item 5-15 for construído, essa troca de padrão volta
-  à mesa.
+  sessão — o modo `bridge` não é (ainda) o padrão de fábrica do repositório,
+  mesmo com o item 5-15 já pronto e testado. Motivo atualizado: falta o
+  Sistema B ter um endereço real publicado; enquanto só existir em
+  `127.0.0.1`, manter `synthetic` como padrão do repositório é o que preserva
+  a demonstração utilizável para qualquer pessoa. Essa troca volta à mesa
+  quando o Sistema B for publicado de verdade.
 - `scripts/start_local_real.py` é novo e foi commitado — utilitário local
   permanente para repetir este teste sem precisar reinventar a solução do CSP.
 
