@@ -1,7 +1,7 @@
 '''Consultas SQLAlchemy usadas exclusivamente pela política de autorização.'''
 
 from datetime import datetime
-from uuid import UUID
+from uuid import UUID, uuid4
 
 from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
@@ -9,12 +9,24 @@ from sqlalchemy.orm import Session
 from serdial21.modules.access_control.adapters.outbound.persistence.models import (
     CompanyAccessModel,
     CompanyModel,
+    CompanyTeamAssignmentModel,
+    OfficeTeamMemberModel,
     PermissionModel,
     RoleBindingModel,
     RoleModel,
     RolePermissionModel,
     TenantMembershipModel,
     UserModel,
+)
+from serdial21.modules.access_control.application.services.company_import import (
+    CompanySnapshot,
+    IMPORT_DEFAULT_CURRENCY_CODE,
+    IMPORT_DEFAULT_TIMEZONE,
+    MappedCompany,
+)
+from serdial21.modules.access_control.application.services.team_import import (
+    MappedTeamMember,
+    TeamMemberSnapshot,
 )
 
 
@@ -253,3 +265,150 @@ class SqlAlchemyAuthorizationRepository:
             .order_by(PermissionModel.code)
         )
         return tuple(self._session.scalars(statement))
+
+
+class SqlAlchemyCompanyImportRepository:
+    '''Leitura e gravação estreitas usadas somente pelo import manual (ADR 0013).'''
+
+    def __init__(self, session: Session) -> None:
+        self._session = session
+
+    def find_by_external_reference(
+        self, tenant_id: UUID, external_system: str, external_type: str, external_id: str,
+    ) -> CompanySnapshot | None:
+        statement = select(CompanyModel).where(
+            CompanyModel.tenant_id == tenant_id,
+            CompanyModel.external_system == external_system,
+            CompanyModel.external_type == external_type,
+            CompanyModel.external_id == external_id,
+        ).limit(1)
+        model = self._session.scalar(statement)
+        return _to_snapshot(model) if model is not None else None
+
+    def find_by_tax_identifier(
+        self, tenant_id: UUID, tax_identifier: str,
+    ) -> CompanySnapshot | None:
+        statement = select(CompanyModel).where(
+            CompanyModel.tenant_id == tenant_id,
+            CompanyModel.tax_identifier == tax_identifier,
+        ).limit(1)
+        model = self._session.scalar(statement)
+        return _to_snapshot(model) if model is not None else None
+
+    def create(
+        self, tenant_id: UUID, mapped: MappedCompany, *, external_system: str, now: datetime,
+    ) -> UUID:
+        model = CompanyModel(
+            id=uuid4(),
+            tenant_id=tenant_id,
+            legal_name=mapped.legal_name,
+            trade_name=mapped.trade_name,
+            tax_identifier=mapped.tax_identifier,
+            timezone=IMPORT_DEFAULT_TIMEZONE,
+            currency_code=IMPORT_DEFAULT_CURRENCY_CODE,
+            status=mapped.status,
+            external_system=external_system,
+            external_type=mapped.external_type,
+            external_id=mapped.external_id,
+            valid_from=now,
+        )
+        self._session.add(model)
+        self._session.flush()
+        return model.id
+
+
+class SqlAlchemyTeamImportRepository:
+    '''Leitura e gravação estreitas da equipe interna, sempre escopadas por tenant.'''
+
+    def __init__(self, session: Session) -> None:
+        self._session = session
+
+    def find_member_by_external_reference(
+        self, tenant_id: UUID, external_system: str, external_type: str, external_id: str,
+    ) -> TeamMemberSnapshot | None:
+        model = self._session.scalar(select(OfficeTeamMemberModel).where(
+            OfficeTeamMemberModel.tenant_id == tenant_id,
+            OfficeTeamMemberModel.external_system == external_system,
+            OfficeTeamMemberModel.external_type == external_type,
+            OfficeTeamMemberModel.external_id == external_id,
+        ).limit(1))
+        return _to_member_snapshot(model) if model is not None else None
+
+    def find_member_by_email(self, tenant_id: UUID, email: str) -> TeamMemberSnapshot | None:
+        model = self._session.scalar(select(OfficeTeamMemberModel).where(
+            OfficeTeamMemberModel.tenant_id == tenant_id,
+            OfficeTeamMemberModel.email == email,
+        ).limit(1))
+        return _to_member_snapshot(model) if model is not None else None
+
+    def list_members(self, tenant_id: UUID) -> list[TeamMemberSnapshot]:
+        return [
+            _to_member_snapshot(model)
+            for model in self._session.scalars(select(OfficeTeamMemberModel).where(
+                OfficeTeamMemberModel.tenant_id == tenant_id,
+            ).order_by(OfficeTeamMemberModel.display_name, OfficeTeamMemberModel.id))
+        ]
+
+    def create_member(
+        self, tenant_id: UUID, mapped: MappedTeamMember, *, external_system: str,
+        external_type: str, now: datetime,
+    ) -> UUID:
+        model = OfficeTeamMemberModel(
+            id=uuid4(), tenant_id=tenant_id, display_name=mapped.display_name,
+            email=mapped.email, job_title=mapped.job_title, status=mapped.status,
+            external_system=external_system, external_type=external_type,
+            external_id=mapped.external_id, valid_from=now,
+        )
+        self._session.add(model)
+        self._session.flush()
+        return model.id
+
+    def find_company_id_by_external_reference(
+        self, tenant_id: UUID, external_system: str, external_type: str, external_id: str,
+    ) -> UUID | None:
+        return self._session.scalar(select(CompanyModel.id).where(
+            CompanyModel.tenant_id == tenant_id,
+            CompanyModel.external_system == external_system,
+            CompanyModel.external_type == external_type,
+            CompanyModel.external_id == external_id,
+        ).limit(1))
+
+    def assignment_exists(
+        self, tenant_id: UUID, company_id: UUID, member_id: UUID, role_label: str,
+    ) -> bool:
+        return self._session.scalar(select(CompanyTeamAssignmentModel.id).where(
+            CompanyTeamAssignmentModel.tenant_id == tenant_id,
+            CompanyTeamAssignmentModel.company_id == company_id,
+            CompanyTeamAssignmentModel.team_member_id == member_id,
+            CompanyTeamAssignmentModel.role_label == role_label,
+        ).limit(1)) is not None
+
+    def create_assignment(
+        self, tenant_id: UUID, company_id: UUID, member_id: UUID, role_label: str,
+        *, now: datetime,
+    ) -> UUID:
+        model = CompanyTeamAssignmentModel(
+            id=uuid4(), tenant_id=tenant_id, company_id=company_id,
+            team_member_id=member_id, role_label=role_label, status='active', valid_from=now,
+        )
+        self._session.add(model)
+        self._session.flush()
+        return model.id
+
+
+def _to_member_snapshot(model: OfficeTeamMemberModel) -> TeamMemberSnapshot:
+    return TeamMemberSnapshot(
+        id=model.id, display_name=model.display_name, email=model.email,
+        job_title=model.job_title, status=model.status, external_id=model.external_id,
+    )
+
+
+def _to_snapshot(model: CompanyModel) -> CompanySnapshot:
+    return CompanySnapshot(
+        id=model.id,
+        legal_name=model.legal_name,
+        trade_name=model.trade_name,
+        tax_identifier=model.tax_identifier,
+        status=model.status,
+        external_id=model.external_id,
+    )

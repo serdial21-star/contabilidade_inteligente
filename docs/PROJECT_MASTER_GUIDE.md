@@ -60,6 +60,21 @@ Este incremento não inicia a Fase 10/10A: não existe conector, identidade M2M,
 chamada de rede, sincronização, correlação automática por CNPJ nem dado real.
 O gate formal de integração continua `NO_GO` pelos bloqueios restantes.
 
+**Atualização posterior no mesmo dia (ADR 0013):** o usuário aprovou um import
+**manual, offline e idempotente** de dados reais do Sistema A (empresas de
+`clientes` e equipe interna de `funcionarios`), sem conexão ao vivo — o gate
+`NO_GO` do Connect Hub não foi alterado. Isso incluiu a migration
+`20260923_0016` (`office_team_members`, `company_team_assignments`, validada no
+Migration Lab), os scripts `scripts/bootstrap_tenant.py`,
+`scripts/import_sistema_a_companies.py` e `scripts/import_sistema_a_team.py`
+(com `--dry-run`; nunca leem senha) e o roteiro
+[LOCAL_REAL_DATA_IMPORT.md](LOCAL_REAL_DATA_IMPORT.md). O banco de
+desenvolvimento `u621451815_serdial21_dev` foi recriado do zero e recebeu
+1 tenant, 3 empresas e 7 membros da equipe. O shell do app também ganhou
+sidebar recolhível e menu do usuário no rodapé. Pendências: login OIDC real
+(sem provedor definido), vínculo membro↔login e padronização de CPF/CNPJ no
+cadastro de clientes do Sistema A.
+
 Fundação (autenticação OIDC, tenant/empresa, catálogo operacional, auditoria
 transversal, importador de NF-e modelo 55) mais 14 fases numeradas concluídas
 e commitadas, cobrindo: shell autenticado do app, Minha Visão, empresas e
@@ -79,7 +94,7 @@ para propostas mistas. Isso incluiu:
 - UI da fila de revisão no app (aba "Itens pendentes" em Contábil);
 - testes automatizados cobrindo tudo isso.
 
-Suíte de testes local: **461 passed**, 18 skipped (só os que exigem MariaDB
+Suíte de testes local: **483 passed**, 20 skipped (só os que exigem MariaDB
 real com opt-in explícito — e esses agora também passam quando habilitados).
 
 O que ainda falta **dentro** dessa fatia, sem virar fase nova: UI de cadastro

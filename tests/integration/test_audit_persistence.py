@@ -255,6 +255,9 @@ def test_commit_hook_audits_creation_and_change_of_initial_entities(
             timezone='America/Sao_Paulo',
             currency_code='BRL',
             status='active',
+            external_system='SERDIAL21_OPERATIONAL',
+            external_type='CLIENT',
+            external_id='client-before',
             valid_from=NOW,
         )
         role_model = RoleModel(
@@ -278,24 +281,30 @@ def test_commit_hook_audits_creation_and_change_of_initial_entities(
         database_session.commit()
 
     audit_service = AuditService(SqlAlchemyAuditRepository(database_session))
-    created_actions = {
-        item.action
-        for item in audit_service.list_by_correlation(
-            tenant_id,
-            creation_correlation,
-        )
-    }
+    created_events = audit_service.list_by_correlation(
+        tenant_id,
+        creation_correlation,
+    )
+    created_actions = {item.action for item in created_events}
     assert created_actions == {
         'tenant.created',
         'company.created',
         'membership.created',
         'role_binding.created',
     }
+    company_created = next(
+        item for item in created_events if item.action == 'company.created'
+    )
+    assert company_created.after is not None
+    assert company_created.after['external_system'] == 'SERDIAL21_OPERATIONAL'
+    assert company_created.after['external_type'] == 'CLIENT'
+    assert company_created.after['external_id'] == 'client-before'
 
     update_correlation = uuid4()
     with audit_scope(database_session, context(update_correlation)):
         tenant_model.status = 'suspended'
         company_model.status = 'suspended'
+        company_model.external_id = 'client-after'
         membership_model.status = 'revoked'
         membership_model.revision = 2
         binding_model.status = 'revoked'
@@ -317,3 +326,12 @@ def test_commit_hook_audits_creation_and_change_of_initial_entities(
     assert membership_event.before == {'status': 'active', 'revision': 1}
     assert membership_event.after == {'status': 'revoked', 'revision': 2}
     assert membership_event.subject_version == 2
+    company_event = next(
+        item for item in updated_events if item.action == 'company.updated'
+    )
+    assert company_event.before == {
+        'status': 'active', 'external_id': 'client-before',
+    }
+    assert company_event.after == {
+        'status': 'suspended', 'external_id': 'client-after',
+    }

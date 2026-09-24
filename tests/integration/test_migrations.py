@@ -19,6 +19,8 @@ EXPECTED_TABLES = {
     'canonical_records',
     'companies',
     'company_accesses',
+    'company_team_assignments',
+    'office_team_members',
     'establishments',
     'evidence_artifacts',
     'fiscal_document_items',

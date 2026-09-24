@@ -11,6 +11,8 @@ from sqlalchemy.orm import Session
 
 from serdial21.modules.access_control.adapters.outbound.persistence.models import (
     CompanyModel,
+    CompanyTeamAssignmentModel,
+    OfficeTeamMemberModel,
     RoleBindingModel,
     TenantMembershipModel,
     TenantModel,
@@ -60,8 +62,22 @@ SUBJECT_POLICIES: dict[type[object], SubjectPolicy] = {
     CompanyModel: SubjectPolicy(
         subject_type='Company',
         action_prefix='company',
-        fields=('status', 'timezone', 'currency_code', 'valid_from', 'valid_until'),
+        fields=(
+            'status', 'timezone', 'currency_code',
+            'external_system', 'external_type', 'external_id',
+            'valid_from', 'valid_until',
+        ),
         company_is_subject=True,
+    ),
+    OfficeTeamMemberModel: SubjectPolicy(
+        subject_type='OfficeTeamMember',
+        action_prefix='office_team_member',
+        fields=('status', 'job_title', 'external_system', 'external_type', 'external_id'),
+    ),
+    CompanyTeamAssignmentModel: SubjectPolicy(
+        subject_type='CompanyTeamAssignment',
+        action_prefix='company_team_assignment',
+        fields=('team_member_id', 'role_label', 'status', 'valid_from', 'valid_until'),
     ),
     TenantMembershipModel: SubjectPolicy(
         subject_type='TenantMembership',

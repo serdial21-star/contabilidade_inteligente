@@ -247,6 +247,77 @@ class CompanyAccessModel(Base):
     )
 
 
+class OfficeTeamMemberModel(Base):
+    '''Cadastro descritivo da equipe interna; sem vínculo com login (ADR 0013).'''
+
+    __tablename__ = 'office_team_members'
+    __table_args__ = (
+        UniqueConstraint('tenant_id', 'id', name='uq_office_team_members_tenant_id_id'),
+        UniqueConstraint('tenant_id', 'email', name='uq_office_team_members_tenant_email'),
+        Index(
+            'ux_office_team_members_tenant_external_reference',
+            'tenant_id', 'external_system', 'external_type', 'external_id',
+            unique=True,
+        ),
+        {
+            'mysql_charset': 'utf8mb4',
+            'mysql_collate': 'utf8mb4_unicode_ci',
+        },
+    )
+
+    id: Mapped[UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid4)
+    tenant_id: Mapped[UUID] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey('tenants.id'), nullable=False,
+    )
+    display_name: Mapped[str] = mapped_column(String(200), nullable=False)
+    email: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    job_title: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    status: Mapped[str] = mapped_column(String(32), nullable=False)
+    external_system: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    external_type: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    external_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    valid_from: Mapped[datetime] = mapped_column(UTCDateTime(), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        UTCDateTime(), nullable=False, server_default=func.current_timestamp(),
+    )
+
+
+class CompanyTeamAssignmentModel(Base):
+    __tablename__ = 'company_team_assignments'
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ['tenant_id', 'company_id'],
+            ['companies.tenant_id', 'companies.id'],
+            name='fk_company_team_assignments_tenant_company',
+        ),
+        ForeignKeyConstraint(
+            ['tenant_id', 'team_member_id'],
+            ['office_team_members.tenant_id', 'office_team_members.id'],
+            name='fk_company_team_assignments_tenant_member',
+        ),
+        UniqueConstraint(
+            'tenant_id', 'company_id', 'team_member_id', 'role_label',
+            name='uq_company_team_assignments_scope',
+        ),
+        {
+            'mysql_charset': 'utf8mb4',
+            'mysql_collate': 'utf8mb4_unicode_ci',
+        },
+    )
+
+    id: Mapped[UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid4)
+    tenant_id: Mapped[UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    company_id: Mapped[UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    team_member_id: Mapped[UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    role_label: Mapped[str] = mapped_column(String(64), nullable=False)
+    status: Mapped[str] = mapped_column(String(32), nullable=False)
+    valid_from: Mapped[datetime] = mapped_column(UTCDateTime(), nullable=False)
+    valid_until: Mapped[datetime | None] = mapped_column(UTCDateTime(), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        UTCDateTime(), nullable=False, server_default=func.current_timestamp(),
+    )
+
+
 class RoleModel(Base):
     __tablename__ = 'roles'
     __table_args__ = (
