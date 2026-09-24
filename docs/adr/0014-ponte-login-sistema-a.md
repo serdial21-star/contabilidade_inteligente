@@ -14,10 +14,24 @@ nunca por armazenamento do navegador), `scripts/bootstrap_user_access.py`
 (provisionamento idempotente de usuário/papel/acesso), 8 testes automatizados
 novos. Testado de ponta a ponta contra a API real e o banco `_dev` usando o
 provedor de desenvolvimento no papel do emissor — retornou as 3 empresas reais
-do tenant. **Lado do Sistema A ainda não implementado**: especificação
-completa (incluindo o achado de que a assinatura RS256 não pode acontecer em
-node de código do n8n — trava já conhecida do item 0b-3) em
-`docs/integration/SISTEMA_A_LOGIN_BRIDGE_SPEC.md`.
+do tenant.
+
+**PONTE COMPLETA E VERIFICADA DE PONTA A PONTA em 2026-09-24.** O lado do
+Sistema A foi construído (duas Supabase Edge Functions + o workflow n8n
+`[SECURITY] Validar Sessão de Funcionário`, reaproveitando a consulta já
+provada do workflow de permissões) seguindo
+`docs/integration/SISTEMA_A_LOGIN_BRIDGE_SPEC.md`. Teste real, com uma sessão
+de funcionário de verdade (não simulada): login pelo Sistema A → token emitido
+pela ponte → aceito pela API real do Sistema B → tela do Sistema B carregada
+com as empresas reais, sem segundo login. Detalhes completos, incluindo os
+dois problemas reais encontrados e corrigidos no caminho, na seção 0 de
+`docs/DOSSIE_SESSAO_2026-09-23.md`.
+
+Pendências que continuam abertas (não fazem parte do que este ADR autorizou):
+o ícone/área de trabalho no Sistema A (item 5-15, deliberadamente adiado), o
+provedor de identidade definitivo da Fase 11 (item 5-11), e qualquer
+sincronização de dados de negócio (continua fora do escopo — gate geral do
+Connect Hub permanece `NO_GO`).
 
 ## Contexto
 

@@ -37,6 +37,71 @@ Usuário de teste `dev-sergio` já provisionado no tenant Serdial21 do `_dev`
 com acesso às 3 empresas — confirmado por chamada real a `/api/v1/identity/me`
 com token do provedor de desenvolvimento.
 
+### 0.1 Ponte concluída de ponta a ponta (mesmo dia, 24/09, mais tarde)
+
+O Lovable construiu as duas Edge Functions do lado do Sistema A. Eu montei o
+workflow `[SECURITY] Validar Sessão de Funcionário` no n8n, reaproveitando a
+consulta exata já provada em produção (`API - Admin - Permissões
+(Funcionários) v2.2`), sem inventar nome de coluna. Depois de resolver três
+problemas reais no caminho, **o login real funcionou**: o usuário entrou pelo
+Sistema A e caiu direto no Sistema B, autenticado, vendo as 3 empresas reais.
+
+**Problemas reais encontrados e corrigidos nesta sessão (guardar para não
+repetir o mesmo caminho de diagnóstico da próxima vez):**
+
+1. **Segredo configurado, função ainda respondendo "not configured".** No
+   Supabase, uma função já publicada não recarrega sozinha quando um segredo
+   novo é criado/alterado — precisa ser republicada. Resolvido pedindo ao
+   Lovable para republicar as duas funções.
+2. **Nome errado da chave no navegador.** O primeiro teste da Lovable supôs
+   `localStorage.getItem('admin_auth_token')`, mas isso corrigiu numa segunda
+   tentativa: existiam DUAS sessões simultâneas no mesmo navegador —
+   `auth_token`/`client_user` (sessão de **cliente**, chave `client_user` com
+   `id":"25"`, o cadastro duplicado "Sergio hotmail." da importação) e
+   `admin_auth_token`/`admin_user` (sessão de **funcionário**). O Sistema B só
+   aceita sessão de funcionário — testar com a de cliente sempre daria
+   "invalid session" (correto: são tabelas de sessão diferentes no Sistema A).
+3. **Funcionário logado não era o esperado.** No painel administrativo, o
+   usuário testou logado como `funcionario_id=1` ("Seu Nome", conta genérica),
+   não `3` ("Sergio Rodrigues"). Os dois foram cadastrados no Sistema B
+   (idempotente, sem custo cadastrar os dois).
+4. **CSP bloqueando a chamada à API real.** `app/index.html` tem
+   `connect-src 'self'` de propósito (não deve ser enfraquecido). Rodar o site
+   numa porta (`:8080`) e a API real noutra (`:8000`) violava essa política no
+   navegador. Resolvido criando `scripts/start_local_real.py` — um servidor
+   local NOVO (separado do `start_local.py` sintético) que serve os mesmos
+   arquivos e também repassa `/api/*` para a API real na mesma origem, sem
+   mudar a política de segurança da página.
+
+**Estado do ambiente ao terminar este teste:**
+- `app/config.js` foi editado **localmente, sem commitar** (`apiBaseUrl:
+  '/api/v1'`, `authMode: 'bridge'`, `dataMode: 'real'`) — revertido de volta
+  ao padrão sintético commitado ao final da sessão (ver seção 0.2). Para
+  repetir o teste depois, editar de novo do mesmo jeito.
+- `.env` tem os endereços REAIS da ponte
+  (`OIDC_ISSUER=https://lgohzjneyvdtonpeapvd.functions.supabase.co/sistema-b-bridge`,
+  `OIDC_JWKS_URL=https://lgohzjneyvdtonpeapvd.supabase.co/functions/v1/sistema-b-jwks`,
+  `OIDC_AUDIENCE=serdial21-sistema-b`, `CORS_ALLOWED_ORIGINS=http://127.0.0.1:8080`) —
+  isso fica assim (não precisa reverter; são os valores reais e definitivos da
+  ponte, não um teste descartável).
+- Usuários reais provisionados no Sistema B (tenant `_dev`):
+  `funcionario:1` (via issuer real) e `funcionario:3` (via issuer real; e um
+  registro antigo com o emissor do provedor de teste local, inofensivo).
+- Servidores locais (API real `:8000` + `scripts/start_local_real.py` `:8080`)
+  encerrados ao final da sessão — reabrir com os comandos da seção 8 quando
+  for testar de novo.
+
+### 0.2 O que ficou registrado vs. o que precisa de decisão futura
+
+- `app/config.js` **voltou ao padrão commitado** (`synthetic`) ao final desta
+  sessão — o modo `bridge` não é (ainda) o padrão de fábrica do repositório.
+  Isso é proposital: o ícone/tela real no Sistema A (item 5-15) ainda não
+  existe, e mudar o padrão de fábrica é uma decisão própria, não algo a fazer
+  de passagem. Quando o item 5-15 for construído, essa troca de padrão volta
+  à mesa.
+- `scripts/start_local_real.py` é novo e foi commitado — utilitário local
+  permanente para repetir este teste sem precisar reinventar a solução do CSP.
+
 ## 1. Como retomar amanhã (5 minutos)
 
 1. `git status -sb` e `git log --oneline -3` na raiz. Esperado: árvore limpa
@@ -188,6 +253,13 @@ $env:SERDIAL21_RUN_MARIADB_MIGRATION_TESTS = "1"
 
 # Demonstração local (dados fictícios): dois cliques em INICIAR_SERDIAL21.cmd
 # -> http://127.0.0.1:8080/app/
+
+# Repetir o teste com login real (edite app/config.js localmente antes,
+# sem commitar: apiBaseUrl:'/api/v1', authMode:'bridge', dataMode:'real')
+.\.venv\Scripts\python.exe -m uvicorn serdial21.main:app --port 8000 --host 127.0.0.1
+.\.venv\Scripts\python.exe scripts\start_local_real.py --port 8080 --api-port 8000
+# -> pegue um token real (ver seção 0.1) e abra:
+# http://127.0.0.1:8080/app/#overview?bridge=SEU_TOKEN_AQUI
 ```
 
 ## 9. Estado do ambiente ao encerrar

@@ -1,5 +1,17 @@
 # Especificação: ponte de login Sistema A → Sistema B
 
+**Status: implementada e verificada de ponta a ponta em 2026-09-24.** Este
+documento passa a ser referência histórica/de manutenção — não é mais um
+roteiro de "a construir". Resumo do que existe hoje:
+
+| Peça | Onde | Status |
+| --- | --- | --- |
+| `sistema-b-jwks` (Edge Function) | Supabase, projeto `lgohzjneyvdtonpeapvd` | no ar, retorna a chave pública |
+| `sistema-b-bridge-token` (Edge Function) | idem | no ar, emite token RS256 após validar a sessão |
+| `[SECURITY] Validar Sessão de Funcionário` (n8n) | `n8n.serdial21.com/webhook/security/validar-sessao-funcionario` | ativo, reaproveita a consulta do workflow de permissões |
+| `authMode: 'bridge'` | `app/app.js` (Sistema B) | testado com sessão real |
+| Chaves RS256 | segredos do Supabase (`SISTEMA_B_BRIDGE_PRIVATE_KEY_PEM`/`..._PUBLIC_JWK`) | configuradas |
+
 Base de decisão: [ADR 0014](../adr/0014-ponte-login-sistema-a.md) (exceção
 pontual e nomeada ao gate do Connect Hub, só para identidade de login).
 Isto é uma especificação técnica para o lado do **Sistema A**, que eu não
