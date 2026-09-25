@@ -36,6 +36,9 @@ def test_redis_is_tls_only_private_and_fail_closed_api_uses_distributed_backend(
     assert api['environment']['RATE_LIMIT_BACKEND_CA_CERT_PATH'].startswith('/run/secrets/')
     assert 'redis' in api['depends_on']
     assert compose['networks']['backend']['internal'] is True
+    assert set(api['networks']) == {'backend', 'egress'}
+    assert set(services['migrate']['networks']) == {'backend', 'egress'}
+    assert 'internal' not in compose['networks']['egress']
 
 
 def test_runtime_secrets_are_files_not_environment_values() -> None:

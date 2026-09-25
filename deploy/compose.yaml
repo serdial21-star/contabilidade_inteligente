@@ -99,6 +99,7 @@ services:
       - evidence:/var/lib/serdial21/evidence
     networks:
       - backend
+      - egress
     depends_on:
       storage-init:
         condition: service_completed_successfully
@@ -133,6 +134,7 @@ services:
     secrets: *api-secrets
     networks:
       - backend
+      - egress
 
   web:
     build:
@@ -162,6 +164,7 @@ services:
 networks:
   backend:
     internal: true
+  egress: {}
   proxy:
     name: serdial21_proxy
     external: true

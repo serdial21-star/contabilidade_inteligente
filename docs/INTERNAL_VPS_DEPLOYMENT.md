@@ -37,9 +37,11 @@ projeto n8n antes de backup, export e janela operacional aprovados.
 - `migrate`: perfil opt-in para migration controlada, nunca executado no
   startup normal.
 
-A rede interna `backend` isola API e Redis. A rede externa
-`serdial21_proxy` permite somente a entrada do Caddy público no serviço web.
-O container do n8n não entra na rede interna do B.
+A rede interna `backend` isola API e Redis. A rede dedicada `egress`, usada
+somente por `api` e `migrate`, permite resolver e acessar MySQL, issuer e JWKS
+sem publicar portas no host. A rede externa `serdial21_proxy` permite somente
+a entrada do Caddy público no serviço web. O container do n8n não entra nas
+redes privadas do B.
 
 ## Fronteira de segredos
 
