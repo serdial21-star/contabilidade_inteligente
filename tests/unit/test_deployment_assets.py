@@ -57,12 +57,24 @@ def test_runtime_secrets_are_files_not_environment_values() -> None:
 
 
 def test_deploy_frontend_is_real_bridge_while_factory_default_stays_synthetic() -> None:
+    compose = _compose()
+    web = compose['services']['web']
     deploy_config = (ROOT / 'deploy' / 'web' / 'config.js').read_text(encoding='utf-8')
+    dockerfile = (ROOT / 'deploy' / 'web' / 'Dockerfile').read_text(encoding='utf-8')
+    caddyfile = (ROOT / 'deploy' / 'web' / 'Caddyfile').read_text(encoding='utf-8')
     factory_config = (ROOT / 'app' / 'config.js').read_text(encoding='utf-8')
     assert "dataMode: 'real'" in deploy_config
     assert "authMode: 'bridge'" in deploy_config
     assert "dataMode: 'synthetic'" in factory_config
     assert "authMode: 'synthetic'" in factory_config
+    assert 'RUN setcap -r /usr/bin/caddy' in dockerfile
+    assert 'USER 1000:1000' in dockerfile
+    assert ':8080 {' in caddyfile
+    assert web['cap_drop'] == ['ALL']
+    assert 'no-new-privileges:true' in web['security_opt']
+    assert web['healthcheck']['test'] == [
+        'CMD', 'wget', '-q', '--spider', 'http://127.0.0.1:8080/app/',
+    ]
 
 
 def test_public_deploy_example_uses_confirmed_domain_and_bridge_identity() -> None:

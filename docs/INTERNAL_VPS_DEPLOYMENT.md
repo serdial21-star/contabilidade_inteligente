@@ -43,6 +43,11 @@ sem publicar portas no host. A rede externa `serdial21_proxy` permite somente
 a entrada do Caddy público no serviço web. O container do n8n não entra nas
 redes privadas do B.
 
+O Caddy interno escuta somente a porta não privilegiada `8080`. A imagem
+derivada remove a file capability `CAP_NET_BIND_SERVICE` presente na imagem
+oficial, permitindo manter `cap_drop: ALL`, `no-new-privileges`, usuário
+`1000:1000` e healthcheck real de `/app/` sem ampliar privilégios.
+
 ## Fronteira de segredos
 
 Credenciais não aparecem no Compose ou nas imagens. A API lê `DATABASE_URL` e
