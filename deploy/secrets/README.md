@@ -10,5 +10,13 @@ esperados por `deploy/compose.yaml` são:
 - `redis_server_key.pem`;
 - `redis-users.acl`.
 
-Crie-os com permissão mínima no host. Nunca envie seu conteúdo em conversa,
-log, issue, commit ou saída de `docker compose config`.
+O Compose local entrega segredos de arquivo por bind mount e não remapeia
+`uid`, `gid` ou `mode`. Reserve no host o grupo sem membros configurado por
+`SERDIAL21_SECRETS_GID` (exemplo: `19021`), atribua todos os arquivos a
+`root:<gid>` e use modo `0640`. Os serviços `api`, `migrate` e `redis` recebem
+somente esse grupo suplementar e continuam executando como usuários não-root.
+
+Antes de criar o grupo, confirme que o GID escolhido está livre. Não adicione
+usuários do host ao grupo e mantenha o diretório de segredos fora de backup ou
+saída não cifrada. Nunca envie o conteúdo dos arquivos em conversa, log,
+issue, commit ou saída de `docker compose config`.

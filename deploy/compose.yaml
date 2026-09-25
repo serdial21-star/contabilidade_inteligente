@@ -13,6 +13,8 @@ services:
 
   redis:
     image: redis:8.2.9-alpine
+    group_add:
+      - "${SERDIAL21_SECRETS_GID:?Defina SERDIAL21_SECRETS_GID}"
     command:
       - redis-server
       - --port
@@ -62,6 +64,8 @@ services:
       context: ..
       dockerfile: deploy/api/Dockerfile
     image: serdial21-b-api:${SERDIAL21_IMAGE_TAG:?Defina SERDIAL21_IMAGE_TAG}
+    group_add:
+      - "${SERDIAL21_SECRETS_GID:?Defina SERDIAL21_SECRETS_GID}"
     restart: unless-stopped
     read_only: true
     tmpfs:
@@ -114,6 +118,8 @@ services:
       context: ..
       dockerfile: deploy/api/Dockerfile
     image: serdial21-b-api:${SERDIAL21_IMAGE_TAG:?Defina SERDIAL21_IMAGE_TAG}
+    group_add:
+      - "${SERDIAL21_SECRETS_GID:?Defina SERDIAL21_SECRETS_GID}"
     command: ["python", "-m", "alembic", "upgrade", "head"]
     read_only: true
     tmpfs:

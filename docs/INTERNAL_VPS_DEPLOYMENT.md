@@ -49,6 +49,13 @@ chave TLS e ACL do Redis também são arquivos ignorados pelo Git. Nunca usar
 `docker compose config` em saída compartilhada, pois ele pode materializar
 configurações do ambiente.
 
+Como o Compose local implementa secrets de arquivo com bind mounts, o host
+reserva um grupo sem membros (`SERDIAL21_SECRETS_GID`, exemplo `19021`). Os
+arquivos ficam `root:<gid>` em modo `0640`, e somente `api`, `migrate` e
+`redis` recebem o grupo suplementar. Não tornar segredo world-readable para
+contornar falha de permissão e não reutilizar um GID que possua membros no
+host.
+
 O frontend de deploy usa `authMode: 'bridge'` e `dataMode: 'real'` em arquivo
 separado. O `app/config.js` padrão continua sintético para preservar a
 demonstração local.

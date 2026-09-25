@@ -39,10 +39,16 @@ def test_redis_is_tls_only_private_and_fail_closed_api_uses_distributed_backend(
 def test_runtime_secrets_are_files_not_environment_values() -> None:
     compose = _compose()
     api = compose['services']['api']
+    migrate = compose['services']['migrate']
+    redis = compose['services']['redis']
     serialized_environment = str(api['environment']).lower()
     assert 'database_url' not in serialized_environment
     assert 'rate_limit_backend_url' not in serialized_environment
     assert {'database_url', 'rate_limit_backend_url'} <= set(api['secrets'])
+    expected_group = '${SERDIAL21_SECRETS_GID:?Defina SERDIAL21_SECRETS_GID}'
+    assert api['group_add'] == [expected_group]
+    assert migrate['group_add'] == [expected_group]
+    assert redis['group_add'] == [expected_group]
 
 
 def test_deploy_frontend_is_real_bridge_while_factory_default_stays_synthetic() -> None:
