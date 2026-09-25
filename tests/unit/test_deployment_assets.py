@@ -80,9 +80,14 @@ def test_public_deploy_example_uses_confirmed_domain_and_bridge_identity() -> No
 
 
 def test_api_container_runs_as_non_root_and_loads_only_named_secret_files() -> None:
+    compose = _compose()
+    healthcheck = compose['services']['api']['healthcheck']['test']
     dockerfile = (ROOT / 'deploy' / 'api' / 'Dockerfile').read_text(encoding='utf-8')
     entrypoint = (ROOT / 'deploy' / 'api' / 'entrypoint.sh').read_text(encoding='utf-8')
     assert 'USER 10001:10001' in dockerfile
     assert '/run/secrets/database_url' in entrypoint
     assert '/run/secrets/rate_limit_backend_url' in entrypoint
     assert '.env' not in entrypoint
+    assert healthcheck[:3] == ['CMD', 'python', '-c']
+    assert "os.environ['TRUSTED_HOSTS']" in healthcheck[3]
+    assert "headers={'Host': host}" in healthcheck[3]
