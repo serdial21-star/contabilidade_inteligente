@@ -1,0 +1,2 @@
+user default on nopass ~* -@all +ping
+user serdial21 on #REPLACE_WITH_SHA256_PASSWORD ~serdial21:rate-limit:* -@all +eval +incr +expire +ttl +ping

@@ -1,5 +1,21 @@
 # System A Integration Readiness Gate
 
+## Atualização 2026-09-25 — Wave 0 e publicação interna autorizadas (ADR 0015)
+
+Por decisão explícita do usuário, registrada em
+[`docs/adr/0015-publicacao-interna-e-wave-zero-connect-hub.md`](../adr/0015-publicacao-interna-e-wave-zero-connect-hub.md), ficam autorizadas:
+
+- a preparação da primeira publicação interna do Sistema B, reutilizando a
+  ponte de login já aprovada;
+- a Wave 0 de inventário, estabilização e congelamento de contratos do Connect
+  Hub.
+
+Esta atualização **não autoriza sincronização runtime de dados de negócio**.
+Cliente, documento, tarefa, honorário, imposto ou outro dado não será
+transmitido automaticamente até que o primeiro fluxo seja escolhido, os
+contratos versionados sejam aprovados e a homologação correspondente passe.
+O `NO_GO` abaixo permanece aplicável à implementação e ativação dessas conexões.
+
 ## Atualização 2026-09-24 — exceção pontual e nomeada (ADR 0014)
 
 O veredito `NO_GO` abaixo **continua valendo integralmente** para sincronização

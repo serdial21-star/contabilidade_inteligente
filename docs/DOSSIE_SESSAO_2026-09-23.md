@@ -3,7 +3,8 @@
 Documento único e autossuficiente: qualquer assistente de IA (não importa
 qual) deve conseguir ler só isto, entender o estado real do trabalho e
 continuar do mesmo jeito que vinha sendo feito, sem depender de memória de
-conversa anterior. Reescrito em 2026-09-24 para consolidar tudo (as versões
+conversa anterior. Reescrito em 2026-09-24 e atualizado em 2026-09-25 para
+consolidar tudo (as versões
 anteriores tinham virado um log cronológico com partes já superadas).
 
 **Nunca contém** senha, CPF, CNPJ ou nome de cliente/funcionário real — de
@@ -150,16 +151,34 @@ funcionando — porque o Sistema B só roda em `127.0.0.1` hoje; mudar o padrão
 agora deixaria a demonstração inutilizável para qualquer pessoa sem o
 Sistema B local. Ver pendência 6.4.
 
+### 2.6 Publicação interna e Wave 0 do Connect Hub — AUTORIZADAS
+
+Decisão registrada em
+`docs/adr/0015-publicacao-interna-e-wave-zero-connect-hub.md` em 2026-09-25:
+
+- primeira publicação destinada somente à equipe Serdial21;
+- entrada pelo Sistema A usando a ponte já pronta;
+- aplicação B no VPS KVM 2 existente, reutilizando Docker e Caddy;
+- banco, usuário, credenciais, migrations e backups do B separados do A;
+- `_dev` não vira produção e dados nele não migram automaticamente;
+- Wave 0 do Connect Hub autorizada para inventário, estabilização, contratos,
+  M2M, idempotência, retry/DLQ, transporte documental e homologação;
+- sincronização runtime de dados de negócio continua `NO_GO` até o primeiro
+  fluxo ser escolhido, contratado e aprovado em homologação.
+
+Infraestrutura informada pelo usuário: n8n em Docker na porta interna 5678,
+Caddy nas portas 80/443, Docker/Docker Manager ativos, sem MySQL/MariaDB no
+VPS e sem Nginx/Apache/Easypanel/Coolify/CloudPanel identificados.
+
 ---
 
 ## 3. Limites que continuam valendo (não mexer sem nova autorização explícita)
 
-- **Connect Hub geral: `NO_GO`.** `docs/integration/SYSTEM_A_INTEGRATION_READINESS_GATE.md`
-  lista os bloqueios (contratos do n8n não congelados, sem credencial M2M
-  genérica, sem confirmação de entrega, sem ambiente de homologação
-  separado). A exceção do ADR 0014 é só para a ponte de login — nada de
-  sincronizar cliente, documento, tarefa, honorário ou imposto entre os
-  sistemas.
+- **Connect Hub runtime: `NO_GO`; Wave 0: autorizada.** O ADR 0015 autoriza
+  planejamento, inventário, estabilização e congelamento de contratos, além da
+  preparação da publicação interna do B. Ainda não autoriza transmitir cliente,
+  documento, tarefa, honorário, imposto ou outro dado de negócio. A ponte de
+  login continua sendo a única integração runtime aprovada.
 - **Sistema A não é multi-tenant.** Não desenhar nada assumindo isso até o
   usuário autorizar esse projeto separadamente (ver 2.1).
 - **Nunca ler/gravar `senha`** de `clientes` ou `funcionarios` do Sistema A,
@@ -178,7 +197,8 @@ Sistema B local. Ver pendência 6.4.
 
 - Alvo de desenvolvimento: `u621451815_serdial21_dev` (MariaDB 11.8.9,
   Hostinger, `srv1183.hstgr.io:3306`, usuário `u621451815_serdial21_app`). O
-  usuário **não usa Docker**.
+  desenvolvimento local não depende de Docker; o VPS de publicação já possui
+  Docker e Caddy em operação.
 - Conexão em `.env` na raiz (git-ignorado). **Nunca abrir nem imprimir o
   conteúdo.** Antes de qualquer migration/import, confirmar o alvo por
   código (comparando `SELECT DATABASE()`), nunca assumindo pela URL.
@@ -191,6 +211,18 @@ Sistema B local. Ver pendência 6.4.
 - CSVs reais de import ficam em `local_data/` (git-ignorado).
 - SQLite só é aceito com `SERDIAL21_ENVIRONMENT=test` — nunca usar isso para
   dados reais.
+- Inspeção somente leitura de 2026-09-25 confirmou que `_hom` continua em
+  `20260907_0009`, com TLS ativo, 33 tabelas, 16 tenants, 28 empresas, 32
+  usuários e 100 eventos de auditoria. Embora o usuário tenha autorizado
+  considerar sua reclassificação, nenhuma escrita/migration ocorreu: a massa
+  histórica/sintética torna inadequado misturar o piloto real ali ou apagar a
+  evidência. Recomendação atual: criar banco limpo exclusivo do piloto.
+- Banco limpo do piloto criado em 2026-09-25:
+  `u621451815_s21_pilot`, com usuário exclusivo
+  `u621451815_s21_pilot_app`. Acesso remoto limitado ao IPv4 exato do VPS,
+  sem wildcard; conectividade TCP VPS→MariaDB confirmada. Autenticação, banco
+  vazio, TLS da sessão autenticada, backup, preflight e migrations ainda não
+  foram comprovados/executados.
 
 ---
 
@@ -220,9 +252,10 @@ Sistema B local. Ver pendência 6.4.
 
 ## 6. Pendências reais (checar aqui antes de perguntar ao usuário)
 
-1. **Trocar a senha do usuário `_app` do banco `_dev`** — apareceu uma vez em
-   texto na conversa (o editor mostrou ao salvar o `.env`). Status: **não
-   confirmado** se já foi trocada. Perguntar, não assumir.
+1. **Senha do usuário `_app` do banco `_dev` rotacionada e verificada** — a
+   troca foi confirmada em 2026-09-25. Uma consulta somente leitura após a
+   rotação confirmou `SELECT DATABASE() = u621451815_serdial21_dev`, sem abrir
+   ou imprimir o `.env`, a URL ou a credencial. Item encerrado.
 2. **Endpoint e tela da equipe interna no site do Sistema B** — a tabela
    existe e está preenchida (2.2), mas não há leitura exposta na API nem na
    tela.
@@ -230,10 +263,16 @@ Sistema B local. Ver pendência 6.4.
    (2.5) resolve o caso de uso real, mas produção de verdade (rotação de
    chave, revogação, múltiplos escritórios se/quando o pivô multi-tenant
    acontecer) é uma decisão maior, ainda em aberto.
-4. **Publicar o Sistema B num endereço real** (fora de `127.0.0.1`) — hoje é
-   o obstáculo concreto para qualquer pessoa além do desenvolvedor usar o
-   ícone "Contabilidade Inteligente". Não iniciar sem decisão explícita do
-   usuário sobre onde/como hospedar.
+4. **Publicar o Sistema B num endereço real** (fora de `127.0.0.1`) — decisão
+   de início já dada no ADR 0015: uso interno Serdial21, VPS KVM 2, Docker +
+   Caddy, banco separado. Senha `_app` rotacionada; inventário inicial do VPS e
+   adaptador Redis concluídos; artefatos Docker preparados localmente; domínio
+   `contabilidade.serdial21.com` e identidade pública da ponte confirmados.
+   Inspeção read-only descartou reutilizar `_hom` sem misturar ou destruir
+   evidência. Banco piloto limpo já criado; próximos bloqueios: acesso remoto e
+   preflight do banco, segredos/certificados Redis, storage e
+   backup, alteração controlada do Caddy, build/smoke e configuração segura de
+   homologação.
 5. **Sistema A — padronizar CPF/CNPJ e limpar duplicatas** (pedido do
    usuário, para depois): login por e-mail faz com que CPF/CNPJ hoje não
    seja conferido; já apareceram um CPF gravado de dois jeitos e um cliente

@@ -1,4 +1,5 @@
 import asyncio
+from pathlib import Path
 
 from fastapi.testclient import TestClient
 from pydantic import ValidationError
@@ -6,7 +7,13 @@ import pytest
 
 from serdial21.bootstrap.application import create_app
 from serdial21.bootstrap.settings import AppSettings
-from serdial21.entrypoints.http.middleware.rate_limit import InMemoryRateLimiter
+from redis.exceptions import ConnectionError as RedisConnectionError
+
+from serdial21.entrypoints.http.middleware.rate_limit import (
+    InMemoryRateLimiter,
+    RateLimiterUnavailable,
+)
+from serdial21.entrypoints.http.middleware.redis_rate_limit import RedisRateLimiter
 
 
 def _production_settings(**overrides: object) -> AppSettings:
@@ -58,9 +65,14 @@ def test_production_rejects_wildcards_local_origins_and_malformed_origins() -> N
         _production_settings(rate_limit_backend_url='redis://rate-limit.example.test/0')
 
 
-def test_distributed_rate_limit_configuration_requires_injected_adapter() -> None:
-    with pytest.raises(ValueError, match='distributed rate limiter adapter'):
-        create_app(_production_settings())
+def test_distributed_rate_limit_configuration_builds_redis_adapter() -> None:
+    app = create_app(_production_settings())
+    assert app is not None
+
+
+def test_rate_limit_ca_path_must_be_absolute() -> None:
+    with pytest.raises(ValidationError, match='deve ser absoluto'):
+        _production_settings(rate_limit_backend_ca_cert_path=Path('redis-ca.pem'))
 
 
 def test_cors_preflight_allowlist_and_unknown_origin() -> None:
@@ -144,6 +156,68 @@ def test_rate_limit_is_deterministic_separates_identities_and_resets() -> None:
     bounded = InMemoryRateLimiter(clock=lambda: 0.0, max_keys=1)
     assert asyncio.run(bounded.allow('a', 'general', 1, 60))
     assert not asyncio.run(bounded.allow('b', 'general', 1, 60))
+
+
+class _FakeRedis:
+    def __init__(self, results: list[object]) -> None:
+        self.results = results
+        self.calls: list[tuple[object, ...]] = []
+        self.closed = False
+
+    async def eval(
+        self, script: str, numkeys: int, *keys_and_args: object,
+    ) -> object:
+        self.calls.append((script, numkeys, *keys_and_args))
+        result = self.results.pop(0)
+        if isinstance(result, BaseException):
+            raise result
+        return result
+
+    async def aclose(self) -> None:
+        self.closed = True
+
+
+def test_redis_rate_limit_is_atomic_and_hides_identity_in_key() -> None:
+    client = _FakeRedis([1, 2, 3])
+    limiter = RedisRateLimiter(client)
+    allow = lambda: asyncio.run(limiter.allow('bearer:sensitive', 'general', 2, 60))
+    assert allow()
+    assert allow()
+    assert not allow()
+    assert all(call[1] == 1 and call[-1] == 60 for call in client.calls)
+    assert all('bearer:sensitive' not in str(call[2]) for call in client.calls)
+    assert 'INCR' in str(client.calls[0][0]) and 'EXPIRE' in str(client.calls[0][0])
+    asyncio.run(limiter.aclose())
+    assert client.closed
+
+
+def test_redis_rate_limit_fails_closed_without_leaking_backend_error() -> None:
+    client = _FakeRedis([RedisConnectionError('redis.internal:6379 unavailable')])
+    limiter = RedisRateLimiter(client)
+    with pytest.raises(RateLimiterUnavailable) as captured:
+        asyncio.run(limiter.allow('client:127.0.0.1', 'general', 1, 60))
+    assert 'redis.internal' not in str(captured.value)
+
+
+class _UnavailableLimiter:
+    async def allow(
+        self, identity: str, bucket: str, limit: int, window_seconds: int,
+    ) -> bool:
+        raise RateLimiterUnavailable
+
+    async def aclose(self) -> None:
+        return None
+
+
+def test_http_rate_limit_backend_outage_returns_safe_503() -> None:
+    app = create_app(AppSettings(_env_file=None, environment='test'), rate_limiter=_UnavailableLimiter())
+    response = TestClient(app).get('/api/v1/health/live')
+    assert response.status_code == 503
+    assert response.json() == {'detail': 'service temporarily unavailable'}
+    assert response.headers['retry-after'] == '5'
+    assert 'rate_limit_backend_unavailable_total{bucket="general"} 1' in (
+        app.state.metrics.render_prometheus()
+    )
 
 
 def test_http_rate_limit_returns_safe_429_and_hashes_bearer_identity() -> None:

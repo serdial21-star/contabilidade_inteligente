@@ -10,7 +10,7 @@
 | IDENTITY | MFA, sessão curta, logout remoto e procedimento de revogação homologados | CONFIG_REQUIRED |
 | NETWORK | certificado, TLS, redirect HTTPS e porta ASGI privada | INFRA_REQUIRED |
 | NETWORK | HSTS validado sem preload | INFRA_REQUIRED |
-| NETWORK | rate limit distribuído compartilhado e monitorado | INFRA_REQUIRED |
+| NETWORK | adaptador Redis distribuído no código; Redis TLS/ACL/monitoramento no ambiente | INFRA_REQUIRED |
 | DATABASE | credencial mínima, TLS/rede privada, backup criptografado e restore ensaiado | INFRA_REQUIRED |
 | DATABASE | migration 0012 ensaiada/aplicada em janela aprovada | BLOCKER |
 | SECRETS | provedor, ACL, rotação e separação por ambiente | INFRA_REQUIRED |

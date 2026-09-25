@@ -1,0 +1,11 @@
+{
+    email operations@example.invalid
+}
+
+n8n.example.invalid {
+    reverse_proxy n8n:5678
+}
+
+contabilidade.example.invalid {
+    reverse_proxy serdial21-web:8080
+}

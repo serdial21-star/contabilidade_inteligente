@@ -2,7 +2,7 @@
 
 ## Gate adicional da Phase 11
 
-Antes de qualquer exposição, validar o checklist em [PRODUCTION_SECURITY_CHECKLIST.md](PRODUCTION_SECURITY_CHECKLIST.md), a matriz em [SECURITY_CONFIGURATION_MATRIX.md](SECURITY_CONFIGURATION_MATRIX.md) e o contrato do proxy em [PRODUCTION_REVERSE_PROXY_SECURITY.md](PRODUCTION_REVERSE_PROXY_SECURITY.md). A composição deve fornecer backend distribuído de rate limit; selecionar `distributed` sem adapter falha no startup. Certificado/TLS, IdP real, segredos, migration 0012, observabilidade/recuperação, privacidade e UAT continuam gates externos.
+Antes de qualquer exposição, validar o checklist em [PRODUCTION_SECURITY_CHECKLIST.md](PRODUCTION_SECURITY_CHECKLIST.md), a matriz em [SECURITY_CONFIGURATION_MATRIX.md](SECURITY_CONFIGURATION_MATRIX.md) e o contrato do proxy em [PRODUCTION_REVERSE_PROXY_SECURITY.md](PRODUCTION_REVERSE_PROXY_SECURITY.md). O adaptador Redis distribuído existe no código, mas Redis TLS, CA, ACL, segredo, monitoramento e teste de indisponibilidade continuam gates do ambiente. Certificado/TLS público, IdP, segredos, migrations, observabilidade/recuperação, privacidade e UAT continuam gates externos.
 
 ## Gates operacionais da Phase 12
 
@@ -23,9 +23,14 @@ O Incident Commander e o Technical Lead confirmam, sem expor valores de segredo:
 4. Status dos incidentes, AccountLocks criticos e gates humanos foi revisado.
 5. Janela, responsaveis, versao anterior da aplicacao e plano de abort estao identificados.
 
-## Gate obrigatorio: migration 0012
+## Gate obrigatório: cadeia até o head 0016
 
-`20260908_0012_privacy_controls` e `PRE_DEPLOY_REQUIRED`. Antes do proximo deploy Runtime: confirmar a revision atual, validar backup recente, revisar o upgrade forward-only, executar o upgrade em janela controlada, verificar tabelas/PK/FK/constraints/indices, confirmar `alembic current` e executar health e smoke. Esta execucao nao aplica a migration no Runtime.
+O head fonte atual é `20260923_0016`. A migration
+`20260908_0012_privacy_controls` permanece parte obrigatória da cadeia. Antes
+do próximo deploy Runtime: confirmar banco e revision atuais, validar backup,
+revisar todo o upgrade forward-only, executar em janela controlada, verificar
+tabelas/PK/FK/constraints/índices, confirmar `alembic current` e executar
+health e smoke. Esta documentação não aplica migrations no Runtime.
 
 ## Deploy, health e smoke
 

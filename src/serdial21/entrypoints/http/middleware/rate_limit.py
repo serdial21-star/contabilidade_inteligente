@@ -22,6 +22,12 @@ class RateLimiter(Protocol):
         self, identity: str, bucket: str, limit: int, window_seconds: int,
     ) -> bool: ...
 
+    async def aclose(self) -> None: ...
+
+
+class RateLimiterUnavailable(RuntimeError):
+    '''Backend distribuído indisponível; nunca libera tráfego por fallback.'''
+
 
 @dataclass
 class _Window:
@@ -65,6 +71,9 @@ class InMemoryRateLimiter:
             window.count += 1
             return True
 
+    async def aclose(self) -> None:
+        return None
+
 
 class RateLimitMiddleware:
     def __init__(
@@ -89,7 +98,29 @@ class RateLimitMiddleware:
             return
         bucket = _bucket(str(scope.get('path', '')), str(scope.get('method', 'GET')))
         identity = _safe_identity(scope)
-        if not await self._limiter.allow(identity, bucket, self._limits[bucket], 60):
+        try:
+            allowed = await self._limiter.allow(
+                identity, bucket, self._limits[bucket], 60,
+            )
+        except RateLimiterUnavailable:
+            self._metrics.increment(
+                'rate_limit_backend_unavailable_total', {'bucket': bucket},
+            )
+            security_event('rate_limit.backend_unavailable', fields={'bucket': bucket})
+            body = json.dumps(
+                {'detail': 'service temporarily unavailable'}, separators=(',', ':'),
+            ).encode()
+            await send({
+                'type': 'http.response.start', 'status': 503,
+                'headers': [
+                    (b'content-type', b'application/json'),
+                    (b'content-length', str(len(body)).encode()),
+                    (b'retry-after', b'5'),
+                ],
+            })
+            await send({'type': 'http.response.body', 'body': body})
+            return
+        if not allowed:
             self._metrics.increment('rate_limit_exceeded_total', {'bucket': bucket})
             security_event('rate_limit.exceeded', fields={'bucket': bucket})
             body = json.dumps({'detail': 'rate limit exceeded'}, separators=(',', ':')).encode()

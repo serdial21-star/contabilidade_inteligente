@@ -119,6 +119,9 @@ class AppSettings(BaseSettings):
     rate_limit_backend_url: SecretStr | None = Field(
         default=None, validation_alias='RATE_LIMIT_BACKEND_URL',
     )
+    rate_limit_backend_ca_cert_path: Path | None = Field(
+        default=None, validation_alias='RATE_LIMIT_BACKEND_CA_CERT_PATH',
+    )
     rate_limit_general_per_minute: int = Field(
         default=1000, ge=10, le=100_000,
         validation_alias='RATE_LIMIT_GENERAL_PER_MINUTE',
@@ -255,6 +258,11 @@ class AppSettings(BaseSettings):
                 raise ValueError('RATE_LIMIT_BACKEND_URL deve ser uma URL Redis válida')
             if secured_environment and parsed_backend.scheme != 'rediss':
                 raise ValueError('RATE_LIMIT_BACKEND_URL deve usar TLS em homologation/production')
+        if (
+            self.rate_limit_backend_ca_cert_path is not None
+            and not self.rate_limit_backend_ca_cert_path.is_absolute()
+        ):
+            raise ValueError('RATE_LIMIT_BACKEND_CA_CERT_PATH deve ser absoluto')
         if self.metrics_endpoint_enabled:
             if self.metrics_access_token is None:
                 raise ValueError('METRICS_ACCESS_TOKEN é obrigatório quando métricas HTTP estão ativas')

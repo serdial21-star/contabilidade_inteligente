@@ -1,0 +1,14 @@
+.git
+.github
+.claude
+.venv
+.pytest_cache
+**/__pycache__
+**/*.pyc
+.env
+.env.*
+!.env.example
+.serdial21-storage
+.backups
+local_data
+deploy/secrets

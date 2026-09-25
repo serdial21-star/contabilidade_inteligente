@@ -20,13 +20,17 @@ Valores abaixo são contratos, nunca credenciais. LOCAL corresponde ao literal t
 | `OFX_MAX_UPLOAD_BYTES` | upload/parser OFX | 10485760 | 10485760 | explícito | explícito | não | não | sim |
 | `RATE_LIMIT_BACKEND` | coordenação de limites | memory | memory | distributed | distributed | não | sim | sim |
 | `RATE_LIMIT_BACKEND_URL` | endpoint/credencial backend | vazio | vazio | provedor | provedor | sim | hom/prod | sim |
+| `RATE_LIMIT_BACKEND_CA_CERT_PATH` | CA para Redis TLS privado | vazio | opcional | caminho absoluto | caminho absoluto | não | quando CA privada | sim |
 | `RATE_LIMIT_*_PER_MINUTE` | políticas por classe | defaults seguros | determinístico | revisado | revisado | não | não | sim |
 | `API_DOCS_ENABLED` | Swagger/ReDoc/OpenAPI | true default | true default | false default | false default | não | não | sim |
 | `METRICS_ENDPOINT_ENABLED` | exposição operacional opt-in | false | false | conforme infraestrutura | conforme infraestrutura | não | não | sim |
 | `METRICS_ACCESS_TOKEN` | autenticação do scrape interno | vazio | sintético se ativado | secret provider | secret provider | sim | se endpoint ativo | sim |
 | `OBJECT_STORAGE_PATH` | evidência local | ignorado | temporário | storage isolado | storage privado | potencialmente | sim no deploy | operacional |
 
-O adapter distribuído implementa a porta `RateLimiter` e deve ser injetado na fábrica. Selecionar `distributed` sem adapter interrompe a composição; nunca cai silenciosamente para memória.
+O adaptador distribuído Redis implementa a porta `RateLimiter`, usa cliente
+assíncrono compartilhado e nunca cai silenciosamente para memória. Falha do
+backend retorna indisponibilidade segura. A existência do adaptador não aprova
+Redis, certificados, ACL, segredo ou observabilidade do ambiente.
 
 Mesmo autenticado, `/internal/metrics` deve ser privado no proxy e inacessível
 pelo portal do cliente. O token possui no mínimo 32 caracteres, não aparece em

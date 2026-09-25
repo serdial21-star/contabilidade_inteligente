@@ -24,6 +24,7 @@ from serdial21.entrypoints.http.middleware.request_observability import (
 from serdial21.entrypoints.http.middleware.rate_limit import (
     InMemoryRateLimiter, RateLimiter, RateLimitMiddleware,
 )
+from serdial21.entrypoints.http.middleware.redis_rate_limit import RedisRateLimiter
 from serdial21.entrypoints.http.middleware.request_limits import (
     RequestBodyLimitMiddleware,
 )
@@ -55,6 +56,16 @@ def create_app(
         environment=resolved_settings.environment,
     )
 
+    if rate_limiter is None:
+        if resolved_settings.rate_limit_backend == 'distributed':
+            assert resolved_settings.rate_limit_backend_url is not None
+            rate_limiter = RedisRateLimiter.from_url(
+                resolved_settings.rate_limit_backend_url.get_secret_value(),
+                ca_cert_path=resolved_settings.rate_limit_backend_ca_cert_path,
+            )
+        else:
+            rate_limiter = InMemoryRateLimiter()
+
     @asynccontextmanager
     async def lifespan(_: FastAPI) -> AsyncIterator[None]:
         technical_event('service.started', fields={
@@ -66,6 +77,7 @@ def create_app(
         try:
             yield
         finally:
+            await rate_limiter.aclose()
             database.dispose()
             technical_event('service.stopped')
 
@@ -84,10 +96,6 @@ def create_app(
     app.state.metrics = metrics
     app.state.alerts = AlertDispatcher(alert_sink or NullAlertSink())
     app.state.oidc_verifier = build_oidc_verifier(resolved_settings)
-    if rate_limiter is None:
-        if resolved_settings.rate_limit_backend == 'distributed':
-            raise ValueError('distributed rate limiter adapter is required')
-        rate_limiter = InMemoryRateLimiter()
     app.add_middleware(
         RequestBodyLimitMiddleware,
         api_prefix=resolved_settings.api_prefix,

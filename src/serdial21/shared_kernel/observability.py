@@ -24,6 +24,7 @@ _METRIC_LABELS: dict[str, frozenset[str]] = {
     'auth_failures_total': frozenset({'reason'}),
     'authorization_denials_total': frozenset({'reason'}),
     'rate_limit_exceeded_total': frozenset({'bucket'}),
+    'rate_limit_backend_unavailable_total': frozenset({'bucket'}),
     'payload_too_large_total': frozenset({'source'}),
     'parser_rejection_total': frozenset({'source'}),
     'document_import_total': frozenset({'source', 'result'}),
