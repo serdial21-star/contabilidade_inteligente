@@ -30,6 +30,8 @@ def test_redis_is_tls_only_private_and_fail_closed_api_uses_distributed_backend(
     assert '--port' in redis['command']
     assert redis['command'][redis['command'].index('--port') + 1] == '0'
     assert '--tls-port' in redis['command']
+    assert redis['user'] == '999:1000'
+    assert 'uid=999,gid=1000' in redis['tmpfs'][0]
     assert api['environment']['RATE_LIMIT_BACKEND'] == 'distributed'
     assert api['environment']['RATE_LIMIT_BACKEND_CA_CERT_PATH'].startswith('/run/secrets/')
     assert 'redis' in api['depends_on']

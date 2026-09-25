@@ -13,6 +13,7 @@ services:
 
   redis:
     image: redis:8.2.9-alpine
+    user: "999:1000"
     group_add:
       - "${SERDIAL21_SECRETS_GID:?Defina SERDIAL21_SECRETS_GID}"
     command:

@@ -15,6 +15,9 @@ O Compose local entrega segredos de arquivo por bind mount e não remapeia
 `SERDIAL21_SECRETS_GID` (exemplo: `19021`), atribua todos os arquivos a
 `root:<gid>` e use modo `0640`. Os serviços `api`, `migrate` e `redis` recebem
 somente esse grupo suplementar e continuam executando como usuários não-root.
+O Redis Alpine fixado executa explicitamente como `999:1000`, os mesmos IDs do
+`tmpfs` privado `/data`; não dependa da troca de usuário do entrypoint quando
+todas as capabilities estiverem removidas.
 
 Antes de criar o grupo, confirme que o GID escolhido está livre. Não adicione
 usuários do host ao grupo e mantenha o diretório de segredos fora de backup ou
