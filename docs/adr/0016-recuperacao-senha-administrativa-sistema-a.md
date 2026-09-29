@@ -106,3 +106,6 @@ recuperação não pode ser gerado por JavaScript nesse runtime.
   ausência de envio para identidade inexistente. Como o driver MySQL do n8n
   retorna o result set de `CALL` aninhado junto dos metadados, a integração
   passou a normalizar explicitamente essa saída antes das decisões do fluxo.
+- 2026-09-29: a versão v1.1 foi publicada e o dono do produto confirmou a
+  conclusão do fluxo real de recuperação administrativa. A evidência registra
+  somente o resultado operacional, sem e-mail, senha, link ou token.

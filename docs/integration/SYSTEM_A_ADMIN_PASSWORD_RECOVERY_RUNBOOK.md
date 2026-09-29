@@ -126,3 +126,12 @@ Use somente um funcionário sintético e uma caixa de e-mail controlada:
 - 2026-09-29: solicitação com e-mail sintético inexistente retornou resposta
   neutra, `should_send = 0` e não acionou o nó SMTP. O teste revelou a forma
   aninhada do retorno de `CALL`, corrigida pelos normalizadores acima.
+- 2026-09-29: workflow v1.1 publicado após testes dos dois webhooks; a chamada
+  de produção com identidade inexistente percorreu o ramo neutro sem acionar
+  SMTP. O dono do produto confirmou a conclusão do fluxo real de recuperação
+  administrativa. Nenhum e-mail, senha, link ou token foi registrado como
+  evidência.
+
+Permanecem como verificações operacionais independentes, caso ainda não tenham
+sido observadas durante o teste real: rejeição do segundo uso do mesmo link e
+invalidação de uma sessão administrativa anterior.
