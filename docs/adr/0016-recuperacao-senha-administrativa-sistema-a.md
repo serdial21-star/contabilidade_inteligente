@@ -99,3 +99,10 @@ recuperação não pode ser gerado por JavaScript nesse runtime.
 
 - 2026-09-29 14:07: backup do banco operacional confirmado pelo dono do
   produto. Nenhum conteúdo do backup foi anexado, lido ou versionado.
+- 2026-09-29: migration validada em MariaDB 11.8.9 e aplicada ao banco
+  operacional; tabela, procedures com `SQL SECURITY INVOKER` e chave
+  estrangeira foram verificadas por consultas somente leitura.
+- 2026-09-29: o primeiro teste sintético confirmou a resposta neutra e a
+  ausência de envio para identidade inexistente. Como o driver MySQL do n8n
+  retorna o result set de `CALL` aninhado junto dos metadados, a integração
+  passou a normalizar explicitamente essa saída antes das decisões do fluxo.

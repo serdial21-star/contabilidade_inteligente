@@ -1,11 +1,13 @@
 -- Verificação somente leitura após aplicar 001_up.sql.
 
+SET @target_schema = COALESCE(DATABASE(), 'u621451815_serdial21');
+
 SELECT
     TABLE_NAME,
     ENGINE,
     TABLE_COLLATION
 FROM information_schema.TABLES
-WHERE TABLE_SCHEMA = DATABASE()
+WHERE TABLE_SCHEMA = @target_schema
   AND TABLE_NAME = 'security_password_reset_funcionarios';
 
 SELECT
@@ -15,7 +17,7 @@ SELECT
     COLUMN_DEFAULT,
     EXTRA
 FROM information_schema.COLUMNS
-WHERE TABLE_SCHEMA = DATABASE()
+WHERE TABLE_SCHEMA = @target_schema
   AND TABLE_NAME = 'security_password_reset_funcionarios'
 ORDER BY ORDINAL_POSITION;
 
@@ -24,7 +26,7 @@ SELECT
     ROUTINE_TYPE,
     SECURITY_TYPE
 FROM information_schema.ROUTINES
-WHERE ROUTINE_SCHEMA = DATABASE()
+WHERE ROUTINE_SCHEMA = @target_schema
   AND ROUTINE_NAME IN (
       'sp_admin_password_reset_request',
       'sp_admin_password_reset_apply'
@@ -37,6 +39,6 @@ SELECT
     REFERENCED_TABLE_NAME,
     REFERENCED_COLUMN_NAME
 FROM information_schema.KEY_COLUMN_USAGE
-WHERE CONSTRAINT_SCHEMA = DATABASE()
+WHERE CONSTRAINT_SCHEMA = @target_schema
   AND TABLE_NAME = 'security_password_reset_funcionarios'
   AND REFERENCED_TABLE_NAME IS NOT NULL;

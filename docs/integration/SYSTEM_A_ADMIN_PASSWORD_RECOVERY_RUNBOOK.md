@@ -71,6 +71,13 @@ origem. Enquanto o proxy não fornecer uma chave confiável, ele usa `unknown` e
 aplica um limite global conservador além do limite por identidade. Não aceite
 um header enviado diretamente pela internet como identidade de origem.
 
+Os nós MySQL do n8n podem representar o retorno de uma `PROCEDURE` MariaDB
+como dois itens: o result set dentro de uma lista e, em seguida, metadados do
+driver. Os nós `Normalizar Solicitacao` e `Normalizar Aplicacao` reduzem essa
+saída a uma única linha identificada por `request_id` antes dos condicionais.
+Não remova esses normalizadores nem conecte os condicionais diretamente aos
+nós MySQL.
+
 ## Critérios obrigatórios
 
 - token gerado pelo banco com `RANDOM_BYTES`, nunca por `Math.random`;
@@ -108,3 +115,13 @@ Use somente um funcionário sintético e uma caixa de e-mail controlada:
 8. nenhuma execução do workflow fica salva no n8n;
 9. o login antigo continua funcionando com a nova senha;
 10. somente depois desses testes execute smoke com a conta real autorizada.
+
+## Registro de homologação
+
+- 2026-09-29: migration validada isoladamente em MariaDB 11.8.9, incluindo
+  upgrade, testes funcionais e rollback.
+- 2026-09-29: migration aplicada ao banco operacional e verificada: tabela com
+  12 colunas, duas procedures `SQL SECURITY INVOKER` e FK para `funcionarios`.
+- 2026-09-29: solicitação com e-mail sintético inexistente retornou resposta
+  neutra, `should_send = 0` e não acionou o nó SMTP. O teste revelou a forma
+  aninhada do retorno de `CALL`, corrigida pelos normalizadores acima.

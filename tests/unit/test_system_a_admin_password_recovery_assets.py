@@ -81,6 +81,23 @@ def test_password_reset_workflow_uses_bound_query_parameters() -> None:
         assert 'queryReplacement' in options
 
 
+def test_password_reset_workflow_normalizes_mariadb_call_result_sets() -> None:
+    workflow = _workflow()
+    code_nodes = {
+        node['name']: node['parameters']['jsCode']
+        for node in workflow['nodes']
+        if node['type'] == 'n8n-nodes-base.code'
+    }
+    assert set(code_nodes) == {
+        'Normalizar Solicitacao',
+        'Normalizar Aplicacao',
+    }
+    for code in code_nodes.values():
+        assert 'Array.isArray(item.json)' in code
+        assert "hasOwnProperty.call(value, 'request_id')" in code
+        assert 'Math.random' not in code
+
+
 def test_password_reset_workflow_contains_only_admin_webhooks() -> None:
     workflow = _workflow()
     webhook_paths = {
