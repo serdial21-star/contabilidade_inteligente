@@ -2,9 +2,14 @@
 
 ## Status
 
-Plano e artefatos locais preparados em 2026-09-25. Nenhum deploy, DNS,
-container, migration ou alteração no Caddy do VPS foi executado por esta
-entrega.
+Runtime privado implantado e validado no VPS em 2026-09-25, no commit
+`6a13281`. API, Redis e Web executam sem portas publicadas no host; o banco
+piloto foi migrado até `20260923_0016` e permanece sem dados empresariais.
+
+Em 2026-09-29, a conferência somente leitura confirmou os três serviços
+`running/healthy`, todos com zero reinícios, e preservou os containers públicos
+do n8n. DNS, HTTPS público, alteração do Caddy externo e teste autenticado da
+ponte no endereço público ainda não foram executados.
 
 Decisão: [ADR 0015](adr/0015-publicacao-interna-e-wave-zero-connect-hub.md).
 
@@ -90,15 +95,15 @@ A mudança exige, nesta ordem:
 - subdomínio confirmado: `contabilidade.serdial21.com`; DNS ainda não criado;
 - banco `u621451815_s21_pilot` e usuário exclusivo
   `u621451815_s21_pilot_app` criados; acesso remoto limitado ao IPv4 do VPS;
-  conectividade TCP com o host MariaDB confirmada; autenticação e preflight
-  ainda pendentes;
+  autenticação, preflight, TLS e migration até `20260923_0016` confirmados;
 - autorizar o corpus real que será carregado nesse banco;
-- gerar CA, certificado, chave, ACL e senha Redis fora do Git;
+- CA, certificado, chave, ACL e senha Redis foram provisionados fora do Git;
 - configurar backup externo do banco e do volume de evidências;
 - validar restore;
-- criar DNS somente depois do smoke privado;
-- aplicar migrations até `20260923_0016` em janela controlada;
-- executar a suíte completa, build das imagens e smoke autenticado;
+- aplicar no VPS e validar a rotação de logs e os limites do Redis preparados
+  no Compose antes da exposição pública;
+- criar e validar o DNS;
+- repetir a suíte completa e executar o smoke autenticado público;
 - testar o clique real Sistema A → Sistema B;
 - atualizar `VITE_SISTEMA_B_URL` somente após o endereço estar saudável.
 

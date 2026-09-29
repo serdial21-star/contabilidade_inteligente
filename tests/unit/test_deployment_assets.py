@@ -22,6 +22,19 @@ def test_deploy_services_do_not_publish_host_ports_or_use_latest_images() -> Non
         assert ':latest' not in image
 
 
+def test_deploy_services_use_bounded_log_rotation() -> None:
+    compose = _compose()
+    services = compose['services']
+    assert isinstance(services, dict)
+    expected = {
+        'driver': 'json-file',
+        'options': {'max-size': '10m', 'max-file': '3'},
+    }
+    for service in services.values():
+        assert isinstance(service, dict)
+        assert service['logging'] == expected
+
+
 def test_redis_is_tls_only_private_and_fail_closed_api_uses_distributed_backend() -> None:
     compose = _compose()
     services = compose['services']
@@ -30,6 +43,11 @@ def test_redis_is_tls_only_private_and_fail_closed_api_uses_distributed_backend(
     assert '--port' in redis['command']
     assert redis['command'][redis['command'].index('--port') + 1] == '0'
     assert '--tls-port' in redis['command']
+    assert redis['command'][redis['command'].index('--maxmemory') + 1] == '128mb'
+    assert (
+        redis['command'][redis['command'].index('--maxmemory-policy') + 1]
+        == 'noeviction'
+    )
     assert redis['user'] == '999:1000'
     assert 'uid=999,gid=1000' in redis['tmpfs'][0]
     assert api['environment']['RATE_LIMIT_BACKEND'] == 'distributed'

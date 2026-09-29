@@ -1,11 +1,18 @@
 name: serdial21-b
 
+x-default-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
 services:
   storage-init:
     image: busybox:1.37.0
     command: ["sh", "-c", "chown -R 10001:10001 /var/lib/serdial21/evidence"]
     user: "0:0"
     restart: "no"
+    logging: *default-logging
     volumes:
       - evidence:/var/lib/serdial21/evidence
     networks:
@@ -36,7 +43,12 @@ services:
       - ""
       - --appendonly
       - "no"
+      - --maxmemory
+      - 128mb
+      - --maxmemory-policy
+      - noeviction
     restart: unless-stopped
+    logging: *default-logging
     read_only: true
     tmpfs:
       - /data:size=64m,mode=0700,uid=999,gid=1000
@@ -68,6 +80,7 @@ services:
     group_add:
       - "${SERDIAL21_SECRETS_GID:?Defina SERDIAL21_SECRETS_GID}"
     restart: unless-stopped
+    logging: *default-logging
     read_only: true
     tmpfs:
       - /tmp:size=64m,mode=1777
@@ -123,6 +136,7 @@ services:
     group_add:
       - "${SERDIAL21_SECRETS_GID:?Defina SERDIAL21_SECRETS_GID}"
     command: ["python", "-m", "alembic", "upgrade", "head"]
+    logging: *default-logging
     read_only: true
     tmpfs:
       - /tmp:size=64m,mode=1777
@@ -142,6 +156,7 @@ services:
       dockerfile: deploy/web/Dockerfile
     image: serdial21-b-web:${SERDIAL21_IMAGE_TAG:?Defina SERDIAL21_IMAGE_TAG}
     restart: unless-stopped
+    logging: *default-logging
     read_only: true
     tmpfs:
       - /data:size=16m,mode=0770,uid=1000,gid=1000
