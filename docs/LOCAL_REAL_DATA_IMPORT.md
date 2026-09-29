@@ -77,7 +77,7 @@ O banco escuta só em `127.0.0.1`.
 ```powershell
 $env:DATABASE_URL = "mysql+pymysql://root:ESCOLHA_UMA_SENHA@127.0.0.1:3307/serdial21_local"
 .\.venv\Scripts\python.exe -m alembic upgrade head
-.\.venv\Scripts\python.exe scripts\bootstrap_tenant.py --name "Serdial21"
+.\.venv\Scripts\python.exe scripts\bootstrap_tenant.py --name "Serdial21" --tenant-id <TENANT_APROVADO>
 # copie o tenant_id impresso:
 $T = "COLE_O_TENANT_ID"
 .\.venv\Scripts\python.exe scripts\import_sistema_a_companies.py --input local_data\clientes.csv --tenant-id $T --dry-run
