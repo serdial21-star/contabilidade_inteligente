@@ -110,6 +110,7 @@ def test_password_reset_workflow_normalizes_mariadb_call_result_sets() -> None:
 
 def test_password_reset_workflow_contains_only_admin_webhooks() -> None:
     workflow = _workflow()
+    assert workflow['name'] == '[Auth] Recuperacao de Senha Admin v1.1'
     webhook_paths = {
         node['parameters']['path']
         for node in workflow['nodes']
