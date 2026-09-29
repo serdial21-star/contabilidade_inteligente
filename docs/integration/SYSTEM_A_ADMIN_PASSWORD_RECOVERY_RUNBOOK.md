@@ -66,10 +66,11 @@ No frontend do Sistema A:
 4. mantenha a chamada pelo `proxy-webhook`;
 5. confirme que o link do e-mail usa `#token=`, não `?token=`.
 
-O workflow aceita `X-Rate-Limit-Key` de um proxy confiável para o limite por
-origem. Enquanto o proxy não fornecer uma chave confiável, ele usa `unknown` e
-aplica um limite global conservador além do limite por identidade. Não aceite
-um header enviado diretamente pela internet como identidade de origem.
+Enquanto o proxy não fornecer uma identidade autenticada, o workflow usa
+sempre `unknown` e aplica um limite global conservador além do limite por
+identidade. O webhook ignora `X-Rate-Limit-Key` enviado diretamente pela
+internet. A futura adoção de uma chave por origem exige autenticar a chamada do
+proxy antes de alterar o workflow.
 
 Os nós MySQL do n8n podem representar o retorno de uma `PROCEDURE` MariaDB
 como dois itens: o result set dentro de uma lista e, em seguida, metadados do

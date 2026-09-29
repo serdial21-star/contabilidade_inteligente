@@ -81,6 +81,16 @@ def test_password_reset_workflow_uses_bound_query_parameters() -> None:
         assert 'queryReplacement' in options
 
 
+def test_password_reset_workflow_does_not_trust_public_rate_limit_header() -> None:
+    workflow = _workflow()
+    request_node = next(
+        node for node in workflow['nodes'] if node['name'] == 'Emitir Token no Banco'
+    )
+    replacements = request_node['parameters']['options']['queryReplacement']
+    assert "'unknown'" in replacements
+    assert 'x-rate-limit-key' not in replacements.lower()
+
+
 def test_password_reset_workflow_normalizes_mariadb_call_result_sets() -> None:
     workflow = _workflow()
     code_nodes = {
