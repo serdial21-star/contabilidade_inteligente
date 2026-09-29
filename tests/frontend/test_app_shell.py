@@ -89,6 +89,13 @@ def test_work_context_preference_is_minimized_and_loaded_before_application() ->
         assert forbidden not in preference
 
 
+def test_tax_identifier_formatter_supports_cpf_and_alphanumeric_cnpj() -> None:
+    app = source('app.js')
+    assert 'const formatTaxIdentifier = (value) =>' in app
+    assert '/^[0-9A-Z]{12}\\d{2}$/' in app
+    assert 'formatTaxIdentifier(item.detail.tax_identifier)' in app
+
+
 def test_synthetic_provider_is_explicit_and_has_no_token() -> None:
     provider = source('mock-provider.js')
     config = source('config.js')

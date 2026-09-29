@@ -72,6 +72,16 @@
   ]);
 
   const escapeHtml = (value) => String(value).replace(/[&<>'"]/g, (character) => ({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[character]));
+  const formatTaxIdentifier = (value) => {
+    const canonical = String(value || '').replace(/[.\-/\s]/g, '').toUpperCase();
+    if (/^\d{11}$/.test(canonical)) {
+      return `${canonical.slice(0, 3)}.${canonical.slice(3, 6)}.${canonical.slice(6, 9)}-${canonical.slice(9)}`;
+    }
+    if (/^[0-9A-Z]{12}\d{2}$/.test(canonical)) {
+      return `${canonical.slice(0, 2)}.${canonical.slice(2, 5)}.${canonical.slice(5, 8)}/${canonical.slice(8, 12)}-${canonical.slice(12)}`;
+    }
+    return String(value || '');
+  };
   const initials = (name) => name.split(/\s+/).slice(0, 2).map((part) => part[0]).join('').toUpperCase();
   const route = () => (location.hash.slice(1) || 'overview').split('?')[0];
   const routeParams = () => new URLSearchParams((location.hash.split('?')[1] || ''));
@@ -305,7 +315,7 @@
     const accounts = (item.bankAccounts || []).map((account) => `<tr><td><strong>${escapeHtml(account.nickname || account.bank_name || account.bank_code)}</strong><small class="row-note">${escapeHtml(account.bank_code)} · ${escapeHtml(account.account_type || 'Tipo não informado')}</small></td><td>${escapeHtml(account.branch_masked)}</td><td>${escapeHtml(account.account_masked)}</td><td><span class="badge ${account.status === 'ACTIVE' ? 'success' : 'neutral'}">${escapeHtml(account.status === 'ACTIVE' ? 'Ativa' : 'Inativa')}</span></td><td>${canManage ? `<button class="btn ghost small" data-action="bank-edit" data-account-id="${escapeHtml(account.id)}">Editar</button><button class="btn ghost small" data-action="bank-status" data-account-id="${escapeHtml(account.id)}" data-status="${account.status === 'ACTIVE' ? 'INACTIVE' : 'ACTIVE'}">${account.status === 'ACTIVE' ? 'Desativar' : 'Ativar'}</button>` : 'Somente leitura'}</td></tr>`).join('');
     const form = canManage ? `<details class="card"><summary>Cadastrar conta bancária</summary><form id="bank-account-form" class="filter-bar"><label>Código do banco<input name="bank_code" maxlength="40" required></label><label>Nome do banco<input name="bank_name" maxlength="120"></label><label>Agência<input name="branch" maxlength="40" required></label><label>Conta<input name="account_number" maxlength="80" required></label><label>Tipo<input name="account_type" maxlength="40" placeholder="CHECKING"></label><label>Apelido<input name="nickname" maxlength="120"></label><label>Moeda<input name="currency_code" maxlength="3" value="BRL" required></label><button class="btn">Salvar conta</button></form></details>` : '';
     return `<div class="page-heading"><div><span class="eyebrow">Empresa autorizada</span><h1>${escapeHtml(item.profile.name)}</h1><p>Hub contextual de documentos, contas bancárias e pendências desta empresa.</p></div><a class="btn secondary" href="#clients">Voltar às empresas</a></div>
-      <section class="operational-cards"><article class="card"><span class="eyebrow">Resumo</span><h2>${escapeHtml(item.detail.legal_name)}</h2><dl class="detail-list"><div><dt>Nome fantasia</dt><dd>${escapeHtml(item.detail.trade_name || 'Não informado')}</dd></div><div><dt>Identificador fiscal</dt><dd>${escapeHtml(item.detail.tax_identifier)}</dd></div><div><dt>Status</dt><dd>${escapeHtml(item.detail.status)}</dd></div><div><dt>Fuso / moeda</dt><dd>${escapeHtml(item.detail.timezone)} · ${escapeHtml(item.detail.currency_code)}</dd></div></dl></article>
+      <section class="operational-cards"><article class="card"><span class="eyebrow">Resumo</span><h2>${escapeHtml(item.detail.legal_name)}</h2><dl class="detail-list"><div><dt>Nome fantasia</dt><dd>${escapeHtml(item.detail.trade_name || 'Não informado')}</dd></div><div><dt>Identificador fiscal</dt><dd>${escapeHtml(formatTaxIdentifier(item.detail.tax_identifier))}</dd></div><div><dt>Status</dt><dd>${escapeHtml(item.detail.status)}</dd></div><div><dt>Fuso / moeda</dt><dd>${escapeHtml(item.detail.timezone)} · ${escapeHtml(item.detail.currency_code)}</dd></div></dl></article>
       <article class="card"><span class="eyebrow">Documentos</span><strong class="dashboard-value">${escapeHtml(item.summary.received)}</strong><p>${escapeHtml(item.summary.processed)} processado(s); ${escapeHtml(item.summary.attention_required)} requer(em) atenção.</p><button class="btn secondary" data-action="company-documents" data-company-id="${escapeHtml(item.profile.id)}">Ver documentos</button></article></section><section class="card"><h2>Contas bancárias autorizadas para OFX</h2><p>O importador associa o extrato somente a uma conta ativa desta empresa.</p><div class="table-wrap"><table><thead><tr><th>Banco/Apelido</th><th>Agência</th><th>Conta</th><th>Status</th><th>Ação</th></tr></thead><tbody>${accounts || '<tr><td colspan="5">Nenhuma conta bancária cadastrada.</td></tr>'}</tbody></table></div></section>${form}`;
   }
 

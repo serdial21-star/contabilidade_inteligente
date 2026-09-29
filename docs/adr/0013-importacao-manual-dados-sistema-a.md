@@ -63,7 +63,7 @@ Estrutura real de `clientes` obtida via `SHOW COLUMNS` em 2026-09-23. Mapeamento
 | --- | --- | --- |
 | `legal_name` | `nome_cliente` | obrigatório |
 | `trade_name` | `nome_fantasia` | opcional |
-| `tax_identifier` | `cnpj`, com fallback para `cnpj_cpf` | guardado em forma canônica: **só dígitos, como texto** (zeros à esquerda preservados), pois o Sistema B já compara documentos fiscais só pelos dígitos e assim o mesmo documento com pontuações diferentes é detectado como duplicado. Linha sem nenhum dos dois é **pulada**; tamanho diferente de 11 (CPF) ou 14 (CNPJ) também é **pulado** (`identificador_fiscal_invalido`); dígito verificador não é validado (não inventar regra) |
+| `tax_identifier` | `cnpj`, com fallback para `cnpj_cpf` | guardado em forma canônica, sem máscara e em maiúsculas (zeros à esquerda preservados). CPF aceita 11 dígitos; CNPJ aceita 12 posições alfanuméricas mais 2 dígitos. Ambos exigem dígitos verificadores válidos, conforme o [ADR 0017](0017-identificador-fiscal-e-cnpj-alfanumerico.md). Linha ausente ou inválida é pulada com motivo explícito |
 | `status` | `status` ('Ativo'→'active', 'Inativo'→'inactive') | `'Lead'` é **pulado**: ainda não é cliente real, não deve virar `Company` |
 | `external_system` | constante `'sistema_a'` | |
 | `external_type` | constante `'cliente'` | |

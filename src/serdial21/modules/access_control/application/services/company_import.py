@@ -10,6 +10,13 @@ from datetime import datetime
 from typing import Protocol
 from uuid import UUID
 
+from serdial21.modules.access_control.domain.tax_identifiers import (
+    canonicalize_tax_identifier,
+    is_valid_cnpj,
+    is_valid_cpf,
+    tax_identifier_kind,
+)
+
 
 EXTERNAL_SYSTEM_SISTEMA_A = 'sistema_a'
 CLIENT_EXTERNAL_TYPE = 'cliente'
@@ -65,11 +72,18 @@ def map_external_client(record: ExternalClientRecord) -> MappedCompany | Skipped
         return SkippedRecord(record.external_id, reason=f'status_nao_mapeado:{record.status}')
 
     raw_tax_identifier = (record.cnpj or '').strip() or (record.cnpj_cpf or '').strip()
-    tax_identifier = ''.join(char for char in raw_tax_identifier if char.isdigit())
-    if not tax_identifier:
+    if not raw_tax_identifier:
         return SkippedRecord(record.external_id, reason='sem_identificador_fiscal')
-    if len(tax_identifier) not in (11, 14):
-        return SkippedRecord(record.external_id, reason='identificador_fiscal_invalido')
+    tax_identifier = canonicalize_tax_identifier(raw_tax_identifier)
+    if tax_identifier is None:
+        return SkippedRecord(record.external_id, reason='formato_identificador_fiscal_invalido')
+    kind = tax_identifier_kind(tax_identifier)
+    if kind is None:
+        return SkippedRecord(record.external_id, reason='formato_identificador_fiscal_invalido')
+    if kind == 'CPF' and not is_valid_cpf(tax_identifier):
+        return SkippedRecord(record.external_id, reason='cpf_digito_verificador_invalido')
+    if kind == 'CNPJ' and not is_valid_cnpj(tax_identifier):
+        return SkippedRecord(record.external_id, reason='cnpj_digito_verificador_invalido')
 
     return MappedCompany(
         external_type=CLIENT_EXTERNAL_TYPE,

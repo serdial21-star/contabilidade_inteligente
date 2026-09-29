@@ -54,7 +54,7 @@ def _tenant(session: Session) -> TenantModel:
 def _record(**overrides: object) -> ExternalClientRecord:
     base = dict(
         external_id='101', nome_cliente='Padaria Bom Pao Ltda', nome_fantasia='Padaria Bom Pao',
-        cnpj='12345678000199', cnpj_cpf=None, status='Ativo',
+        cnpj='12345678000195', cnpj_cpf=None, status='Ativo',
     )
     base.update(overrides)
     return ExternalClientRecord(**base)  # type: ignore[arg-type]
@@ -69,15 +69,15 @@ def _import_context() -> AuditContext:
 def test_map_active_client_uses_cnpj() -> None:
     mapped = map_external_client(_record())
     assert not isinstance(mapped, SkippedRecord)
-    assert mapped.tax_identifier == '12345678000199'
+    assert mapped.tax_identifier == '12345678000195'
     assert mapped.status == 'active'
     assert mapped.trade_name == 'Padaria Bom Pao'
 
 
 def test_map_falls_back_to_cnpj_cpf_when_cnpj_missing() -> None:
-    mapped = map_external_client(_record(cnpj=None, cnpj_cpf='11122233344'))
+    mapped = map_external_client(_record(cnpj=None, cnpj_cpf='52998224725'))
     assert not isinstance(mapped, SkippedRecord)
-    assert mapped.tax_identifier == '11122233344'
+    assert mapped.tax_identifier == '52998224725'
 
 
 def test_map_skips_lead_status() -> None:
@@ -92,18 +92,39 @@ def test_map_skips_record_without_any_tax_identifier() -> None:
     assert mapped.reason == 'sem_identificador_fiscal'
 
 
-def test_map_canonicalizes_tax_identifier_to_digits_preserving_leading_zeros() -> None:
-    mapped = map_external_client(_record(cnpj='00.123.456/0001-99'))
+def test_map_canonicalizes_tax_identifier_preserving_leading_zeros() -> None:
+    mapped = map_external_client(_record(cnpj='00.000.000/E08G-12'))
     assert not isinstance(mapped, SkippedRecord)
-    assert mapped.tax_identifier == '00123456000199'
-    cpf = map_external_client(_record(cnpj='574.431.141-68'))
-    assert not isinstance(cpf, SkippedRecord) and cpf.tax_identifier == '57443114168'
+    assert mapped.tax_identifier == '00000000E08G12'
+    cpf = map_external_client(_record(cnpj='529.982.247-25'))
+    assert not isinstance(cpf, SkippedRecord) and cpf.tax_identifier == '52998224725'
+
+
+def test_map_accepts_official_alphanumeric_cnpj_example() -> None:
+    mapped = map_external_client(_record(cnpj='12.ABC.345/01DE-35'))
+    assert not isinstance(mapped, SkippedRecord)
+    assert mapped.tax_identifier == '12ABC34501DE35'
 
 
 def test_map_skips_tax_identifier_with_invalid_length() -> None:
     mapped = map_external_client(_record(cnpj='12345'))
     assert isinstance(mapped, SkippedRecord)
-    assert mapped.reason == 'identificador_fiscal_invalido'
+    assert mapped.reason == 'formato_identificador_fiscal_invalido'
+
+
+@pytest.mark.parametrize(
+    ('value', 'reason'),
+    [
+        ('529.982.247-24', 'cpf_digito_verificador_invalido'),
+        ('12.ABC.345/01DE-34', 'cnpj_digito_verificador_invalido'),
+        ('12.ABC.345/01DE-AA', 'formato_identificador_fiscal_invalido'),
+        ('12_ABC_345_01DE_35', 'formato_identificador_fiscal_invalido'),
+    ],
+)
+def test_map_rejects_invalid_tax_identifier(value: str, reason: str) -> None:
+    mapped = map_external_client(_record(cnpj=value))
+    assert isinstance(mapped, SkippedRecord)
+    assert mapped.reason == reason
 
 
 def test_clean_external_cell_treats_literal_null_as_empty() -> None:
@@ -124,8 +145,8 @@ def test_same_person_formatted_differently_is_reported_as_duplicate(
     service = ImportExternalCompanies(SqlAlchemyCompanyImportRepository(database_session))
     with audit_scope(database_session, _import_context()):
         report = service.execute(tenant.id, [
-            _record(external_id='16', cnpj='57443114168'),
-            _record(external_id='25', cnpj='574.431.141-68'),
+            _record(external_id='16', cnpj='52998224725'),
+            _record(external_id='25', cnpj='529.982.247-25'),
         ], now=NOW)
         database_session.commit()
     assert len(report.created) == 1

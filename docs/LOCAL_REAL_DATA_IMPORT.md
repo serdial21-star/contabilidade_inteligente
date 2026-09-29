@@ -91,8 +91,10 @@ Ordem obrigatória: empresas primeiro, equipe depois.
 
 ## 4. Como ler o relatório
 
-- `skipped` — `status_nao_mapeado:Lead` (não é cliente ainda) ou
-  `sem_identificador_fiscal` (sem CNPJ/CPF): nada foi inventado.
+- `skipped` — `status_nao_mapeado:Lead` (não é cliente ainda),
+  `sem_identificador_fiscal`, `formato_identificador_fiscal_invalido`,
+  `cpf_digito_verificador_invalido` ou
+  `cnpj_digito_verificador_invalido`: nada foi inventado ou corrigido.
 - `conflicts` — `conteudo_divergente` ou `identificador_fiscal_em_uso`/
   `email_em_uso`: o registro já existe diferente; nada foi sobrescrito.
 - `assignments` — `ambiguous` (homônimos), `unmatched` (nome não bate

@@ -82,7 +82,7 @@ def _run_team(db: Session, tenant: TenantModel, records: list[ExternalStaffRecor
     return report
 
 
-def _company(db: Session, tenant: TenantModel, external_id: str = '1', cnpj: str = '12345678000199'):
+def _company(db: Session, tenant: TenantModel, external_id: str = '1', cnpj: str = '12345678000195'):
     with audit_scope(db, _ctx()):
         ImportExternalCompanies(SqlAlchemyCompanyImportRepository(db)).execute(
             tenant.id,
@@ -176,8 +176,8 @@ def test_assignment_never_guesses(session: Session) -> None:
         _staff(external_id='8', email='b@x.com', nome_funcionario='maria da silva'),  # homônimo
         _staff(external_id='9', email='c@x.com', nome_funcionario='Pedro Souza', status='Inativo'),
     ])
-    for external_id, cnpj in (('1', '11111111000111'), ('2', '22222222000122'),
-                              ('3', '33333333000133'), ('4', '44444444000144')):
+    for external_id, cnpj in (('1', '11222333000181'), ('2', '22333444000181'),
+                              ('3', '33444555000181'), ('4', '44555666000181')):
         _company(session, tenant, external_id, cnpj)
     report = _assign(session, tenant, [
         ExternalResponsibleRecord('1', 'Maria da Silva'),   # ambíguo (2 homônimos)

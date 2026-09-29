@@ -10,6 +10,9 @@ from serdial21.modules.access_control.application.services.authorization import 
     AuthorizationRequest, AuthorizationService,
 )
 from serdial21.modules.access_control.domain.permissions import PermissionCode
+from serdial21.modules.access_control.domain.tax_identifiers import (
+    canonicalize_tax_identifier,
+)
 from serdial21.modules.accounting.application.ports.repository import (
     AccountingClassificationRepository, ClassificationRecord,
 )
@@ -793,7 +796,7 @@ class OperationalService:
         company = self._repository.get_company(command.tenant_id, command.company_id)
         if company is None:
             raise OperationalUnavailableError()
-        company_tax_id = _digits(company.tax_identifier)
+        company_tax_id = _canonical_tax_identifier(company.tax_identifier)
         if len(company_tax_id) != 14:
             raise CompanyTaxIdentifierGapError('authoritative company CNPJ required')
         try:
@@ -803,7 +806,8 @@ class OperationalService:
                 raise ValueError('accounting date unavailable for invalid XML') from None
         else:
             if company_tax_id not in {
-                _digits(parsed.issuer_tax_id), _digits(parsed.recipient_tax_id),
+                _canonical_tax_identifier(parsed.issuer_tax_id),
+                _canonical_tax_identifier(parsed.recipient_tax_id),
             }:
                 raise NFeCompanyMismatchError('NF-e does not belong to selected company')
             if command.accounting_date is None:
@@ -1284,10 +1288,14 @@ def _bank_account_view(account: BankAccount) -> BankAccountView:
 
 
 def _fiscal_view(row: object, company_tax_identifier: str | None = None) -> FiscalDocumentView:
-    company_tax_id = _digits(company_tax_identifier)
-    direction = ('SAIDA' if company_tax_id and company_tax_id == _digits(row.issuer_tax_id)
-                 else 'ENTRADA' if company_tax_id and company_tax_id == _digits(row.recipient_tax_id)
-                 else None)
+    company_tax_id = _canonical_tax_identifier(company_tax_identifier)
+    direction = (
+        'SAIDA'
+        if company_tax_id and company_tax_id == _canonical_tax_identifier(row.issuer_tax_id)
+        else 'ENTRADA'
+        if company_tax_id and company_tax_id == _canonical_tax_identifier(row.recipient_tax_id)
+        else None
+    )
     return FiscalDocumentView(
         row.id, row.company_id, row.access_key, row.model, row.schema_version,
         row.series, row.document_number, row.operation_nature,
@@ -1309,8 +1317,8 @@ def _statement_view(row: object) -> BankStatementView:
     )
 
 
-def _digits(value: str | None) -> str:
-    return ''.join(character for character in (value or '') if character.isdigit())
+def _canonical_tax_identifier(value: str | None) -> str:
+    return canonicalize_tax_identifier(value) or ''
 
 
 def _masked(value: str | None, *, visible: int) -> str | None:
