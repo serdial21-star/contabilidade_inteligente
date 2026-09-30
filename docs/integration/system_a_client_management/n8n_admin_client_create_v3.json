@@ -1,0 +1,174 @@
+{
+  "name": "API - Admin - Novo Cliente V3 (Seguro)",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "admin/novo-cliente-v2",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "7b64adbd-ef54-4c7d-9cda-05cb997d664c",
+      "name": "Receber Cadastro",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [-1080, 0],
+      "webhookId": "e590ba5d-925e-4453-bf87-e7421a1310a7"
+    },
+    {
+      "parameters": {
+        "jsCode": "const req = $input.first().json;\nconst body = req.body || {};\nconst auth = String(req.headers?.authorization || '');\nconst match = auth.match(/^Bearer\\s+([A-Za-z0-9]{20,128})$/i);\nconst adminToken = match ? match[1] : '';\nconst text = (value) => String(value ?? '').trim();\nconst nome = text(body.nome_cliente);\nconst email = text(body.email).toLowerCase();\nconst status = text(body.status || 'Ativo');\nconst whatsapp = text(body.whatsapp).replace(/\\D/g, '');\nconst rawDocument = text(body.cnpj_cpf || body.cnpj).toUpperCase();\nif ([...rawDocument].some((char) => !/[0-9A-Z.\\/ -]/.test(char))) throw new Error('Documento fiscal invalido.');\nconst documento = rawDocument.replace(/[.\\/ -]/g, '');\nconst cpfDigit = (digits, initialWeight) => { let total = 0; for (let i = 0; i < digits.length; i++) total += Number(digits[i]) * (initialWeight - i); const remainder = total % 11; return remainder < 2 ? 0 : 11 - remainder; };\nconst validCpf = (value) => { if (!/^\\d{11}$/.test(value) || /^(\\d)\\1{10}$/.test(value)) return false; const d1 = cpfDigit(value.slice(0, 9), 10); const d2 = cpfDigit(value.slice(0, 9) + d1, 11); return value.endsWith(`${d1}${d2}`); };\nconst cnpjDigit = (base, weights) => { const total = [...base].reduce((sum, char, index) => sum + (char.charCodeAt(0) - 48) * weights[index], 0); const remainder = total % 11; return remainder < 2 ? 0 : 11 - remainder; };\nconst validCnpj = (value) => { if (!/^[0-9A-Z]{12}\\d{2}$/.test(value) || (/^\\d{14}$/.test(value) && /^(\\d)\\1{13}$/.test(value))) return false; const w1 = [5,4,3,2,9,8,7,6,5,4,3,2]; const w2 = [6,5,4,3,2,9,8,7,6,5,4,3,2]; const d1 = cnpjDigit(value.slice(0, 12), w1); const d2 = cnpjDigit(value.slice(0, 12) + d1, w2); return value.endsWith(`${d1}${d2}`); };\nif (!adminToken) throw new Error('Sessao administrativa ausente ou invalida.');\nif (nome.length < 2 || nome.length > 150) throw new Error('Nome invalido.');\nif (email.length > 100 || !/^[A-Za-z0-9._%+\\-]+@[A-Za-z0-9.\\-]+\\.[A-Za-z]{2,}$/.test(email)) throw new Error('E-mail invalido.');\nif (!['Ativo', 'Inativo', 'Lead'].includes(status)) throw new Error('Status invalido.');\nif (status !== 'Lead' && !documento) throw new Error('CPF/CNPJ obrigatorio para cliente ativo ou inativo.');\nif (documento && !validCpf(documento) && !validCnpj(documento)) throw new Error('CPF/CNPJ com digitos verificadores invalidos.');\nif (whatsapp && !/^\\d{10,15}$/.test(whatsapp)) throw new Error('WhatsApp invalido.');\nreturn [{ json: { admin_token: adminToken, nome_cliente: nome, email, documento, status, whatsapp, folder_name: nome } }];"
+      },
+      "id": "95a22e64-799c-4350-ae62-51cfc995b122",
+      "name": "Validar e Normalizar",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [-840, 0]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "CALL sp_admin_cliente_create($1, $2, $3, $4, $5, $6);",
+        "options": {
+          "queryReplacement": "={{ [$json.admin_token, $json.nome_cliente, $json.email, $json.documento, $json.status, $json.whatsapp] }}"
+        }
+      },
+      "id": "b4111798-cab3-49e3-8904-7ec3bdfc5c5b",
+      "name": "Criar Cliente no Banco",
+      "type": "n8n-nodes-base.mySql",
+      "typeVersion": 2.1,
+      "position": [-600, 0],
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "jsCode": "const candidates = $input.all().flatMap((item) => Array.isArray(item.json) ? item.json : [item.json]);\nconst row = candidates.find((value) => value && typeof value === 'object' && Object.prototype.hasOwnProperty.call(value, 'request_id'));\nreturn [{ json: row ?? { success: 0, result: 'internal_error', cliente_id: null, should_send: 0, delivery_email: null, reset_token: null, request_id: null } }];"
+      },
+      "id": "e4859470-c0d9-43d0-8c02-d0d637820817",
+      "name": "Normalizar Resultado",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [-360, 0]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [{"value1": "={{ Number($json.success || 0) === 1 }}", "value2": true}]
+        }
+      },
+      "id": "7170075e-5a84-4f2c-9026-776632981658",
+      "name": "Cliente Criado?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [-120, 0]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { success: false, message: $json.result === 'email_conflict' ? 'Este e-mail ja esta cadastrado.' : $json.result === 'document_conflict' ? 'Este CPF/CNPJ ja esta cadastrado.' : $json.result === 'unauthorized' ? 'Sessao expirada ou invalida.' : 'Nao foi possivel cadastrar o cliente.', request_id: $json.request_id || null } }}",
+        "options": {"responseCode": "={{ $json.result === 'unauthorized' ? 401 : ($json.result === 'email_conflict' || $json.result === 'document_conflict' || $json.result === 'conflict') ? 409 : 400 }}", "responseHeaders": {"entries": [{"name": "Access-Control-Allow-Origin", "value": "https://serdial21.com"}]}}
+      },
+      "id": "8a9d8eb3-7de4-4f27-8144-468109234741",
+      "name": "Responder Falha",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [120, 144]
+    },
+    {
+      "parameters": {
+        "resource": "folder",
+        "name": "={{ $('Validar e Normalizar').first().json.folder_name }}",
+        "driveId": {"__rl": true, "value": "myDrive", "mode": "list"},
+        "folderId": {"__rl": true, "value": "CONFIGURE_ROOT_FOLDER_ID", "mode": "id"},
+        "options": {}
+      },
+      "id": "30a13983-fcea-4527-8dc2-f997333e2c48",
+      "name": "Criar Pasta Raiz",
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
+      "position": [120, -96]
+    },
+    {
+      "parameters": {"resource": "folder", "name": "00_INBOX", "driveId": {"__rl": true, "value": "myDrive", "mode": "list"}, "folderId": {"__rl": true, "value": "={{ $('Criar Pasta Raiz').first().json.id }}", "mode": "id"}, "options": {}},
+      "id": "57e64763-b5a6-4308-9664-bd15fd9f0b4d", "name": "Criar 00_INBOX", "type": "n8n-nodes-base.googleDrive", "typeVersion": 3, "position": [360, -96]
+    },
+    {
+      "parameters": {"resource": "folder", "name": "01_FISCAL", "driveId": {"__rl": true, "value": "myDrive", "mode": "list"}, "folderId": {"__rl": true, "value": "={{ $('Criar Pasta Raiz').first().json.id }}", "mode": "id"}, "options": {}},
+      "id": "13d2eef5-351f-442c-ac82-08ba5d077c0a", "name": "Criar 01_FISCAL", "type": "n8n-nodes-base.googleDrive", "typeVersion": 3, "position": [600, -96]
+    },
+    {
+      "parameters": {"resource": "folder", "name": "02_PESSOAL", "driveId": {"__rl": true, "value": "myDrive", "mode": "list"}, "folderId": {"__rl": true, "value": "={{ $('Criar Pasta Raiz').first().json.id }}", "mode": "id"}, "options": {}},
+      "id": "ae20db31-962e-4ae6-a4e0-83a30f4d6b41", "name": "Criar 02_PESSOAL", "type": "n8n-nodes-base.googleDrive", "typeVersion": 3, "position": [840, -96]
+    },
+    {
+      "parameters": {"resource": "folder", "name": "03_CONTABIL", "driveId": {"__rl": true, "value": "myDrive", "mode": "list"}, "folderId": {"__rl": true, "value": "={{ $('Criar Pasta Raiz').first().json.id }}", "mode": "id"}, "options": {}},
+      "id": "8568ce14-01cc-44ac-a2cb-97f918e61763", "name": "Criar 03_CONTABIL", "type": "n8n-nodes-base.googleDrive", "typeVersion": 3, "position": [1080, -96]
+    },
+    {
+      "parameters": {"resource": "folder", "name": "04_SOCIETARIO", "driveId": {"__rl": true, "value": "myDrive", "mode": "list"}, "folderId": {"__rl": true, "value": "={{ $('Criar Pasta Raiz').first().json.id }}", "mode": "id"}, "options": {}},
+      "id": "f842516e-58c6-4391-b630-d76b6ae5fae7", "name": "Criar 04_SOCIETARIO", "type": "n8n-nodes-base.googleDrive", "typeVersion": 3, "position": [1320, -96]
+    },
+    {
+      "parameters": {"resource": "folder", "name": "99_DIVERSOS", "driveId": {"__rl": true, "value": "myDrive", "mode": "list"}, "folderId": {"__rl": true, "value": "={{ $('Criar Pasta Raiz').first().json.id }}", "mode": "id"}, "options": {}},
+      "id": "aef96cf4-413d-427d-b4eb-f943a2808c74", "name": "Criar 99_DIVERSOS", "type": "n8n-nodes-base.googleDrive", "typeVersion": 3, "position": [1560, -96]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "CALL sp_admin_cliente_set_folder($1, $2, $3);",
+        "options": {"queryReplacement": "={{ [$('Validar e Normalizar').first().json.admin_token, $('Normalizar Resultado').first().json.cliente_id, $('Criar Pasta Raiz').first().json.id] }}"}
+      },
+      "id": "ce465888-a75f-42bd-aab7-59d51bc7066a", "name": "Vincular Pasta no Banco", "type": "n8n-nodes-base.mySql", "typeVersion": 2.1, "position": [1800, -96]
+    },
+    {
+      "parameters": {"conditions": {"boolean": [{"value1": "={{ Number($('Normalizar Resultado').first().json.should_send || 0) === 1 }}", "value2": true}]}},
+      "id": "12aa3f5c-ae8c-4e97-8ea8-340188dd0961", "name": "Enviar Ativacao?", "type": "n8n-nodes-base.if", "typeVersion": 1, "position": [2040, -96]
+    },
+    {
+      "parameters": {
+        "fromEmail": "atendimento@serdial21.com",
+        "toEmail": "={{ $('Normalizar Resultado').first().json.delivery_email }}",
+        "subject": "Serdial21 - Ative seu acesso ao Portal do Cliente",
+        "emailFormat": "html",
+        "html": "=Ola,<br><br>Seu cadastro no Portal do Cliente Serdial21 foi criado.<br><br>Use o link abaixo para definir sua senha. O link e valido por 30 minutos e pode ser usado uma unica vez:<br><a href=\"https://serdial21.com/redefinir-senha#token={{ $('Normalizar Resultado').first().json.reset_token }}\"><b>DEFINIR MINHA SENHA</b></a><br><br>Se voce nao esperava esta mensagem, ignore este e-mail.<br><br>Serdial21",
+        "options": {}
+      },
+      "id": "7c4b92bf-4051-4454-b719-b87681920e24", "name": "Enviar Link de Ativacao", "type": "n8n-nodes-base.emailSend", "typeVersion": 2.1, "position": [2280, -192], "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {"respondWith": "json", "responseBody": "={{ { success: true, message: 'Cliente cadastrado com seguranca.', request_id: $('Normalizar Resultado').first().json.request_id || null } }}", "options": {"responseHeaders": {"entries": [{"name": "Access-Control-Allow-Origin", "value": "https://serdial21.com"}]}}},
+      "id": "ae5fd379-8f48-4319-82fd-c35865501787", "name": "Responder Sucesso", "type": "n8n-nodes-base.respondToWebhook", "typeVersion": 1.1, "position": [2520, -96]
+    },
+    {
+      "parameters": {"httpMethod": "OPTIONS", "path": "admin/novo-cliente-v2", "responseMode": "responseNode", "options": {}},
+      "id": "6fc55f7b-fc2f-4f68-a018-43b1de1b111e", "name": "OPTIONS", "type": "n8n-nodes-base.webhook", "typeVersion": 2, "position": [-360, 336], "webhookId": "da5c79e2-033b-4fdc-b443-c06530750722"
+    },
+    {
+      "parameters": {"respondWith": "text", "responseBody": "OK", "options": {"responseHeaders": {"entries": [{"name": "Access-Control-Allow-Origin", "value": "https://serdial21.com"}, {"name": "Access-Control-Allow-Methods", "value": "POST, OPTIONS"}, {"name": "Access-Control-Allow-Headers", "value": "Content-Type, Authorization"}]}}},
+      "id": "09074344-7e48-444d-b467-8f04178b6263", "name": "CORS OK", "type": "n8n-nodes-base.respondToWebhook", "typeVersion": 1.1, "position": [-120, 336]
+    }
+  ],
+  "connections": {
+    "Receber Cadastro": {"main": [[{"node": "Validar e Normalizar", "type": "main", "index": 0}]]},
+    "Validar e Normalizar": {"main": [[{"node": "Criar Cliente no Banco", "type": "main", "index": 0}]]},
+    "Criar Cliente no Banco": {"main": [[{"node": "Normalizar Resultado", "type": "main", "index": 0}]]},
+    "Normalizar Resultado": {"main": [[{"node": "Cliente Criado?", "type": "main", "index": 0}]]},
+    "Cliente Criado?": {"main": [[{"node": "Criar Pasta Raiz", "type": "main", "index": 0}], [{"node": "Responder Falha", "type": "main", "index": 0}]]},
+    "Criar Pasta Raiz": {"main": [[{"node": "Criar 00_INBOX", "type": "main", "index": 0}]]},
+    "Criar 00_INBOX": {"main": [[{"node": "Criar 01_FISCAL", "type": "main", "index": 0}]]},
+    "Criar 01_FISCAL": {"main": [[{"node": "Criar 02_PESSOAL", "type": "main", "index": 0}]]},
+    "Criar 02_PESSOAL": {"main": [[{"node": "Criar 03_CONTABIL", "type": "main", "index": 0}]]},
+    "Criar 03_CONTABIL": {"main": [[{"node": "Criar 04_SOCIETARIO", "type": "main", "index": 0}]]},
+    "Criar 04_SOCIETARIO": {"main": [[{"node": "Criar 99_DIVERSOS", "type": "main", "index": 0}]]},
+    "Criar 99_DIVERSOS": {"main": [[{"node": "Vincular Pasta no Banco", "type": "main", "index": 0}]]},
+    "Vincular Pasta no Banco": {"main": [[{"node": "Enviar Ativacao?", "type": "main", "index": 0}]]},
+    "Enviar Ativacao?": {"main": [[{"node": "Enviar Link de Ativacao", "type": "main", "index": 0}], [{"node": "Responder Sucesso", "type": "main", "index": 0}]]},
+    "Enviar Link de Ativacao": {"main": [[{"node": "Responder Sucesso", "type": "main", "index": 0}]]},
+    "OPTIONS": {"main": [[{"node": "CORS OK", "type": "main", "index": 0}]]}
+  },
+  "active": false,
+  "settings": {"executionOrder": "v1", "saveDataErrorExecution": "none", "saveDataSuccessExecution": "none", "saveManualExecutions": false, "saveExecutionProgress": false, "binaryMode": "separate", "availableInMCP": false},
+  "versionId": "e92c698d-4e78-4572-b52b-224f7d41aed8",
+  "meta": {"templateCredsSetupCompleted": false},
+  "tags": []
+}

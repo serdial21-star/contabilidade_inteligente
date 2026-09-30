@@ -1,0 +1,54 @@
+{
+  "name": "API - Admin - Lista Clientes V2.1 (Completa)",
+  "nodes": [
+    {
+      "parameters": {"path": "admin/clientes-v2", "responseMode": "responseNode", "options": {}},
+      "id": "1c30e696-95b0-4fe0-944f-c4e8250c2022", "name": "GET Clientes", "type": "n8n-nodes-base.webhook", "typeVersion": 2, "position": [-720, 0], "webhookId": "d1479cbe-993f-40e5-bbd6-4073cb9f7ab2"
+    },
+    {
+      "parameters": {"jsCode": "const auth = String($input.first().json.headers?.authorization || '');\nconst match = auth.match(/^Bearer\\s+([A-Za-z0-9]{20,128})$/i);\nreturn [{ json: { token: match ? match[1] : '' } }];"},
+      "id": "c85b6ab8-455a-481f-9b9a-d22b3c02f8d0", "name": "Extrair Token", "type": "n8n-nodes-base.code", "typeVersion": 2, "position": [-480, 0]
+    },
+    {
+      "parameters": {"operation": "executeQuery", "query": "SELECT f.id FROM security_sessoes_funcionarios AS s JOIN funcionarios AS f ON f.id = s.funcionario_id WHERE s.token_hash = SHA2($1, 256) AND s.expira_em > UTC_TIMESTAMP() AND s.revogado_em IS NULL AND f.status = 'Ativo' LIMIT 1;", "options": {"queryReplacement": "={{ [$json.token] }}"}},
+      "id": "f1213eeb-c32e-46bc-a107-805d40764ec0", "name": "Validar Sessao Admin", "type": "n8n-nodes-base.mySql", "typeVersion": 2.1, "position": [-240, 0], "alwaysOutputData": true
+    },
+    {
+      "parameters": {"conditions": {"boolean": [{"value1": "={{ Boolean($json.id) }}", "value2": true}]}},
+      "id": "a0761105-8b71-4cb6-b70e-bc21761ef8a8", "name": "Sessao Valida?", "type": "n8n-nodes-base.if", "typeVersion": 1, "position": [0, 0]
+    },
+    {
+      "parameters": {"operation": "executeQuery", "query": "SELECT c.id, c.nome_cliente, c.nome_fantasia, c.documento_fiscal_canonico AS cnpj_cpf, c.whatsapp, c.telefone, c.status, MIN(e.email) AS email, MIN(e.email) AS emails, GROUP_CONCAT(e.email ORDER BY e.id SEPARATOR ', ') AS emails_autorizados FROM clientes AS c LEFT JOIN clientes_emails_autorizados AS e ON e.cliente_id = c.id GROUP BY c.id, c.nome_cliente, c.nome_fantasia, c.documento_fiscal_canonico, c.whatsapp, c.telefone, c.status ORDER BY c.nome_cliente ASC;", "options": {}},
+      "id": "56b69eca-68aa-4457-bb9b-cdf36b28791c", "name": "Buscar Todos os Clientes", "type": "n8n-nodes-base.mySql", "typeVersion": 2.1, "position": [240, -96]
+    },
+    {
+      "parameters": {"respondWith": "json", "responseBody": "={{ { success: true, data: $input.all().map((item) => item.json) } }}", "options": {"responseHeaders": {"entries": [{"name": "Access-Control-Allow-Origin", "value": "https://serdial21.com"}]}}},
+      "id": "d9f27f68-ebf5-4131-8019-d3b0c0e02345", "name": "Responder Lista", "type": "n8n-nodes-base.respondToWebhook", "typeVersion": 1.1, "position": [480, -96]
+    },
+    {
+      "parameters": {"respondWith": "json", "responseBody": "={{ { success: false, message: 'Sessao expirada ou invalida. Faca login novamente.' } }}", "options": {"responseCode": 401, "responseHeaders": {"entries": [{"name": "Access-Control-Allow-Origin", "value": "https://serdial21.com"}]}}},
+      "id": "018c612d-123d-4f6e-9f64-99cb17a42eac", "name": "Nao Autorizado", "type": "n8n-nodes-base.respondToWebhook", "typeVersion": 1.1, "position": [240, 96]
+    },
+    {
+      "parameters": {"httpMethod": "OPTIONS", "path": "admin/clientes-v2", "responseMode": "responseNode", "options": {}},
+      "id": "0ea8ed16-b6fe-4ef0-84fc-e4486980b439", "name": "OPTIONS", "type": "n8n-nodes-base.webhook", "typeVersion": 2, "position": [-240, 288], "webhookId": "59a4db9d-2cd1-482f-9e5b-e86473ccaf7b"
+    },
+    {
+      "parameters": {"respondWith": "text", "responseBody": "OK", "options": {"responseHeaders": {"entries": [{"name": "Access-Control-Allow-Origin", "value": "https://serdial21.com"}, {"name": "Access-Control-Allow-Methods", "value": "GET, OPTIONS"}, {"name": "Access-Control-Allow-Headers", "value": "Content-Type, Authorization"}]}}},
+      "id": "fcd11806-9a70-4a2b-af7a-5399f0d54e1c", "name": "CORS OK", "type": "n8n-nodes-base.respondToWebhook", "typeVersion": 1.1, "position": [0, 288]
+    }
+  ],
+  "connections": {
+    "GET Clientes": {"main": [[{"node": "Extrair Token", "type": "main", "index": 0}]]},
+    "Extrair Token": {"main": [[{"node": "Validar Sessao Admin", "type": "main", "index": 0}]]},
+    "Validar Sessao Admin": {"main": [[{"node": "Sessao Valida?", "type": "main", "index": 0}]]},
+    "Sessao Valida?": {"main": [[{"node": "Buscar Todos os Clientes", "type": "main", "index": 0}], [{"node": "Nao Autorizado", "type": "main", "index": 0}]]},
+    "Buscar Todos os Clientes": {"main": [[{"node": "Responder Lista", "type": "main", "index": 0}]]},
+    "OPTIONS": {"main": [[{"node": "CORS OK", "type": "main", "index": 0}]]}
+  },
+  "active": false,
+  "settings": {"executionOrder": "v1", "saveDataErrorExecution": "none", "saveDataSuccessExecution": "none", "saveManualExecutions": false, "saveExecutionProgress": false, "binaryMode": "separate", "availableInMCP": false},
+  "versionId": "003fba19-cd92-487e-8e34-d9bc86ff7c56",
+  "meta": {"templateCredsSetupCompleted": false},
+  "tags": []
+}
