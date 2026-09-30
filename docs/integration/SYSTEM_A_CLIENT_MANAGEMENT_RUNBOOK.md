@@ -116,10 +116,16 @@ e exige plano especifico. O rollback nunca remove a tabela preexistente
 - `001_up.sql` e `002_up.sql` aplicados no schema operacional do Sistema A;
 - coluna `clientes.telefone` confirmada como `VARCHAR(20) NULL`;
 - procedures do pacote confirmadas como `SQL SECURITY INVOKER`;
-- workflows seguros de cadastro, listagem, edicao e recuperacao configurados;
-- listagem e edicao publicadas nos paths preservados;
+- workflows seguros de cadastro, listagem, edicao e recuperacao configurados
+  e publicados nos paths preservados;
+- workflows antigos de cadastro, listagem e recuperacao de senha foram
+  exportados e despublicados antes da publicacao de seus substitutos;
 - frontend publicado e confirmado no dominio principal;
 - teste negativo de edicao recusou bearer token invalido com HTTP 401;
+- teste negativo de cadastro recusou bearer token invalido com HTTP 401;
+- solicitacao de senha para identidade sintetica inexistente respondeu de
+  forma neutra com HTTP 200;
+- aplicacao com token sintetico invalido respondeu HTTP 400;
 - teste positivo alterou somente um cadastro sintetico e confirmou CNPJ
   alfanumerico, status, resposta de sucesso e atualizacao da listagem;
 - transicao para `Lead` revogou sessoes e links pendentes e gerou auditoria;
@@ -131,3 +137,7 @@ Durante o teste, uma execucao salva exibiu um bearer token administrativo. A
 sessao foi imediatamente renovada, a execucao foi removida e a retencao foi
 explicitamente desativada antes de continuar. Nenhum token e reproduzido neste
 registro.
+
+Backups pos-liberacao do banco do Sistema A e do n8n, alem das exportacoes
+individuais dos workflows novos e substituidos, foram confirmados pelo
+operador em 30/09/2026 as 15:58 (America/Sao_Paulo).

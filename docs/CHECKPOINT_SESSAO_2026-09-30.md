@@ -24,12 +24,12 @@ ou payload de cliente.
 
 ## Workflows n8n
 
-- `API - Admin - Novo Cliente V3 (Seguro)` configurado;
+- `API - Admin - Novo Cliente V3 (Seguro)` publicado;
 - `API - Admin - Lista Clientes V2.1 (Completa)` publicado;
 - `API - Admin - Editar Cliente V1 (Seguro)` publicado;
-- `[Auth] Gestao de Senhas Cliente v2 (Seguro)` configurado;
-- listagem antiga foi despublicada antes da publicacao da substituta no mesmo
-  path;
+- `[Auth] Gestao de Senhas Cliente v2 (Seguro)` publicado;
+- workflows antigos de cadastro, listagem e gestao de senhas foram exportados
+  e despublicados antes da publicacao dos substitutos nos mesmos paths;
 - credenciais foram associadas pela interface e nao registradas no
   repositorio;
 - execucoes de sucesso, falha, manuais e progresso nao sao retidas;
@@ -50,6 +50,10 @@ ou payload de cliente.
 
 - endpoints de listagem e edicao recusaram token sintetico invalido com HTTP
   401;
+- endpoint de cadastro recusou token sintetico invalido com HTTP 401;
+- solicitacao de senha para identidade sintetica inexistente retornou resposta
+  neutra e HTTP 200;
+- redefinicao com token sintetico invalido retornou HTTP 400;
 - listagem autenticada carregou pelo frontend;
 - edicao positiva de cadastro sintetico persistiu CNPJ alfanumerico e status
   `Lead`;
@@ -64,6 +68,15 @@ Uma execucao do n8n exibiu um bearer token administrativo nos dados salvos. A
 sessao foi renovada, a execucao foi excluida e a retencao foi desativada nos
 quatro workflows novos. Nao reproduzir o token em documento, issue, commit,
 captura ou conversa.
+
+## Backups pos-liberacao
+
+- backup do banco do Sistema A confirmado;
+- backup do n8n confirmado;
+- exportacoes individuais dos quatro workflows novos confirmadas;
+- exportacoes dos workflows antigos de cadastro, listagem e gestao de senhas
+  confirmadas para rollback;
+- controles registrados em 30/09/2026 as 15:58 (America/Sao_Paulo).
 
 ## Riscos e pendencias restantes
 
