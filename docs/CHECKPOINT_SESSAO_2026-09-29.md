@@ -85,18 +85,26 @@ e-mail, CPF/CNPJ, token, credencial ou conteúdo do CSV.
 
 ## Controles pendentes para a primeira ação da próxima sessão
 
-1. Fazer backup pós-importação do banco piloto e verificar que o artefato é
-   recuperável. O backup confirmado às 15:45 antecede o import real.
-2. Executar conferência somente leitura: revision Alembic, uma empresa, um
-   CompanyAccess para a membership acima e containers saudáveis.
-3. Após o backup pós-importação, remover com procedimento aprovado o CSV real
-   em texto claro do VPS ou movê-lo para armazenamento criptografado com
-   retenção definida. Não deixar `clientes.csv` ativo indefinidamente.
-4. Preservar o CSV sintético fora da fila; decidir retenção/eliminação em vez
+1. Preservar o CSV sintético fora da fila; decidir retenção/eliminação em vez
    de reativá-lo.
-5. Só então iniciar a correção do Sistema A: obter o JSON do workflow n8n e o
+2. Iniciar a correção do Sistema A: obter o JSON do workflow n8n e o
    schema/índices reais, implementar validação server-side e depois ajustar o
    Lovable/frontend.
+
+## Retomada em 30/09/2026
+
+- Backup pós-importação do banco `u621451815_s21_pilot` confirmado pelo
+  operador em 30/09/2026 às 09:19.
+- Conferência somente leitura confirmou:
+  `DATABASE=u621451815_s21_pilot`, `ALEMBIC=20260923_0016`, uma empresa ativa
+  e um CompanyAccess ativo para a membership esperada.
+- `api`, `redis` e `web` permaneceram `running/healthy`, com zero reinícios.
+- `n8n-caddy-1` e `n8n-n8n-1` permaneceram ativos e não foram recriados.
+- Após autorização explícita, o CSV real temporário
+  `/opt/serdial21-b/local_data/clientes.csv`, cujo hash estava previamente
+  conferido, foi removido definitivamente do VPS. O dado permanece no Sistema
+  A, no banco piloto e no backup pós-importação.
+- O CSV sintético arquivado não foi removido nem reativado.
 
 ## Proibições na retomada
 
