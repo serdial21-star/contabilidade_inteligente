@@ -2,7 +2,7 @@
 
 | Campo | Valor |
 |---|---|
-| Estado | ACEITA (aguardando confirmação do usuário) |
+| Estado | CONCLUÍDA |
 | Origem | Item 13 do QUADRO; confirmado com `gh` em 01/10/2026 |
 | Sistema | Sistema B (CI, scripts e documentação) |
 | Exige ADR | não — mas a abordagem toca a decisão registrada em `docs/SECURITY_GATE_EXECUTION_33.md` (ver "Restrições"); a aprovação deste briefing registra a escolha |
@@ -253,3 +253,11 @@ Os ajustes estão prontos para nova revisão do diff pelo Claude.
 ---
 
 ## 5. Encerramento
+
+### [2026-10-01] Claude — Encerramento
+
+- Aceite do usuário: 01/10/2026 ("aceito o commitar").
+- Commits: `06f07d3` (correção da varredura), `499ac70` (registro da T-0001 e da T-0002), `cc9ffb0` (regra do protocolo citada no commit anterior e que faltava no `README.md`).
+- Push: feito pelo usuário em 01/10/2026.
+- **Critério 9 verificado com `gh`:** a execução do CI no commit `cc9ffb0` terminou com `success` em todas as etapas, inclusive `verify_release_secrets.py`. Primeiro CI verde desde `9f48be7` (22/09/2026).
+- Pendências na fila: item 14 (credencial dentro de URL) e item 10 (Ruff, verificador de tipos e Python do CI alinhado ao de produção).

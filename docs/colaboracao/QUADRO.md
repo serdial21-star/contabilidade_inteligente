@@ -6,7 +6,7 @@ Protocolo: [README.md](README.md). Atualizado por quem mudar o estado de uma tar
 
 | ID | Título | Estado | Com quem | Arquivo |
 |---|---|---|---|---|
-| T-0002 | CI verde: falsos positivos da varredura de segredos sem afrouxá-la | ACEITA (aguardando confirmação do usuário) | Usuário | [T-0002](tarefas/T-0002-ci-varredura-de-segredos.md) |
+| — | Nenhuma tarefa em andamento | — | — | — |
 
 ## Fila (ainda sem briefing; ordem sugerida, sujeita à decisão do usuário)
 
@@ -30,3 +30,4 @@ Protocolo: [README.md](README.md). Atualizado por quem mudar o estado de uma tar
 | ID | Título | Commit | Data |
 |---|---|---|---|
 | T-0001 | Rate limit por origem confiável e cache JWKS com validade | `14f3450` | 01/10/2026 |
+| T-0002 | CI verde: falsos positivos da varredura de segredos sem allowlist | `06f07d3`, `499ac70`, `cc9ffb0` | 01/10/2026 |
