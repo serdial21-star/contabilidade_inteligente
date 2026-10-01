@@ -10,6 +10,7 @@ jobs:
       - run: python -m pip install --upgrade pip
       - run: python -m pip install -e '.[dev]' pip-audit
       - run: python -m pytest tests/unit tests/integration tests/api -q
+      - run: bash scripts/validate_system_a_client_management.sh
       - run: python -m pip_audit
       - run: python -c "from alembic.script import ScriptDirectory; from alembic.config import Config; assert len(ScriptDirectory.from_config(Config('alembic.ini')).get_heads()) == 1"
       - run: python scripts/verify_release_secrets.py

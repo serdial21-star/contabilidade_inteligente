@@ -15,6 +15,20 @@ CREATE TABLE funcionarios (
     UNIQUE KEY email (email)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+CREATE TABLE permissoes_funcionario_modulos (
+    id INT(11) NOT NULL AUTO_INCREMENT,
+    funcionario_id INT(11) NOT NULL,
+    modulo VARCHAR(50) NOT NULL,
+    acao VARCHAR(20) NOT NULL,
+    permitido TINYINT(1) NOT NULL DEFAULT 1,
+    criado_em DATETIME NULL DEFAULT CURRENT_TIMESTAMP(),
+    atualizado_em DATETIME NULL DEFAULT CURRENT_TIMESTAMP()
+        ON UPDATE CURRENT_TIMESTAMP(),
+    PRIMARY KEY (id),
+    UNIQUE KEY uk_func_modulo_acao (funcionario_id, modulo, acao),
+    KEY idx_func_id (funcionario_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 CREATE TABLE clientes (
     id INT(11) NOT NULL AUTO_INCREMENT,
     nome_cliente VARCHAR(150) NOT NULL,
@@ -99,16 +113,43 @@ CREATE TABLE logs_auditoria (
         ON UPDATE RESTRICT ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
-INSERT INTO funcionarios (
-    nome_funcionario, email, senha, cargo, status
-) VALUES (
-    'Usuario Sintetico', 'synthetic-admin@example.invalid',
-    SHA2('SyntheticOnly9x!', 256), 'Administrador', 'Ativo'
-);
+INSERT INTO funcionarios (nome_funcionario, email, senha, cargo, status) VALUES
+    ('Administrador Sintetico', 'administrator@example.invalid', SHA2('SyntheticOnly9x!', 256), 'Administrador', 'Ativo'),
+    ('Admin Sintetico', 'admin@example.invalid', SHA2('SyntheticOnly9x!', 256), 'Admin', 'Ativo'),
+    ('Operador Permitido', 'operator-allowed@example.invalid', SHA2('SyntheticOnly9x!', 256), 'Operador', 'Ativo'),
+    ('Operador Sem Linhas', 'operator-missing@example.invalid', SHA2('SyntheticOnly9x!', 256), 'Operador', 'Ativo'),
+    ('Operador Negado', 'operator-denied@example.invalid', SHA2('SyntheticOnly9x!', 256), 'Operador', 'Ativo'),
+    ('Auditor Sintetico', 'auditor@example.invalid', SHA2('SyntheticOnly9x!', 256), 'Auditor', 'Ativo'),
+    ('Cargo Desconhecido', 'unknown-role@example.invalid', SHA2('SyntheticOnly9x!', 256), 'Desconhecido', 'Ativo'),
+    ('Cargo Nulo', 'null-role@example.invalid', SHA2('SyntheticOnly9x!', 256), NULL, 'Ativo'),
+    ('Cargo Vazio', 'empty-role@example.invalid', SHA2('SyntheticOnly9x!', 256), '', 'Ativo'),
+    ('Cargo Espacos', 'spaces-role@example.invalid', SHA2('SyntheticOnly9x!', 256), '   ', 'Ativo'),
+    ('Cargo Acentuado', 'accented-role@example.invalid', SHA2('SyntheticOnly9x!', 256), 'Admín', 'Ativo'),
+    ('Admin Espacado', 'trimmed-admin@example.invalid', SHA2('SyntheticOnly9x!', 256), ' ADMIN ', 'Ativo');
 
-INSERT INTO security_sessoes_funcionarios (
-    funcionario_id, token_hash, expira_em
-) VALUES (
-    1, SHA2('SyntheticAdminToken1234567890', 256),
-    UTC_TIMESTAMP() + INTERVAL 1 HOUR
-);
+INSERT INTO security_sessoes_funcionarios (funcionario_id, token_hash, expira_em) VALUES
+    (1, SHA2('SyntheticAdministratorToken1001', 256), UTC_TIMESTAMP() + INTERVAL 1 HOUR),
+    (2, SHA2('SyntheticAdminToken1000000002', 256), UTC_TIMESTAMP() + INTERVAL 1 HOUR),
+    (3, SHA2('SyntheticOperatorAllowed1003', 256), UTC_TIMESTAMP() + INTERVAL 1 HOUR),
+    (4, SHA2('SyntheticOperatorMissing1004', 256), UTC_TIMESTAMP() + INTERVAL 1 HOUR),
+    (5, SHA2('SyntheticOperatorDenied1005', 256), UTC_TIMESTAMP() + INTERVAL 1 HOUR),
+    (6, SHA2('SyntheticAuditorToken100006', 256), UTC_TIMESTAMP() + INTERVAL 1 HOUR),
+    (7, SHA2('SyntheticUnknownRoleToken1007', 256), UTC_TIMESTAMP() + INTERVAL 1 HOUR),
+    (8, SHA2('SyntheticNullRoleToken100008', 256), UTC_TIMESTAMP() + INTERVAL 1 HOUR),
+    (9, SHA2('SyntheticEmptyRoleToken10009', 256), UTC_TIMESTAMP() + INTERVAL 1 HOUR),
+    (10, SHA2('SyntheticSpacesRoleToken1010', 256), UTC_TIMESTAMP() + INTERVAL 1 HOUR),
+    (11, SHA2('SyntheticAccentedRoleToken11', 256), UTC_TIMESTAMP() + INTERVAL 1 HOUR),
+    (12, SHA2('SyntheticTrimmedAdminToken12', 256), UTC_TIMESTAMP() + INTERVAL 1 HOUR);
+
+INSERT INTO permissoes_funcionario_modulos (
+    funcionario_id, modulo, acao, permitido
+) VALUES
+    (3, 'clientes', 'visualizar', 1),
+    (3, 'clientes', 'criar', 1),
+    (3, 'clientes', 'editar', 1),
+    (5, 'clientes', 'visualizar', 0),
+    (5, 'clientes', 'criar', 0),
+    (5, 'clientes', 'editar', 0),
+    (6, 'clientes', 'visualizar', 1),
+    (6, 'clientes', 'criar', 0),
+    (6, 'clientes', 'editar', 0);

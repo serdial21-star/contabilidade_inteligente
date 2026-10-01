@@ -8,10 +8,17 @@ UP = ASSET_DIR / '001_up.sql'
 DOWN = ASSET_DIR / '001_down.sql'
 CREATE_WORKFLOW = ASSET_DIR / 'n8n_admin_client_create_v3.json'
 LIST_WORKFLOW = ASSET_DIR / 'n8n_admin_client_list_v2.json'
+LIST_ROLLBACK_WORKFLOW = ASSET_DIR / 'n8n_admin_client_list_v2_rollback.json'
 RESET_WORKFLOW = ASSET_DIR / 'n8n_client_password_recovery_v2.json'
 EDIT_UP = ASSET_DIR / '002_up.sql'
 EDIT_DOWN = ASSET_DIR / '002_down.sql'
 EDIT_WORKFLOW = ASSET_DIR / 'n8n_admin_client_update_v1.json'
+AUTH_UP = ASSET_DIR / '003_up.sql'
+AUTH_DOWN = ASSET_DIR / '003_down.sql'
+BASE_SCHEMA = ASSET_DIR / 'test_base_schema.sql'
+VALIDATION_SCRIPT = ROOT / 'scripts' / 'validate_system_a_client_management.sh'
+CI_WORKFLOW = ROOT / '.github' / 'workflows' / 'ci.yml'
+VERIFY_SQL = ASSET_DIR / 'verify.sql'
 
 
 def _workflow(path: Path) -> dict[str, object]:
@@ -98,14 +105,19 @@ def test_create_workflow_validates_tax_ids_and_sends_activation_link() -> None:
 
 def test_list_workflow_returns_all_statuses_and_display_fields() -> None:
     workflow = _workflow(LIST_WORKFLOW)
-    query = next(
-        node['parameters']['query']
-        for node in workflow['nodes']
-        if node['name'] == 'Buscar Todos os Clientes'
-    )
-    assert "status = 'Ativo'" not in query
+    serialized = json.dumps(workflow, ensure_ascii=False)
+    migration = AUTH_UP.read_text(encoding='utf-8')
+    procedure = migration.split('CREATE PROCEDURE sp_admin_cliente_list', 1)[1]
+    procedure = procedure.split('CREATE PROCEDURE sp_admin_cliente_create', 1)[0]
+    assert 'CALL sp_admin_cliente_list($1)' in serialized
+    assert 'is_meta' in serialized
+    assert 'JSON_ARRAYAGG' not in procedure
+    assert "status = 'Ativo'" not in procedure
     for field in ('cnpj_cpf', 'whatsapp', 'telefone', 'status', 'email', 'emails'):
-        assert field in query
+        assert field in procedure
+    assert 'WHERE e_primary.cliente_id = c.id' in procedure
+    assert 'ORDER BY e_primary.id' in procedure
+    assert 'MIN(e.email) AS email' not in procedure
 
 
 def test_edit_migration_authenticates_actor_and_handles_nullable_status() -> None:
@@ -167,3 +179,129 @@ def test_rollback_removes_only_objects_from_this_package() -> None:
     assert 'DROP PROCEDURE IF EXISTS sp_admin_cliente_update' in edit_rollback
     assert 'DROP COLUMN IF EXISTS telefone' in edit_rollback
     assert 'DROP TABLE' not in edit_rollback
+
+
+def test_authorization_migration_is_fail_closed_and_centralized() -> None:
+    migration = AUTH_UP.read_text(encoding='utf-8')
+    assert 'CREATE PROCEDURE sp_admin_client_authorize' in migration
+    assert "p_result = 'unauthorized'" in migration
+    assert "p_result = 'forbidden'" in migration
+    assert "IN ('administrador', 'admin')" in migration
+    assert 'FROM permissoes_funcionario_modulos' in migration
+    assert 'permitido' in migration
+    assert "'client_action_forbidden'" in migration
+    assert "BINARY LOWER(TRIM(COALESCE(p_cargo, '')))" in migration
+    for action in ('visualizar', 'criar', 'editar'):
+        assert f"'clientes', '{action}'" in migration
+
+
+def test_sensitive_identity_change_policy_and_minimal_audit() -> None:
+    migration = AUTH_UP.read_text(encoding='utf-8')
+    update = migration.split('CREATE PROCEDURE sp_admin_cliente_update', 1)[1]
+    assert 'IF (v_email_changed' in update
+    assert 'v_documento_anterior IS NULL' in update
+    assert "COALESCE(v_status_anterior, '') = 'Lead'" in update
+    assert "NOT IN ('administrador', 'admin')" in update
+    assert "'email_changed'" in update
+    assert "'document_changed'" in update
+    assert "JSON_OBJECT('request_id', v_request_id)" in update
+    assert "'previous_hash'" not in update
+    assert "'new_hash'" not in update
+    assert 'SHA2(v_email_anterior, 256)' not in update
+    assert 'SHA2(v_documento_anterior, 256)' not in update
+
+
+def test_email_change_revokes_sessions_and_pending_links() -> None:
+    migration = AUTH_UP.read_text(encoding='utf-8')
+    update = migration.split('CREATE PROCEDURE sp_admin_cliente_update', 1)[1]
+    email_branch = update.split('IF v_email_changed THEN', 1)[1]
+    email_branch = email_branch.split('END IF;', 1)[0]
+    assert 'UPDATE security_sessoes_clientes' in email_branch
+    assert 'UPDATE security_password_reset_clientes' in email_branch
+    assert 'revogado_em = UTC_TIMESTAMP()' in email_branch
+
+
+def test_permission_fixture_matches_verified_runtime_shape() -> None:
+    schema = BASE_SCHEMA.read_text(encoding='utf-8')
+    table = schema.split('CREATE TABLE permissoes_funcionario_modulos', 1)[1]
+    table = table.split(') ENGINE=', 1)[0]
+    for column in (
+        'id INT(11) NOT NULL AUTO_INCREMENT',
+        'funcionario_id INT(11) NOT NULL',
+        'modulo VARCHAR(50) NOT NULL',
+        'acao VARCHAR(20) NOT NULL',
+        'permitido TINYINT(1) NOT NULL DEFAULT 1',
+        'criado_em DATETIME NULL DEFAULT CURRENT_TIMESTAMP()',
+        'atualizado_em DATETIME NULL DEFAULT CURRENT_TIMESTAMP()',
+    ):
+        assert column in table
+    assert 'UNIQUE KEY uk_func_modulo_acao (funcionario_id, modulo, acao)' in table
+    assert 'KEY idx_func_id (funcionario_id)' in table
+    for role in (
+        'Administrador', 'Admin', 'Operador', 'Auditor', 'Desconhecido',
+        'Admín', "' ADMIN '", 'Cargo Vazio', 'Cargo Espacos',
+    ):
+        assert role in schema
+
+
+def test_workflows_map_authentication_and_authorization_statuses() -> None:
+    for path in (CREATE_WORKFLOW, LIST_WORKFLOW, EDIT_WORKFLOW):
+        serialized = json.dumps(_workflow(path), ensure_ascii=False)
+        assert "result === 'unauthorized' ? 401" in serialized
+        assert "result === 'forbidden' ? 403" in serialized
+
+
+def test_create_and_edit_forward_empty_token_to_unauthorized_procedure_result() -> None:
+    for path in (CREATE_WORKFLOW, EDIT_WORKFLOW):
+        serialized = json.dumps(_workflow(path), ensure_ascii=False)
+        assert "if (!adminToken) throw" not in serialized
+        assert "if (!adminToken) return" in serialized
+        assert "admin_token: adminToken" in serialized
+
+
+def test_set_folder_revalidates_create_permission() -> None:
+    migration = AUTH_UP.read_text(encoding='utf-8')
+    procedure = migration.split('CREATE PROCEDURE sp_admin_cliente_set_folder', 1)[1]
+    procedure = procedure.split('CREATE PROCEDURE sp_admin_cliente_list', 1)[0]
+    assert 'CALL sp_admin_client_authorize' in procedure
+    assert "'clientes', 'criar'" in procedure
+
+
+def test_list_rollback_workflow_is_previous_version() -> None:
+    rollback = _workflow(LIST_ROLLBACK_WORKFLOW)
+    serialized = json.dumps(rollback, ensure_ascii=False)
+    assert "SELECT f.id FROM security_sessoes_funcionarios" in serialized
+    assert "CALL sp_admin_cliente_list" not in serialized
+    assert rollback['active'] is False
+
+
+def test_authorization_rollback_restores_previous_procedures() -> None:
+    rollback = AUTH_DOWN.read_text(encoding='utf-8')
+    assert 'DROP PROCEDURE IF EXISTS sp_admin_client_authorize' in rollback
+    assert 'DROP PROCEDURE IF EXISTS sp_admin_cliente_list' in rollback
+    assert 'CREATE PROCEDURE sp_admin_cliente_create' in rollback
+    assert 'CREATE PROCEDURE sp_admin_cliente_update' in rollback
+    assert 'CREATE PROCEDURE sp_admin_cliente_set_folder' in rollback
+    assert 'permissoes_funcionario_modulos' not in rollback
+    assert 'client_action_forbidden' not in rollback
+    assert 'DROP TABLE' not in rollback
+
+
+def test_ci_runs_disposable_mariadb_authorization_validation() -> None:
+    ci = CI_WORKFLOW.read_text(encoding='utf-8')
+    script = VALIDATION_SCRIPT.read_text(encoding='utf-8')
+    assert 'bash scripts/validate_system_a_client_management.sh' in ci
+    for migration in ('001_up.sql', '002_up.sql', '003_up.sql', '003_down.sql'):
+        assert migration in script
+    assert 'CLIENT_MANAGEMENT_AUTHORIZATION_TESTS=PASS' in script
+    assert 'CLIENT_MANAGEMENT_AUDIT_TESTS=PASS' in script
+
+
+def test_prepublication_verification_covers_collations_indexes_and_grants() -> None:
+    verification = VERIFY_SQL.read_text(encoding='utf-8')
+    assert 'DEFAULT_COLLATION_NAME' in verification
+    assert "COLUMN_NAME IN ('cargo', 'status')" in verification
+    assert "COLUMN_NAME IN ('modulo', 'acao')" in verification
+    assert "TABLE_NAME = 'security_sessoes_funcionarios'" in verification
+    assert 'lembrete_show_grants_n8n' in verification
+    assert 'SHOW GRANTS' in verification
