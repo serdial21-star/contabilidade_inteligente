@@ -6,7 +6,7 @@ Protocolo: [README.md](README.md). Atualizado por quem mudar o estado de uma tar
 
 | ID | Título | Estado | Com quem | Arquivo |
 |---|---|---|---|---|
-| — | Nenhuma tarefa em andamento | — | — | — |
+| T-0002 | CI verde: falsos positivos da varredura de segredos sem afrouxá-la | ACEITA (aguardando confirmação do usuário) | Usuário | [T-0002](tarefas/T-0002-ci-varredura-de-segredos.md) |
 
 ## Fila (ainda sem briefing; ordem sugerida, sujeita à decisão do usuário)
 
@@ -23,8 +23,7 @@ Protocolo: [README.md](README.md). Atualizado por quem mudar o estado de uma tar
 | 9 | Formalizar fontes normativas versionadas (MOC/NT/XSD NF-e, OFX, IN RFB) e citá-las no código e nos ADRs | [REFERENCIAS.md](REFERENCIAS.md), seção 2 | Sistema B | Parte depende de você obter os documentos oficiais |
 | 10 | Qualidade automática: adotar Ruff e verificador de tipos (mypy ou pyright) como dependência de desenvolvimento e no CI; alinhar o Python do CI (3.12) ao de produção (3.14) | Análise de ferramentas, 01/10/2026 | Sistema B | Muda dependências: exige justificativa conforme `AGENTS.md` seção 3 |
 | 11 | Segundo limite de requisições por usuário autenticado, aplicado depois da verificação do token | T-0001, decisão de 01/10/2026 | Sistema B | Fazer antes de ampliar o número de usuários atrás do mesmo IP |
-| 12 | Renovação do JWKS expirado com lock e intervalo mínimo após falha (queda da Edge Function não deve gerar espera de 5 s por requisição) | T-0001, Revisão 1 item 3 | Sistema B | Degradação introduzida pela T-0001; não bloqueia publicação |
-| 13 | Varredura de segredos do CI (`scripts/verify_release_secrets.py`) falha com 6 falsos positivos preexistentes; o CI do GitHub provavelmente está vermelho | Encerramento da T-0001 | Sistema B | Corrigir os falsos positivos sem afrouxar a varredura; confirmar o estado do CI com `gh` |
+| 14 | Varredura de segredos não detecta credencial dentro de URL (`DATABASE_URL=mysql+pymysql://usuario:senha@host`), o tipo de vazamento mais provável neste projeto | Briefing da T-0002 | Sistema B | Exige tratar os placeholders existentes (`replace_me`, `SUA_SENHA`) sem allowlist |
 
 ## Concluídas
 

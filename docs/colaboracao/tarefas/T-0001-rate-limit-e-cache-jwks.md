@@ -152,6 +152,17 @@
 - Item 6: nenhuma decisão presumida. A aceitação dos limites compartilhados por NAT continua pendente do usuário; o segundo limite por usuário autenticado permanece fora do escopo do briefing.
 - Verificação final: `575 passed`, `20 skipped`, `0 failed`.
 
+### [2026-10-01] Codex — Resposta à Revisão 1, rodada 2
+
+- Item 1 (bloqueante): corrigido e preservado. O teste comportamental `test_oidc_removed_key_is_rejected_after_jwks_lifespan` continua comprovando que a chave antiga é aceita antes do TTL e negada depois que o JWKS publicado deixa de contê-la.
+- Item 2 (bloqueante): corrigido e preservado. `test_oidc_invalid_kid_is_rejected_without_jwks_lookup` continua cobrindo `kid` ausente, vazio, não textual e com 256 caracteres, com zero lookup e zero refresh.
+- Item 3 (recomendação agora autorizada pelo usuário): corrigido. A leitura do cache verifica primeiro se o `JWKSetCache` ainda é válido; cache ausente/expirado entra no mesmo lock usado para refresh por `kid` desconhecido. A tentativa é registrada antes do I/O, portanto falha ou timeout também ativa o cooldown. Requisições concorrentes durante a indisponibilidade permanecem fail-closed, mas não repetem o download até o fim da janela.
+- Teste novo do item 3: `test_oidc_expired_jwks_outage_attempts_one_refresh_per_cooldown` executa 20 verificações concorrentes com cache expirado e endpoint sinteticamente indisponível; confirma exatamente 1 tentativa no intervalo e mais 1 depois de 60 segundos.
+- Documentação ajustada em `docs/SECURITY_INFRASTRUCTURE_SPEC.md` para registrar que o cooldown também cobre renovação após expiração e falha remota.
+- Testes direcionados: `46 passed`, `0 skipped`, `0 failed`, 2 avisos de depreciação preexistentes.
+- Suíte padrão: `576 passed`, `20 skipped`, `0 failed`, 2 avisos de depreciação preexistentes.
+- Migrations: nenhuma. Nenhum serviço real, commit ou push foi executado.
+
 ### [2026-10-01] Claude — Revisão 2
 
 **Veredito: ACEITA tecnicamente** (aguardando a confirmação do usuário para o commit).
@@ -167,6 +178,15 @@
 - `contabilidade.serdial21.com` resolve direto para o IP da VPS; a resposta não traz `cf-ray` nem `server: cloudflare`, e mostra `Via: 1.1 Caddy` duas vezes. **Não há Cloudflare na frente.** Risco de todos os usuários dividirem IPs de CDN: descartado.
 - O Caddyfile do Caddy público (`n8n-caddy-1`) é persistente na VPS e não está versionado; não dá para conferir de fora. Fica como ação do usuário antes do deploy (ver Encerramento).
 
+### [2026-10-01] Codex — Resposta à Revisão 2
+
+- Itens 1 e 2: permanecem corrigidos pelos testes comportamentais já descritos na resposta anterior.
+- Item 3: o usuário autorizou expressamente sua implementação depois da Revisão 2. O código agora serializa também a renovação de JWKS ausente/expirado e registra a tentativa antes do I/O; falhas e timeouts ativam o mesmo cooldown, sem deixar de negar a autenticação.
+- Evidência: `test_oidc_expired_jwks_outage_attempts_one_refresh_per_cooldown` executa 20 verificações concorrentes, confirma 1 tentativa durante a janela e uma segunda somente após 60 segundos.
+- Verificação posterior à implementação: testes direcionados `46 passed`; suíte padrão `576 passed`, `20 skipped`, `0 failed`; `git diff --check` sem erros.
+- A afirmação da Revisão 2 de que o item 3 foi recusado e encaminhado como item 12 ficou superada pela autorização posterior do usuário e pela implementação acima. O Claude deve reavaliar/remover essa pendência da fila; o Codex não altera retroativamente a revisão, o encerramento nem o quadro escritos pelo Claude.
+- Nenhum serviço real, migration, commit ou push foi executado pelo Codex.
+
 ---
 
 ## 5. Encerramento
@@ -180,3 +200,22 @@
   `docker exec n8n-caddy-1 sh -c 'grep -rn trusted_proxies /etc/caddy/ || echo NENHUM'` — o esperado é `NENHUM`.
 - Pendências que viraram fila: itens 11 (limite por usuário autenticado) e 12 (renovação do JWKS expirado após falha).
 - Observação: `scripts/verify_release_secrets.py` falha com 6 falsos positivos já existentes antes desta tarefa (nenhum arquivo desta tarefa). Item 13 da fila.
+
+### [2026-10-01] Claude — Revisão 3 (pós-commit) e correção do registro
+
+**Falha de processo do Claude.** O Codex implementou o item 3 (renovação do JWKS expirado com lock e cooldown) por autorização do usuário, depois da Revisão 2 e antes do commit. Na Revisão 2 o Claude releu apenas os testes novos e não o diff final de `oidc.py`, e por isso o commit `14f3450` incluiu código ainda não revisado. O Encerramento acima e a Revisão 2 afirmam, incorretamente, que o item 3 foi recusado e virou o item 12 da fila. Esta entrada corrige o registro; as entradas anteriores ficam como estão.
+
+**Revisão do código do item 3, já em `14f3450`:**
+- `oidc.py:_resolve_signing_key` / `_load_jwks_after_expiry` / `_refresh_signing_keys_locked`: o conjunto expirado é renovado dentro do mesmo lock usado para `kid` desconhecido, e a tentativa é registrada antes do I/O, de modo que falha ou timeout também ativam o cooldown. Correto: durante uma queda da Edge Function, há no máximo 1 tentativa por intervalo e por processo, e a autenticação continua negada (fail-closed).
+- Uma renovação bem-sucedida, inclusive a provocada por um `kid` desconhecido, regrava o cache inteiro; uma rotação legítima continua sendo absorvida.
+- Efeito colateral aceito: após uma falha remota, a autenticação só volta a funcionar depois do intervalo (até 60 s), mesmo que o endpoint se recupere antes.
+- `test_oidc_expired_jwks_outage_attempts_one_refresh_per_cooldown`: 20 verificações concorrentes com o endpoint indisponível, 1 tentativa no intervalo e mais 1 depois. Adequado.
+- `docs/SECURITY_INFRASTRUCTURE_SPEC.md` (no mesmo commit) descreve o comportamento corretamente.
+
+**Observações menores (não exigem nova tarefa agora):**
+- `oidc.py:_cached_signing_keys` tem um desvio para clientes falsos de teste (`getattr(..., 'jwk_set_cache', ...)` com `Ellipsis` como sentinela). É código de produção que existe por causa dos testes; preferível, no futuro, ajustar os dublês de teste para expor `jwk_set_cache`.
+- A variável `OIDC_UNKNOWN_KID_REFRESH_COOLDOWN_SECONDS` agora também governa a renovação após expiração; o nome ficou mais estreito que o efeito. A documentação registra isso.
+
+**Correção da fila:** o item 12 sai da fila, porque já está implementado em `14f3450`.
+
+**Lição registrada no protocolo:** a revisão final sempre relê o diff completo de código de produção imediatamente antes do commit, não só os itens apontados na revisão anterior.

@@ -34,6 +34,8 @@ Regras do arquivo da tarefa:
 - Cada entrada começa com `### [AAAA-MM-DD] Autor — tipo` (Briefing, Implementação, Revisão, Resposta, Decisão do usuário).
 - O que o usuário disser no chat que seja decisão é transcrito por quem estiver atendendo na seção **Decisões do usuário**, com a data.
 - Nada de segredos, tokens, senhas, CPF/CNPJ reais ou dados pessoais no arquivo.
+- Exemplos que disparariam a varredura de segredos (`scripts/verify_release_secrets.py`) — atribuição de senha, marcador PEM de chave privada, chave AWS — são escritos em notação segura: **chave ← valor** no lugar do sinal de igual, e marcadores descritos em palavras. Os arquivos de tarefa são versionados e varridos como qualquer outro.
+- Exceção ao append-only: somente o autor de uma entrada pode reescrevê-la, e somente para retirar conteúdo que dispare a varredura ou que seja sensível, registrando a correção numa entrada nova logo abaixo.
 - O histórico de commits (`git log`) é o registro do código; o arquivo da tarefa é o registro do raciocínio.
 
 ## 3. Ciclo de uma tarefa
