@@ -55,7 +55,8 @@ histórico ou chat (PowerShell):
 ```powershell
 $s = Read-Host "Senha do banco _dev" -AsSecureString
 $p = [Runtime.InteropServices.Marshal]::PtrToStringAuto([Runtime.InteropServices.Marshal]::SecureStringToBSTR($s))
-$env:DATABASE_URL = "mysql+pymysql://u621451815_serdial21_app:$([uri]::EscapeDataString($p))@srv1183.hstgr.io:3306/u621451815_serdial21_dev"
+[Environment]::SetEnvironmentVariable("SERDIAL21_LOCAL_DB_PASSWORD", $p, "Process")
+$env:DATABASE_URL = "mysql+pymysql://u621451815_serdial21_app:$([uri]::EscapeDataString($env:SERDIAL21_LOCAL_DB_PASSWORD))@srv1183.hstgr.io:3306/u621451815_serdial21_dev"
 ```
 
 Se a conexão falhar, o IP do seu computador provavelmente não está liberado em
@@ -64,7 +65,10 @@ hPanel → Bancos de dados → MySQL remoto.
 **Com Docker (opcional)** — MariaDB local descartável, Docker Desktop aberto:
 
 ```powershell
-docker run --name serdial21-local-db -e MARIADB_ROOT_PASSWORD=ESCOLHA_UMA_SENHA `
+$s = Read-Host "Senha do MariaDB local" -AsSecureString
+$p = [Runtime.InteropServices.Marshal]::PtrToStringAuto([Runtime.InteropServices.Marshal]::SecureStringToBSTR($s))
+[Environment]::SetEnvironmentVariable("SERDIAL21_LOCAL_DB_PASSWORD", $p, "Process")
+docker run --name serdial21-local-db -e "MARIADB_ROOT_PASSWORD=$env:SERDIAL21_LOCAL_DB_PASSWORD" `
   -e MARIADB_DATABASE=serdial21_local -p 127.0.0.1:3307:3306 `
   -v serdial21_local_data:/var/lib/mysql -d mariadb:11.8
 ```
@@ -75,7 +79,7 @@ O banco escuta só em `127.0.0.1`.
 ## 3. Rodar (mesmo terminal PowerShell, na raiz do projeto)
 
 ```powershell
-$env:DATABASE_URL = "mysql+pymysql://root:ESCOLHA_UMA_SENHA@127.0.0.1:3307/serdial21_local"
+$env:DATABASE_URL = "mysql+pymysql://root:$([uri]::EscapeDataString($env:SERDIAL21_LOCAL_DB_PASSWORD))@127.0.0.1:3307/serdial21_local"
 .\.venv\Scripts\python.exe -m alembic upgrade head
 .\.venv\Scripts\python.exe scripts\bootstrap_tenant.py --name "Serdial21" --tenant-id <TENANT_APROVADO>
 # copie o tenant_id impresso:

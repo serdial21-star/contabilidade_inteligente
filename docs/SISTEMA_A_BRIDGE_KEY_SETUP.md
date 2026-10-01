@@ -38,8 +38,8 @@ No painel do Supabase do projeto (Sistema A):
   "Environment Variables" dentro de Edge Functions).
 - Crie dois segredos:
   - `SISTEMA_B_BRIDGE_PRIVATE_KEY_PEM` → cole o bloco **CHAVE PRIVADA**
-    inteiro, incluindo as linhas `-----BEGIN PRIVATE KEY-----` e
-    `-----END PRIVATE KEY-----`.
+    inteiro, incluindo as linhas de início e de fim do bloco, que começam com
+    cinco hífens.
   - `SISTEMA_B_BRIDGE_PUBLIC_JWK` → cole o bloco **CHAVE PÚBLICA (JWK)**
     inteiro (é uma linha só de JSON).
 
