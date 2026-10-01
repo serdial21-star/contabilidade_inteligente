@@ -1,5 +1,11 @@
 # Dossiê da iniciativa Sistema A + Sistema B — ponto de retomada
 
+> **Atualização operacional:** para o estado do deployment no VPS após o
+> commit `6a13281`, leia primeiro
+> `docs/DOSSIE_TECNICO_ESTADO_ATUAL_2026-09-25.md`. Quando houver conflito de
+> status operacional, o dossiê de 25/09/2026 prevalece; este documento continua
+> sendo a referência histórica e funcional anterior.
+
 Documento único e autossuficiente: qualquer assistente de IA (não importa
 qual) deve conseguir ler só isto, entender o estado real do trabalho e
 continuar do mesmo jeito que vinha sendo feito, sem depender de memória de

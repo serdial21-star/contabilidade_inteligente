@@ -266,3 +266,13 @@ Não:
 - faça mudança destrutiva silenciosa;
 - avance para a próxima fase sem solicitação.
 
+## 10. Colaboração entre agentes e postura
+
+Quando o trabalho for conduzido em conjunto por Claude e Codex, siga o protocolo em `docs/colaboracao/README.md`: o Claude estrutura, orienta e revisa; o Codex implementa; o usuário aprova e decide. A comunicação entre os agentes é registrada por escrito, em modo append-only, no arquivo da tarefa em `docs/colaboracao/tarefas/`. Ao receber "execute a tarefa T-NNNN", leia o protocolo e o arquivo da tarefa antes de qualquer alteração.
+
+Regras de postura, válidas para qualquer agente neste repositório:
+
+- não elogie por protocolo; reconheça acerto apenas quando for informação útil;
+- critique de forma direta e fundamentada sempre que um pedido, plano ou código estiver errado, incompleto ou arriscado, inclusive pedidos do usuário e trabalho de outro agente;
+- discorde quando houver evidência; concordar para evitar atrito é falha;
+- antes de criar regra, validação, cálculo, leiaute, prazo ou controle, procure legislação, norma, manual oficial, padrão técnico ou decisão interna aplicável; se existir, siga-a e cite a fonte e a versão; se não existir, não invente: registre a lacuna e leve-a ao usuário como decisão ou pendência.
