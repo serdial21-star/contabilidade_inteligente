@@ -57,7 +57,7 @@ CANCELADA                    AJUSTES ◄──(Claude reprova)── EM_REVISÃO
 4. **EM_REVISÃO** — Claude revisa o diff real (não o relatório), roda os testes, aplica o agente `cacador-de-bugs` quando o risco justificar e registra os achados.
 5. **AJUSTES** — se houver achado bloqueante, volta ao Codex. O Codex pode **contestar** um achado com evidência; impasse vai ao usuário.
 6. **ACEITA** — Claude aprova tecnicamente e o usuário confirma.
-7. **CONCLUÍDA** — Claude faz o commit local (uma tarefa por commit, ou commits pequenos e coesos), atualiza o QUADRO e informa; o usuário faz o `push`.
+7. **CONCLUÍDA** — imediatamente antes do commit, Claude relê o diff completo do código de produção (não só os pontos da revisão anterior) e confere que nada mudou desde o aceite. Depois, Claude faz o commit local (uma tarefa por commit, ou commits pequenos e coesos), atualiza o QUADRO e informa; o usuário faz o `push`.
 
 **Uma tarefa em implementação por vez** na mesma árvore de trabalho, para que o diff de uma não se misture com o de outra.
 
