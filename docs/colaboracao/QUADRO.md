@@ -6,13 +6,12 @@ Protocolo: [README.md](README.md). Atualizado por quem mudar o estado de uma tar
 
 | ID | Título | Estado | Com quem | Arquivo |
 |---|---|---|---|---|
-| — | Nenhuma tarefa em andamento | — | — | — |
+| T-0003 | Exigir permissão nas operações administrativas de clientes do Sistema A | ACEITA — commitada, aguardando push, CI e publicação | Usuário (push) | [T-0003](tarefas/T-0003-permissao-operacoes-clientes-sistema-a.md) |
 
 ## Fila (ainda sem briefing; ordem sugerida, sujeita à decisão do usuário)
 
 | Ordem | Tema | Origem | Sistema | Observação |
 |---|---|---|---|---|
-| 1 | Exigir cargo/permissão nas procedures e workflows "admin" de clientes; auditar troca de e-mail e documento; revogar sessões do cliente quando o e-mail mudar | Auditoria #3 | Sistema A (artefatos em `docs/integration`) | Exige ADR e ações do usuário no n8n/phpMyAdmin |
 | 2 | Retenção, CORS e SQL parametrizado no workflow "[SECURITY] Validar Sessão de Funcionário" | Auditoria #7 | Sistema A | Ação do usuário no n8n |
 | 3 | Onboarding não sobrescreve nome e e-mail do usuário compartilhado entre tenants | Auditoria #5 | Sistema B | Isolamento multi-tenant |
 | 4 | Limite global da recuperação de senha não contar tentativas já bloqueadas; alerta | Auditoria #6 | Sistema A | — |
