@@ -88,6 +88,8 @@ def test_deploy_frontend_is_real_bridge_while_factory_default_stays_synthetic() 
     assert 'RUN setcap -r /usr/bin/caddy' in dockerfile
     assert 'USER 1000:1000' in dockerfile
     assert ':8080 {' in caddyfile
+    assert 'trusted_proxies static private_ranges' in caddyfile
+    assert 'trusted_proxies_strict' in caddyfile
     assert web['cap_drop'] == ['ALL']
     assert 'no-new-privileges:true' in web['security_opt']
     assert web['healthcheck']['test'] == [
@@ -107,6 +109,8 @@ def test_public_deploy_example_uses_confirmed_domain_and_bridge_identity() -> No
         'OIDC_JWKS_URL=https://lgohzjneyvdtonpeapvd.functions.supabase.co/'
         'sistema-b-jwks'
     ) in environment
+    assert 'OIDC_JWKS_CACHE_LIFESPAN_SECONDS=300' in environment
+    assert 'OIDC_UNKNOWN_KID_REFRESH_COOLDOWN_SECONDS=60' in environment
 
 
 def test_api_container_runs_as_non_root_and_loads_only_named_secret_files() -> None:

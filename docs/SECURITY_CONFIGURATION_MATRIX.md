@@ -10,6 +10,8 @@ Valores abaixo são contratos, nunca credenciais. LOCAL corresponde ao literal t
 | `OIDC_ISSUER` | issuer exato | opcional completo | opcional completo | HTTPS | HTTPS | não | hom/prod | sim |
 | `OIDC_AUDIENCE` | audience exclusiva | opcional completo | opcional completo | explícita | explícita | não | hom/prod | sim |
 | `OIDC_JWKS_URL` | chaves públicas | opcional completo | opcional completo | HTTPS | HTTPS | não | hom/prod | sim |
+| `OIDC_JWKS_CACHE_LIFESPAN_SECONDS` | TTL do conjunto JWKS | 300 | 300 | 300 | 300 | não | não | sim |
+| `OIDC_UNKNOWN_KID_REFRESH_COOLDOWN_SECONDS` | contenção de refresh remoto | 60 | 60 | 60 | 60 | não | não | sim |
 | `PUBLIC_FRONTEND_URL` | origem pública | opcional | opcional | HTTPS | HTTPS | não | hom/prod | sim |
 | `CORS_ALLOWED_ORIGINS` | origins CSV exatas | vazio/same-origin | explícitas em teste | HTTPS | HTTPS | não | hom/prod | sim |
 | `TRUSTED_HOSTS` | hosts CSV exatos | vazio | testserver opcional | obrigatório | obrigatório | não | hom/prod | sim |

@@ -16,4 +16,8 @@ def build_oidc_verifier(settings: AppSettings) -> OidcJwtVerifier | None:
         jwks_url=str(settings.oidc_jwks_url),
         leeway_seconds=settings.oidc_clock_skew_seconds,
         timeout_seconds=settings.oidc_jwks_timeout_seconds,
+        jwks_lifespan_seconds=settings.oidc_jwks_cache_lifespan_seconds,
+        unknown_kid_refresh_cooldown_seconds=(
+            settings.oidc_unknown_kid_refresh_cooldown_seconds
+        ),
     )

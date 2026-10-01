@@ -2,6 +2,8 @@
 
 from collections.abc import Callable
 from datetime import UTC, datetime
+from threading import Lock
+from time import monotonic
 from typing import Any
 from uuid import UUID
 
@@ -31,18 +33,26 @@ class OidcJwtVerifier:
         jwks_url: str,
         leeway_seconds: int = 30,
         timeout_seconds: int = 5,
+        jwks_lifespan_seconds: int = 300,
+        unknown_kid_refresh_cooldown_seconds: int = 60,
         signing_key_resolver: Callable[[str], Any] | None = None,
+        clock: Callable[[], float] = monotonic,
     ) -> None:
         self._issuer = issuer.rstrip('/')
         self._audience = audience
         self._leeway_seconds = leeway_seconds
         self._client = PyJWKClient(
             jwks_url,
-            cache_keys=True,
-            max_cached_keys=16,
-            lifespan=300,
+            cache_keys=False,
+            lifespan=jwks_lifespan_seconds,
             timeout=timeout_seconds,
         )
+        self._jwks_refresh_cooldown_seconds = (
+            unknown_kid_refresh_cooldown_seconds
+        )
+        self._clock = clock
+        self._last_jwks_refresh_attempt_at: float | None = None
+        self._jwks_refresh_lock = Lock()
         self._signing_key_resolver = signing_key_resolver
 
     def verify(self, token: str) -> VerifiedIdentity:
@@ -52,7 +62,7 @@ class OidcJwtVerifier:
             key = (
                 self._signing_key_resolver(token)
                 if self._signing_key_resolver is not None
-                else self._client.get_signing_key_from_jwt(token).key
+                else self._resolve_signing_key(token)
             )
             claims = jwt.decode(
                 token,
@@ -81,6 +91,63 @@ class OidcJwtVerifier:
             raise
         except (InvalidTokenError, PyJWKClientError, PyJWKError, KeyError, TypeError, ValueError):
             self._deny('invalid_token')
+
+    def _resolve_signing_key(self, token: str) -> Any:
+        header = jwt.get_unverified_header(token)
+        kid = header.get('kid')
+        if not isinstance(kid, str) or not kid or len(kid) > 255:
+            raise PyJWKClientError('invalid signing key identifier')
+
+        signing_keys = self._cached_signing_keys()
+        if signing_keys is None:
+            signing_keys = self._load_jwks_after_expiry()
+        signing_key = self._client.match_kid(signing_keys, kid)
+        if signing_key is not None:
+            return signing_key.key
+
+        # Um kid desconhecido pode forcar refresh remoto. O mesmo lock e
+        # cooldown tambem protegem a renovacao de um conjunto expirado quando
+        # o endpoint esta indisponivel.
+        with self._jwks_refresh_lock:
+            signing_keys = self._cached_signing_keys()
+            if signing_keys is not None:
+                signing_key = self._client.match_kid(signing_keys, kid)
+                if signing_key is not None:
+                    return signing_key.key
+
+            signing_keys = self._refresh_signing_keys_locked()
+            signing_key = self._client.match_kid(signing_keys, kid)
+            if signing_key is None:
+                raise PyJWKClientError('unknown signing key identifier')
+            return signing_key.key
+
+    def _cached_signing_keys(self) -> list[Any] | None:
+        cache = getattr(self._client, 'jwk_set_cache', ...)
+        if cache is ...:
+            # Clientes falsos de teste representam diretamente o cache atual.
+            return self._client.get_signing_keys()
+        if cache is None or cache.get() is None:
+            return None
+        return self._client.get_signing_keys()
+
+    def _load_jwks_after_expiry(self) -> list[Any]:
+        with self._jwks_refresh_lock:
+            signing_keys = self._cached_signing_keys()
+            if signing_keys is not None:
+                return signing_keys
+            return self._refresh_signing_keys_locked()
+
+    def _refresh_signing_keys_locked(self) -> list[Any]:
+        now = self._clock()
+        last_attempt = self._last_jwks_refresh_attempt_at
+        if (
+            last_attempt is not None
+            and now - last_attempt < self._jwks_refresh_cooldown_seconds
+        ):
+            raise PyJWKClientError('JWKS refresh cooldown active')
+        # Registrar antes do I/O tambem contem falhas e timeouts do endpoint.
+        self._last_jwks_refresh_attempt_at = now
+        return self._client.get_signing_keys(refresh=True)
 
     @staticmethod
     def _deny(reason: str) -> None:

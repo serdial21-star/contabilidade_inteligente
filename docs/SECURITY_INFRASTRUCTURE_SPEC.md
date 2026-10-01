@@ -4,7 +4,7 @@
 
 O navegador recebe somente o frontend estático, delega autenticação ao IdP por Authorization Code + PKCE e mantém o access token em memória. `sessionStorage` contém apenas a transação PKCE efêmera; `localStorage` contém somente preferências de layout. A API aceita Bearer JWT RS256, valida assinatura, algoritmo, issuer, audience e tempo, resolve a identidade interna e revalida tenant, membership, CompanyAccess, papel e permissão no efeito.
 
-O fluxo externo previsto é `browser -> HTTPS reverse proxy/plataforma -> ASGI`. Somente o proxy autorizado pode definir informações de cliente encaminhadas; o aplicativo não confia em `X-Forwarded-For` para rate limit. Banco e object storage ficam em rede privada, usam identidades distintas e nunca são acessados pelo browser. Segredos pertencem ao ambiente/provedor de segredos, não ao frontend, código, logs ou auditoria.
+O fluxo externo previsto é `browser -> HTTPS reverse proxy/plataforma -> ASGI`. Somente o proxy autorizado pode definir informações de cliente encaminhadas. O rate limit pré-autenticação usa exclusivamente o endereço de cliente já resolvido no escopo ASGI; ignora `Authorization` e não lê diretamente `X-Forwarded-For`. Banco e object storage ficam em rede privada, usam identidades distintas e nunca são acessados pelo browser. Segredos pertencem ao ambiente/provedor de segredos, não ao frontend, código, logs ou auditoria.
 
 Documento, XML, OFX, nomes de arquivo, campos de busca, headers e texto de evento são dados não confiáveis. Limites de corpo atuam antes do parsing; parsers estruturais mantêm seus próprios limites; rotas tipadas limitam strings, listas e paginação. Malware scanning continua `INFRASTRUCTURE_GAP` e não é substituído por validação estrutural.
 
@@ -12,14 +12,14 @@ Documento, XML, OFX, nomes de arquivo, campos de busca, headers e texto de event
 
 | Controle | Estado | Evidência/limite |
 |---|---|---|
-| JWT/OIDC | READY | RS256 fixo, JWKS cacheado, issuer/audience/exp/iat/sub/tenant obrigatórios |
+| JWT/OIDC | READY | RS256 fixo, JWKS com TTL, sem cache individual sem validade, refresh serializado com cooldown para `kid` desconhecido, expiração e falha remota, issuer/audience/exp/iat/sub/tenant obrigatórios |
 | Tenant/empresa | READY | contexto autenticado + consultas tenant/company-aware + CompanyAccess |
 | CORS | READY | allowlist exata; sem credenciais por cookie; origem desconhecida não recebe ACAO |
 | Host | READY | `TrustedHostMiddleware`; allowlist obrigatória fora de local/test |
 | Headers/cache | READY | CSP da API, frame denial, nosniff, referrer/permissions policy e `no-store` |
 | HSTS | READY_FOR_DEPLOYMENT | emitido em production; exige `EXTERNAL_HTTPS=true`; preload adiado |
 | Corpo/upload | READY | geral, NF-e e OFX possuem limites independentes e dupla validação |
-| Rate limit | READY | backend em memória para local/test; porta injetável distribuída e fail-closed fora deles |
+| Rate limit | READY | origem confiável antes da autenticação; Bearer não verificado nunca cria chave; backend em memória para local/test; porta distribuída e fail-closed fora deles |
 | Erros/logs | READY | erro 500 genérico fora de local/test; logs sem body/query/header/claims |
 | Request ID | READY | UUID validado ou substituído; propagado na resposta e logs técnicos |
 
@@ -27,7 +27,7 @@ Documento, XML, OFX, nomes de arquivo, campos de busca, headers e texto de event
 
 Homologação e produção não iniciam com debug, HTTP externo, OIDC incompleto, origem/host ausente, banco ausente ou rate limit em memória. O adaptador distribuído é dependência de composição e infraestrutura, não um fallback opcional. Produção desabilita Swagger/ReDoc/OpenAPI por padrão; isso reduz superfície, mas não substitui autorização.
 
-JWKS falho, chave desconhecida ou rotação não resolvida negam autenticação. `PyJWKClient` mantém cache limitado por cinco minutos e busca novamente conforme seleção de `kid`; nenhuma falha aceita token não verificado. Revogação global continua `PROVIDER_DEPENDENT`: mitigação exige tokens curtos, revogação de sessão no IdP, rotação de chaves e revalidação interna por request.
+JWKS falho, chave desconhecida ou rotação não resolvida negam autenticação. O conjunto JWKS tem TTL configurável e o cache individual sem validade permanece desabilitado. Um `kid` ausente, uma renovação após expiração ou uma falha do endpoint podem provocar no máximo uma tentativa remota por janela global de cooldown em cada processo. Isso preserva a descoberta de uma chave recém-rotacionada sem permitir uma busca remota por token hostil nem repetir timeouts a cada requisição; nenhuma falha aceita token não verificado. Revogação global continua `PROVIDER_DEPENDENT`: mitigação exige tokens curtos, revogação de sessão no IdP, rotação de chaves e revalidação interna por request.
 
 Não há cookie de autenticação na API, portanto CSRF é `NOT_APPLICABLE_CURRENT_BEARER_MODEL`. Se cookies autenticados forem introduzidos, a decisão deve ser revista antes da exposição.
 

@@ -220,22 +220,69 @@ def test_http_rate_limit_backend_outage_returns_safe_503() -> None:
     )
 
 
-def test_http_rate_limit_returns_safe_429_and_hashes_bearer_identity() -> None:
+def test_http_rate_limit_returns_safe_429_and_ignores_unverified_bearers() -> None:
     settings = AppSettings(
         _env_file=None, environment='test', rate_limit_general_per_minute=10,
     )
     app = create_app(settings)
     client = TestClient(app)
-    headers = {'Authorization': 'Bearer synthetic-a'}
-    responses = [client.get('/api/v1/health/live', headers=headers) for _ in range(11)]
-    separate = client.get(
-        '/api/v1/health/live', headers={'Authorization': 'Bearer synthetic-b'},
-    )
+    responses = [
+        client.get(
+            '/api/v1/health/live',
+            headers={'Authorization': f'Bearer invented-{index}'},
+        )
+        for index in range(50)
+    ]
     assert all(response.status_code == 200 for response in responses[:10])
-    assert responses[-1].status_code == 429
-    assert responses[-1].json() == {'detail': 'rate limit exceeded'}
-    assert responses[-1].headers['retry-after'] == '60'
-    assert separate.status_code == 200
-    assert 'rate_limit_exceeded_total{bucket="general"} 1' in (
+    assert all(response.status_code == 429 for response in responses[10:])
+    assert responses[10].json() == {'detail': 'rate limit exceeded'}
+    assert responses[10].headers['retry-after'] == '60'
+    assert 'rate_limit_exceeded_total{bucket="general"} 40' in (
         app.state.metrics.render_prometheus()
     )
+
+
+class _RecordingLimiter:
+    def __init__(self) -> None:
+        self.identities: list[str] = []
+
+    async def allow(
+        self, identity: str, bucket: str, limit: int, window_seconds: int,
+    ) -> bool:
+        self.identities.append(identity)
+        return True
+
+    async def aclose(self) -> None:
+        return None
+
+
+def test_http_rate_limit_uses_asgi_client_not_forwarded_or_authorization() -> None:
+    limiter = _RecordingLimiter()
+    app = create_app(
+        AppSettings(_env_file=None, environment='test'), rate_limiter=limiter,
+    )
+    response = TestClient(app).get(
+        '/api/v1/health/live',
+        headers={
+            'Authorization': 'Bearer must-not-be-a-rate-limit-key',
+            'X-Forwarded-For': '203.0.113.99',
+        },
+    )
+    assert response.status_code == 200
+    assert limiter.identities == ['client:testclient']
+
+
+def test_http_rate_limit_keeps_distinct_client_origins_independent() -> None:
+    settings = AppSettings(
+        _env_file=None, environment='test', rate_limit_general_per_minute=10,
+    )
+    app = create_app(settings)
+    client_a = TestClient(app, client=('198.51.100.10', 50000))
+    client_b = TestClient(app, client=('198.51.100.11', 50000))
+
+    responses_a = [client_a.get('/api/v1/health/live') for _ in range(11)]
+    response_b = client_b.get('/api/v1/health/live')
+
+    assert all(response.status_code == 200 for response in responses_a[:10])
+    assert responses_a[10].status_code == 429
+    assert response_b.status_code == 200

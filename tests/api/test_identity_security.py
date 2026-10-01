@@ -1,15 +1,22 @@
 from __future__ import annotations
 
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
+import json
+from types import SimpleNamespace
+from typing import Any
 from uuid import UUID, uuid4
 
 from cryptography.hazmat.primitives.asymmetric import rsa
 from fastapi import FastAPI
 import jwt
+import jwt.jwk_set_cache
+from jwt.exceptions import PyJWKClientConnectionError
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import select
+from jwt.algorithms import RSAAlgorithm
 
 from serdial21.bootstrap.audit import AuditContext, audit_scope
 from serdial21.bootstrap.database import Base, session_scope
@@ -29,7 +36,10 @@ from serdial21.modules.access_control.adapters.outbound.persistence.models impor
 )
 from serdial21.modules.audit.adapters.outbound.persistence.models import AuditEventModel
 from serdial21.modules.audit.domain.entities import AuditOrigin
-from serdial21.modules.identity.adapters.inbound.oidc import OidcJwtVerifier
+from serdial21.modules.identity.adapters.inbound.oidc import (
+    AuthenticationError,
+    OidcJwtVerifier,
+)
 
 
 ISSUER = 'https://identity.example.test'
@@ -149,6 +159,230 @@ def identity() -> IdentityFixture:
 
 def _headers(token: str) -> dict[str, str]:
     return {'Authorization': f'Bearer {token}'}
+
+
+class _FakeJwksClient:
+    def __init__(self, current: list[Any], refreshed: list[Any]) -> None:
+        self.current = current
+        self.refreshed = refreshed
+        self.lookup_count = 0
+        self.refresh_count = 0
+
+    def get_signing_keys(self, refresh: bool = False) -> list[Any]:
+        self.lookup_count += 1
+        if refresh:
+            self.refresh_count += 1
+            self.current = self.refreshed
+        return self.current
+
+    @staticmethod
+    def match_kid(signing_keys: list[Any], kid: str) -> Any | None:
+        return next((key for key in signing_keys if key.key_id == kid), None)
+
+
+class _UnavailableJwksClient:
+    def __init__(self) -> None:
+        self.jwk_set_cache = SimpleNamespace(get=lambda: None)
+        self.refresh_count = 0
+
+    def get_signing_keys(self, refresh: bool = False) -> list[Any]:
+        assert refresh
+        self.refresh_count += 1
+        raise PyJWKClientConnectionError('synthetic JWKS outage')
+
+    @staticmethod
+    def match_kid(signing_keys: list[Any], kid: str) -> Any | None:
+        return None
+
+
+def _signed_token(
+    signing_key: rsa.RSAPrivateKey, kid: Any = 'test-key',
+) -> str:
+    headers = {} if kid is None else {
+        'kid': kid if isinstance(kid, str) else 'temporary-valid-kid',
+    }
+    token = jwt.encode(
+        {
+            'iss': ISSUER,
+            'sub': 'jwks-subject',
+            'aud': AUDIENCE,
+            'iat': int((NOW - timedelta(minutes=1)).timestamp()),
+            'exp': int((NOW + timedelta(minutes=10)).timestamp()),
+            'tenant_id': str(uuid4()),
+        },
+        signing_key,
+        algorithm='RS256',
+        headers=headers,
+    )
+    if kid is not None and not isinstance(kid, str):
+        _, payload, signature = token.split('.')
+        encoded_header = jwt.utils.base64url_encode(json.dumps({
+            'alg': 'RS256', 'kid': kid, 'typ': 'JWT',
+        }, separators=(',', ':')).encode()).decode()
+        return '.'.join((encoded_header, payload, signature))
+    return token
+
+
+def _public_jwk(signing_key: rsa.RSAPrivateKey, kid: str) -> dict[str, Any]:
+    jwk = RSAAlgorithm.to_jwk(signing_key.public_key(), as_dict=True)
+    jwk.update({'kid': kid, 'use': 'sig', 'alg': 'RS256'})
+    return jwk
+
+
+def test_oidc_disables_indefinite_per_key_cache() -> None:
+    verifier = OidcJwtVerifier(
+        issuer=ISSUER,
+        audience=AUDIENCE,
+        jwks_url=f'{ISSUER}/jwks.json',
+    )
+    assert not hasattr(verifier._client.get_signing_key, 'cache_info')
+
+
+def test_oidc_refreshes_once_for_rotated_key_and_accepts_it() -> None:
+    old_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+    new_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+    verifier = OidcJwtVerifier(
+        issuer=ISSUER,
+        audience=AUDIENCE,
+        jwks_url=f'{ISSUER}/jwks.json',
+        leeway_seconds=0,
+    )
+    client = _FakeJwksClient(
+        [SimpleNamespace(key_id='old-key', key=old_key.public_key())],
+        [SimpleNamespace(key_id='new-key', key=new_key.public_key())],
+    )
+    verifier._client = client
+
+    verified = verifier.verify(_signed_token(new_key, 'new-key'))
+
+    assert verified.subject == 'jwks-subject'
+    assert client.refresh_count == 1
+
+
+def test_oidc_removed_key_is_rejected_after_jwks_lifespan(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    old_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+    new_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+    now = [0.0]
+    monkeypatch.setattr(jwt.jwk_set_cache.time, 'monotonic', lambda: now[0])
+    verifier = OidcJwtVerifier(
+        issuer=ISSUER,
+        audience=AUDIENCE,
+        jwks_url=f'{ISSUER}/jwks.json',
+        leeway_seconds=0,
+        jwks_lifespan_seconds=300,
+        clock=lambda: now[0],
+    )
+    client = verifier._client
+    downloads: list[int] = []
+
+    def fetch_data() -> dict[str, Any]:
+        downloads.append(1)
+        data = {
+            'keys': [
+                _public_jwk(old_key, 'old-key')
+                if len(downloads) == 1
+                else _public_jwk(new_key, 'new-key')
+            ],
+        }
+        assert client.jwk_set_cache is not None
+        client.jwk_set_cache.put(data)
+        return data
+
+    monkeypatch.setattr(client, 'fetch_data', fetch_data)
+    old_token = _signed_token(old_key, 'old-key')
+
+    assert verifier.verify(old_token).subject == 'jwks-subject'
+    now[0] = 299.0
+    assert verifier.verify(old_token).subject == 'jwks-subject'
+    now[0] = 301.0
+    with pytest.raises(AuthenticationError):
+        verifier.verify(old_token)
+
+    assert len(downloads) >= 2
+
+
+def test_oidc_unknown_kids_cannot_force_refresh_per_request() -> None:
+    signing_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+    now = [100.0]
+    verifier = OidcJwtVerifier(
+        issuer=ISSUER,
+        audience=AUDIENCE,
+        jwks_url=f'{ISSUER}/jwks.json',
+        unknown_kid_refresh_cooldown_seconds=60,
+        clock=lambda: now[0],
+    )
+    client = _FakeJwksClient(
+        [SimpleNamespace(key_id='known-key', key=signing_key.public_key())],
+        [SimpleNamespace(key_id='known-key', key=signing_key.public_key())],
+    )
+    verifier._client = client
+
+    tokens = [
+        _signed_token(signing_key, f'unknown-{index}') for index in range(50)
+    ]
+
+    def is_rejected(token: str) -> bool:
+        with pytest.raises(AuthenticationError):
+            verifier.verify(token)
+        return True
+
+    with ThreadPoolExecutor(max_workers=10) as executor:
+        assert all(executor.map(is_rejected, tokens))
+    assert client.refresh_count == 1
+
+    now[0] += 60
+    with pytest.raises(AuthenticationError):
+        verifier.verify(_signed_token(signing_key, 'unknown-after-cooldown'))
+    assert client.refresh_count == 2
+
+
+def test_oidc_expired_jwks_outage_attempts_one_refresh_per_cooldown() -> None:
+    signing_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+    now = [100.0]
+    verifier = OidcJwtVerifier(
+        issuer=ISSUER,
+        audience=AUDIENCE,
+        jwks_url=f'{ISSUER}/jwks.json',
+        unknown_kid_refresh_cooldown_seconds=60,
+        clock=lambda: now[0],
+    )
+    client = _UnavailableJwksClient()
+    verifier._client = client
+    tokens = [_signed_token(signing_key, 'known-key') for _ in range(20)]
+
+    def is_rejected(token: str) -> bool:
+        with pytest.raises(AuthenticationError):
+            verifier.verify(token)
+        return True
+
+    with ThreadPoolExecutor(max_workers=10) as executor:
+        assert all(executor.map(is_rejected, tokens))
+    assert client.refresh_count == 1
+
+    now[0] += 60
+    with pytest.raises(AuthenticationError):
+        verifier.verify(_signed_token(signing_key, 'known-key'))
+    assert client.refresh_count == 2
+
+
+@pytest.mark.parametrize('kid', [None, '', 123, 'x' * 256])
+def test_oidc_invalid_kid_is_rejected_without_jwks_lookup(kid: Any) -> None:
+    signing_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+    verifier = OidcJwtVerifier(
+        issuer=ISSUER,
+        audience=AUDIENCE,
+        jwks_url=f'{ISSUER}/jwks.json',
+    )
+    client = _FakeJwksClient([], [])
+    verifier._client = client
+
+    with pytest.raises(AuthenticationError):
+        verifier.verify(_signed_token(signing_key, kid))
+
+    assert client.lookup_count == 0
+    assert client.refresh_count == 0
 
 
 def _onboard(client: TestClient, identity: IdentityFixture) -> tuple[UUID, str]:

@@ -93,6 +93,18 @@ class AppSettings(BaseSettings):
         le=30,
         validation_alias='OIDC_JWKS_TIMEOUT_SECONDS',
     )
+    oidc_jwks_cache_lifespan_seconds: int = Field(
+        default=300,
+        ge=30,
+        le=3600,
+        validation_alias='OIDC_JWKS_CACHE_LIFESPAN_SECONDS',
+    )
+    oidc_unknown_kid_refresh_cooldown_seconds: int = Field(
+        default=60,
+        ge=5,
+        le=300,
+        validation_alias='OIDC_UNKNOWN_KID_REFRESH_COOLDOWN_SECONDS',
+    )
     public_frontend_url: HttpUrl | None = Field(
         default=None, validation_alias='PUBLIC_FRONTEND_URL',
     )

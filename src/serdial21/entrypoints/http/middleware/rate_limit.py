@@ -2,7 +2,6 @@
 
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
-from hashlib import sha256
 import json
 from threading import Lock
 from time import monotonic
@@ -148,10 +147,11 @@ def _bucket(path: str, method: str) -> str:
 
 
 def _safe_identity(scope: dict[str, Any]) -> str:
-    headers = {name.lower(): value for name, value in scope.get('headers', [])}
-    authorization = headers.get(b'authorization')
-    if authorization:
-        return f'bearer:{sha256(authorization).hexdigest()}'
+    '''Usa somente a origem resolvida pela camada ASGI/proxy confiavel.
+
+    O Bearer ainda nao foi autenticado neste middleware e, portanto, nunca
+    pode criar uma identidade ou uma chave nova no backend de rate limit.
+    '''
     client = scope.get('client')
     host = str(client[0]) if client else 'unknown'
     return f'client:{host}'

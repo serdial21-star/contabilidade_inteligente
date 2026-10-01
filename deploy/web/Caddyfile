@@ -1,6 +1,12 @@
 {
     admin off
     auto_https off
+    servers {
+        # Esta instancia e interna e recebe trafego somente do proxy publico
+        # pela rede Docker privada. Preserva a origem que esse proxy sanitizou.
+        trusted_proxies static private_ranges
+        trusted_proxies_strict
+    }
 }
 :8080 {
     encode zstd gzip

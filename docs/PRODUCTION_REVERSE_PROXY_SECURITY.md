@@ -23,4 +23,4 @@ O aplicativo emite `Strict-Transport-Security: max-age=31536000; includeSubDomai
 
 ## Cliente real
 
-O backend local usa IP direto ou digest irreversível do Bearer para o limitador em memória e ignora `X-Forwarded-For`. O adaptador distribuído/proxy poderá usar IP real apenas após validar que a conexão veio de proxy conhecido. Nunca aceite uma cadeia fornecida diretamente pela internet.
+O rate limit pré-autenticação usa somente o endereço de cliente já resolvido no escopo ASGI e nunca usa o Bearer ainda não verificado. O middleware ignora `X-Forwarded-For`; cabe ao servidor ASGI aceitá-lo exclusivamente do proxy autorizado, em rede privada. Na topologia de duas camadas, o Caddy público sanitiza a origem recebida da internet e o Caddy interno confia apenas em proxies de faixas privadas, em ordem estrita, antes de encaminhar ao ASGI. Nunca aceite uma cadeia de forwarding fornecida diretamente pela internet. Tokens distintos enviados pela mesma origem permanecem no mesmo limite.

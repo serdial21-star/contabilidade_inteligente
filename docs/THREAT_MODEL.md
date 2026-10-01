@@ -3,11 +3,11 @@
 | Ameaça | Controles atuais | Risco residual / próxima mitigação |
 |---|---|---|
 | Roubo de credencial/token | IdP externo, PKCE, token em memória, TLS obrigatório | MFA, sessão curta e resposta a incidente dependem do IdP |
-| Token forjado/replay | RS256 fixo, iss/aud/exp/iat, JWKS e membership revalidado | revogação global provider-dependent; rate limit distribuído pendente |
+| Token forjado/replay | RS256 fixo, iss/aud/exp/iat, JWKS com TTL/cooldown e membership revalidado | revogação global provider-dependent |
 | Cross-tenant/IDOR | tenant do token, CompanyAccess, queries compostas e negação uniforme | regressão obrigatória a cada nova fronteira |
 | Arquivo malicioso | limites, extensão/mídia, parser XML sem DTD/entidade, parser OFX limitado | malware scanning para binários genéricos é gap de infraestrutura |
 | XSS | escape de texto, CSP same-origin/no-inline e sem payload bruto | QA integrado de browser na Phase 14 |
-| Brute force/API abuse | autenticação no IdP e rate limit por classes | backend distribuído/monitoramento ainda requer infraestrutura |
+| Brute force/API abuse | limite pré-auth por origem confiável, classes de endpoint e backend distribuído obrigatório fora de local/test | monitoramento e ajuste de limiares no ambiente real |
 | Exfiltração/cache | DTOs minimizados, `no-store`, logs sem body/query/auth | controles de egress e SIEM pertencem ao ambiente/Phase 12 |
 | Alteração de decisão | permissão, segregação, revisão/hash, idempotência, AccountLock e auditoria atômica | UAT e alçadas reais pendentes |
 | Alteração de auditoria | modelo append-only, listeners contra update/delete e hash | proteção/backup do banco requer infraestrutura |
