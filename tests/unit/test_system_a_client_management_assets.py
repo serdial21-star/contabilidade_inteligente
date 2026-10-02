@@ -297,6 +297,19 @@ def test_ci_runs_disposable_mariadb_authorization_validation() -> None:
     assert 'CLIENT_MANAGEMENT_AUDIT_TESTS=PASS' in script
 
 
+def test_mariadb_wait_requires_authenticated_tcp_query_and_fails_closed() -> None:
+    script = VALIDATION_SCRIPT.read_text(encoding='utf-8')
+    wait = script.split('DB_READY=false', 1)[1].split('db() {', 1)[0]
+    assert 'mariadb-admin' not in wait
+    assert '--protocol=tcp --host=127.0.0.1' in wait
+    assert "--execute='SELECT 1'" in wait
+    assert 'DB_READY=true' in wait
+    assert 'if [[ "${DB_READY}" != true ]]' in wait
+    assert 'MARIADB_READY_TIMEOUT' in wait
+    assert 'docker logs --tail 50 "${CONTAINER}"' in wait
+    assert 'exit 1' in wait
+
+
 def test_prepublication_verification_covers_collations_indexes_and_grants() -> None:
     verification = VERIFY_SQL.read_text(encoding='utf-8')
     assert 'DEFAULT_COLLATION_NAME' in verification

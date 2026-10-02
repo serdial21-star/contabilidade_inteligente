@@ -32,14 +32,23 @@ docker run --name "${CONTAINER}" \
   --env "MARIADB_ROOT_PASSWORD=${DB_PASSWORD}" \
   --detach mariadb:11.8.9 >/dev/null
 
+DB_READY=false
 for _ in $(seq 1 60); do
-  if docker exec "${CONTAINER}" mariadb-admin \
-      --user=root --password="${DB_PASSWORD}" ping \
-      --silent >/dev/null 2>&1; then
+  if docker exec "${CONTAINER}" mariadb \
+      --protocol=tcp --host=127.0.0.1 \
+      --user=root --password="${DB_PASSWORD}" \
+      --execute='SELECT 1' >/dev/null 2>&1; then
+    DB_READY=true
     break
   fi
   sleep 1
 done
+
+if [[ "${DB_READY}" != true ]]; then
+  echo "MARIADB_READY_TIMEOUT container=${CONTAINER}" >&2
+  docker logs --tail 50 "${CONTAINER}" >&2 || true
+  exit 1
+fi
 
 db() {
   docker exec "${CONTAINER}" mariadb \

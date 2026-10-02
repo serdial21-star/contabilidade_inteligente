@@ -2,7 +2,7 @@
 
 | Campo | Valor |
 |---|---|
-| Estado | ACEITA — commitada, aguardando push, CI e publicação |
+| Estado | ACEITA — ajuste do CI commitado, aguardando push, CI e publicação |
 | Origem | Item 1 do QUADRO; auditoria de segurança de 01/10/2026, achado #3 (ALTA) |
 | Sistema | Sistema A (artefatos versionados em `docs/integration/system_a_client_management/`) |
 | Exige ADR | sim — `docs/adr/0018-autorizacao-por-permissao-clientes-sistema-a.md` (Proposta) |
@@ -401,3 +401,83 @@ Conferido pelo Claude no código (não só no relatório):
 - Diff completo conferido antes do commit: mesmos arquivos e conteúdo da Revisão 2.
 - Commit da implementação: `9b2c079`.
 - Pendente para concluir: push pelo usuário; CI verde com o validador MariaDB; publicação guiada no phpMyAdmin e no n8n.
+
+### [2026-10-01] Claude — Falha no CI (primeira execução real do validador)
+
+**Veredito: AJUSTES.** Push feito pelo usuário; o CI do commit `6b40dff` falhou na etapa `bash scripts/validate_system_a_client_management.sh`, antes de qualquer procedure rodar. Testes Python passaram; `pip-audit`, Alembic e varredura de segredos foram pulados por causa da falha.
+
+**Log (trecho final):** `ERROR 1045 (28000): Access denied for user 'root'@'localhost' (using password: YES)`, logo após o download da imagem `mariadb:11.8.9`.
+
+**Causa (confirmada pela leitura do script, linhas 31-41):**
+- O laço de espera usa `mariadb-admin ping`. Esse comando retorna 0 sempre que o servidor está de pé, **mesmo quando a autenticação falha** (comportamento documentado do `mysqladmin`/`mariadb-admin ping`).
+- A imagem oficial sobe primeiro um servidor temporário de inicialização (sem rede, antes de definir a senha do root) e depois o reinicia. O laço considerou esse servidor temporário pronto e o script seguiu cedo demais.
+- Além disso, se as 60 tentativas se esgotassem, o laço terminaria sem erro.
+- O defeito já existia na versão anterior do script, que nunca tinha sido executada. É a suspeita nº 5 do `cacador-de-bugs` na Revisão 1.
+
+**Correção pedida ao Codex:**
+1. Esperar pelo servidor definitivo com uma consulta real por TCP, que o servidor temporário não aceita: por exemplo, `mariadb --protocol=tcp --host=127.0.0.1 --user=root --password ← (a senha gerada) --execute='SELECT 1'` dentro do contêiner, repetindo até funcionar. Alternativa aceitável: o `healthcheck.sh --connect --innodb_initialized` da própria imagem, se confirmado na documentação da imagem.
+2. Se o prazo esgotar, encerrar com mensagem clara e código diferente de zero, mostrando as últimas linhas de `docker logs` do contêiner (sem a senha).
+3. Não mudar nenhuma asserção nem o SQL. A correção é só na espera.
+4. Teste de ativos garantindo que o script não usa mais `ping` como critério de prontidão e que falha quando o prazo esgota.
+
+Depois do ajuste: commit pelo Claude, push pelo usuário e nova execução do CI. A publicação continua bloqueada até o CI ficar verde.
+
+### [2026-10-02] Codex — Resposta à falha do CI
+
+Os ajustes solicitados após a primeira execução real do validador estão
+concluídos. A tarefa retorna para revisão do Claude.
+
+**Correção.**
+
+- O laço de prontidão deixou de usar `mariadb-admin ping` e agora somente
+  considera o banco pronto quando `SELECT 1` autentica como `root` por TCP em
+  `127.0.0.1`. Assim, o servidor temporário sem rede da inicialização da imagem
+  não satisfaz o critério.
+- O estado começa explicitamente como não pronto. Se nenhuma das 60 tentativas
+  funcionar, o script informa `MARIADB_READY_TIMEOUT`, mostra apenas as últimas
+  50 linhas dos logs do contêiner e encerra com código diferente de zero.
+- Nenhuma asserção funcional, migration SQL ou workflow foi alterado.
+- O teste de ativos verifica a consulta TCP autenticada, proíbe o retorno ao
+  `mariadb-admin`, e exige o ramo de timeout com logs e `exit 1`.
+
+**Arquivos alterados nesta resposta.**
+
+- `scripts/validate_system_a_client_management.sh`;
+- `tests/unit/test_system_a_client_management_assets.py`;
+- este arquivo e `docs/colaboracao/QUADRO.md`, somente para registrar e devolver
+  o trabalho à revisão.
+
+Nenhum arquivo foi criado e nenhuma migration foi criada ou alterada.
+
+**Validação.**
+
+- Testes específicos: `25 passed`.
+- Suíte completa: `614 passed, 20 skipped`, com os 2 avisos de depreciação já
+  existentes.
+- Varredura de segredos: canário e release `PASS`.
+- `bash -n scripts/validate_system_a_client_management.sh`: aprovado.
+- `git diff --check`: sem erro; apenas avisos de normalização LF/CRLF.
+
+O ciclo funcional descartável ainda precisa ser reexecutado no CI Ubuntu após
+commit e push. Nenhum banco, API, n8n, Google Drive ou serviço real foi
+acessado; a publicação continua bloqueada até o CI verde.
+
+### [2026-10-02] Claude — Revisão do ajuste da espera do MariaDB
+
+**Veredito: ACEITA.** Conferido no diff real, não só no relatório.
+
+- Diff restrito ao laço de espera do script, a um teste novo e aos registros de colaboração. Nenhum SQL, asserção funcional, workflow ou migration alterado.
+- A espera agora exige `SELECT 1` autenticado como `root` por TCP em `127.0.0.1`. O servidor temporário de inicialização da imagem roda sem rede, então não satisfaz mais o critério. O estado começa como não pronto; esgotadas as 60 tentativas, o script emite `MARIADB_READY_TIMEOUT`, mostra as últimas 50 linhas de `docker logs` (sem a senha, que só existe em variável e argumento) e sai com `exit 1`.
+- `set -euo pipefail` já estava ativo; o `|| true` em `docker logs` não mascara a saída com erro.
+- Final de linha: o script está como LF no índice e na cópia de trabalho (`git ls-files --eol`), então o Bash do Ubuntu não quebra.
+- Reexecutado pelo Claude: testes específicos `25 passed`; suíte completa `614 passed, 20 skipped`; `bash -n` aprovado.
+
+**Limitação registrada:** o teste novo é estático (confere o texto do script). O comportamento real da espera só é provado no CI, porque o Docker não está disponível nesta máquina. Isso é aceitável para este ajuste; o CI verde é a condição para fechar.
+
+**Próximo passo:** "aceito" do usuário → commit pelo Claude → push pelo usuário → CI. A publicação no phpMyAdmin e no n8n continua bloqueada até o CI ficar verde.
+
+### [2026-10-02] Claude — Commit do ajuste
+
+- "Aceito" do usuário recebido. Diff de produção relido antes do commit: idêntico ao revisado (script +15/−3, teste +13).
+- Commit único com o ajuste e estes registros (mensagem: `fix(ci): wait for authenticated TCP MariaDB before System A validation (T-0003)`).
+- Pendente: push pelo usuário; CI verde; publicação guiada no phpMyAdmin e no n8n.
