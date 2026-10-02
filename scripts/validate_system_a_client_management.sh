@@ -66,8 +66,9 @@ apply_sql() {
 assert_contains() {
   local output="$1"
   local expected="$2"
+  local label="$3"
   grep -q "${expected}" <<<"${output}" || {
-    echo "ASSERT_CONTAINS_FAILED=${expected}"
+    echo "ASSERT_CONTAINS_FAILED label=${label} expected=${expected} actual=${output}"
     exit 1
   }
 }
@@ -78,7 +79,7 @@ assert_scalar() {
   local actual
   actual="$(db "${query}")"
   test "${actual}" = "${expected}" || {
-    echo "ASSERT_SCALAR_FAILED expected=${expected} actual=${actual}"
+    echo "ASSERT_SCALAR_FAILED query=${query} expected=${expected} actual=${actual}"
     exit 1
   }
 }
@@ -90,143 +91,147 @@ apply_sql 001_up.sql
 apply_sql 002_up.sql
 apply_sql 003_up.sql
 
+administrator_id="$(db "SELECT id FROM funcionarios WHERE email='administrator@example.invalid';")"
+admin_id="$(db "SELECT id FROM funcionarios WHERE email='admin@example.invalid';")"
+operator_allowed_id="$(db "SELECT id FROM funcionarios WHERE email='operator-allowed@example.invalid';")"
+
 # Sessao invalida, expirada e revogada nunca produzem efeito.
 result="$(db "CALL sp_admin_cliente_create('InvalidSyntheticToken0000','Nao Criado','invalid-session@example.invalid','', 'Lead', NULL);")"
-assert_contains "${result}" $'0\tunauthorized'
+assert_contains "${result}" $'0\tunauthorized' "invalid session cannot create"
 assert_scalar "SELECT COUNT(*) FROM clientes_emails_autorizados WHERE email = 'invalid-session@example.invalid';" "0"
 result="$(db "CALL sp_admin_cliente_list('InvalidSyntheticToken0000');")"
-assert_contains "${result}" $'0\tunauthorized'
+assert_contains "${result}" $'0\tunauthorized' "invalid session cannot list"
 test "$(awk 'END { print NR }' <<<"${result}")" = "1"
 
-db "UPDATE security_sessoes_funcionarios SET expira_em = UTC_TIMESTAMP() - INTERVAL 1 MINUTE WHERE funcionario_id = 3;" >/dev/null
+db "UPDATE security_sessoes_funcionarios SET expira_em = UTC_TIMESTAMP() - INTERVAL 1 MINUTE WHERE funcionario_id = ${operator_allowed_id};" >/dev/null
 result="$(db "CALL sp_admin_cliente_create('SyntheticOperatorAllowed1003','Nao Criado','expired-session@example.invalid','', 'Lead', NULL);")"
-assert_contains "${result}" $'0\tunauthorized'
-db "UPDATE security_sessoes_funcionarios SET expira_em = UTC_TIMESTAMP() + INTERVAL 1 HOUR, revogado_em = UTC_TIMESTAMP() WHERE funcionario_id = 3;" >/dev/null
+assert_contains "${result}" $'0\tunauthorized' "expired session cannot create"
+db "UPDATE security_sessoes_funcionarios SET expira_em = UTC_TIMESTAMP() + INTERVAL 1 HOUR, revogado_em = UTC_TIMESTAMP() WHERE funcionario_id = ${operator_allowed_id};" >/dev/null
 result="$(db "CALL sp_admin_cliente_create('SyntheticOperatorAllowed1003','Nao Criado','revoked-session@example.invalid','', 'Lead', NULL);")"
-assert_contains "${result}" $'0\tunauthorized'
-db "UPDATE security_sessoes_funcionarios SET revogado_em = NULL WHERE funcionario_id = 3;" >/dev/null
+assert_contains "${result}" $'0\tunauthorized' "revoked session cannot create"
+db "UPDATE security_sessoes_funcionarios SET revogado_em = NULL WHERE funcionario_id = ${operator_allowed_id};" >/dev/null
 
 # Sem linha, negacao explicita, cargo desconhecido e cargo nulo falham fechados.
 result="$(db "CALL sp_admin_cliente_create('SyntheticOperatorMissing1004','Nao Criado','missing-permission@example.invalid','', 'Lead', NULL);")"
-assert_contains "${result}" $'0\tforbidden'
+assert_contains "${result}" $'0\tforbidden' "missing create permission"
 assert_scalar "SELECT COUNT(*) FROM clientes_emails_autorizados WHERE email='missing-permission@example.invalid';" "0"
 result="$(db "CALL sp_admin_cliente_create('SyntheticOperatorDenied1005','Nao Criado','denied-permission@example.invalid','', 'Lead', NULL);")"
-assert_contains "${result}" $'0\tforbidden'
+assert_contains "${result}" $'0\tforbidden' "explicitly denied create permission"
 assert_scalar "SELECT COUNT(*) FROM clientes_emails_autorizados WHERE email='denied-permission@example.invalid';" "0"
 result="$(db "CALL sp_admin_cliente_list('SyntheticOperatorMissing1004');")"
-assert_contains "${result}" $'0\tforbidden'
+assert_contains "${result}" $'0\tforbidden' "missing list permission"
 test "$(awk 'END { print NR }' <<<"${result}")" = "1"
 result="$(db "CALL sp_admin_cliente_list('SyntheticOperatorDenied1005');")"
-assert_contains "${result}" $'0\tforbidden'
+assert_contains "${result}" $'0\tforbidden' "explicitly denied list permission"
 test "$(awk 'END { print NR }' <<<"${result}")" = "1"
 result="$(db "CALL sp_admin_cliente_list('SyntheticUnknownRoleToken1007');")"
-assert_contains "${result}" $'0\tforbidden'
+assert_contains "${result}" $'0\tforbidden' "unknown role cannot list"
 test "$(awk 'END { print NR }' <<<"${result}")" = "1"
 result="$(db "CALL sp_admin_cliente_list('SyntheticNullRoleToken100008');")"
-assert_contains "${result}" $'0\tforbidden'
+assert_contains "${result}" $'0\tforbidden' "null role cannot list"
 test "$(awk 'END { print NR }' <<<"${result}")" = "1"
 result="$(db "CALL sp_admin_cliente_list('SyntheticEmptyRoleToken10009');")"
-assert_contains "${result}" $'0\tforbidden'
+assert_contains "${result}" $'0\tforbidden' "empty role cannot list"
 test "$(awk 'END { print NR }' <<<"${result}")" = "1"
 result="$(db "CALL sp_admin_cliente_list('SyntheticSpacesRoleToken1010');")"
-assert_contains "${result}" $'0\tforbidden'
+assert_contains "${result}" $'0\tforbidden' "spaces-only role cannot list"
 test "$(awk 'END { print NR }' <<<"${result}")" = "1"
 result="$(db "CALL sp_admin_cliente_list('SyntheticAccentedRoleToken11');")"
-assert_contains "${result}" $'0\tforbidden'
+assert_contains "${result}" $'0\tforbidden' "accented admin variant cannot list"
 test "$(awk 'END { print NR }' <<<"${result}")" = "1"
-assert_contains "$(db "CALL sp_admin_cliente_list('SyntheticTrimmedAdminToken12');")" $'1\tlisted'
+assert_contains "$(db "CALL sp_admin_cliente_list('SyntheticTrimmedAdminToken12');")" $'1\tlisted' "trimmed Admin role can list"
 assert_scalar "SELECT COUNT(*) >= 9 FROM logs_auditoria WHERE acao = 'client_action_forbidden';" "1"
 assert_scalar "SELECT COUNT(*) FROM logs_auditoria WHERE acao = 'client_action_forbidden' AND registro_id IS NOT NULL;" "0"
 
 # Os dois cargos administrativos ignoram a matriz; visualizar explicito tambem funciona.
-assert_contains "$(db "CALL sp_admin_cliente_list('SyntheticAdministratorToken1001');")" $'1\tlisted'
-assert_contains "$(db "CALL sp_admin_cliente_list('SyntheticAdminToken1000000002');")" $'1\tlisted'
-assert_contains "$(db "CALL sp_admin_cliente_list('SyntheticOperatorAllowed1003');")" $'1\tlisted'
-assert_contains "$(db "CALL sp_admin_cliente_list('SyntheticAuditorToken100006');")" $'1\tlisted'
+assert_contains "$(db "CALL sp_admin_cliente_list('SyntheticAdministratorToken1001');")" $'1\tlisted' "Administrador can list"
+assert_contains "$(db "CALL sp_admin_cliente_list('SyntheticAdminToken1000000002');")" $'1\tlisted' "Admin can list"
+assert_contains "$(db "CALL sp_admin_cliente_list('SyntheticOperatorAllowed1003');")" $'1\tlisted' "permitted operator can list"
+assert_contains "$(db "CALL sp_admin_cliente_list('SyntheticAuditorToken100006');")" $'1\tlisted' "permitted auditor can list"
 
 # Admin tambem cria sem linha de permissao; o reset do portal continua funcional.
 result="$(db "CALL sp_admin_cliente_create('SyntheticAdminToken1000000002','Cliente Reset','portal-reset@example.invalid','39053344705','Ativo',NULL);")"
-assert_contains "${result}" $'1\tcreated'
+assert_contains "${result}" $'1\tcreated' "Admin can create without permission row"
 reset_token="$(awk -F '\t' 'NR == 1 { print $6 }' <<<"${result}")"
 test "${#reset_token}" -eq 64
 result="$(db "CALL sp_cliente_password_reset_apply('${reset_token}','SyntheticClient9x!');")"
-assert_contains "${result}" $'1\tsuccess'
+assert_contains "${result}" $'1\tsuccess' "password reset succeeds once"
 result="$(db "CALL sp_cliente_password_reset_apply('${reset_token}','SyntheticClient9x!');")"
-assert_contains "${result}" $'0\tinvalid_or_expired'
+assert_contains "${result}" $'0\tinvalid_or_expired' "password reset token cannot be reused"
 
 # Operador com permissao cria e edita campos comuns.
 result="$(db "CALL sp_admin_cliente_create('SyntheticOperatorAllowed1003','Cliente Operador','z-primary@example.invalid','', 'Lead', '11999999999');")"
-assert_contains "${result}" $'1\tcreated'
+assert_contains "${result}" $'1\tcreated' "permitted operator can create"
 operator_client_id="$(awk -F '\t' 'NR == 1 { print $3 }' <<<"${result}")"
 db "INSERT INTO clientes_emails_autorizados (cliente_id,email) VALUES (${operator_client_id},'a-secondary@example.invalid');" >/dev/null
 result="$(db "CALL sp_admin_cliente_list('SyntheticOperatorAllowed1003');")"
 listed_email="$(awk -F '\t' -v id="${operator_client_id}" '$5 == id { print $12 }' <<<"${result}")"
 test "${listed_email}" = "z-primary@example.invalid"
 result="$(db "CALL sp_admin_cliente_update('SyntheticOperatorAllowed1003',${operator_client_id},'Cliente Operador Atualizado','${listed_email}','', 'Lead','11999999999','1133334444');")"
-assert_contains "${result}" $'1\tupdated'
+assert_contains "${result}" $'1\tupdated' "operator updates common fields"
 assert_scalar "SELECT nome_cliente FROM clientes WHERE id = ${operator_client_id};" "Cliente Operador Atualizado"
 
 # Unauthorized e as duas formas de negacao de editar nao alteram o cliente.
 result="$(db "CALL sp_admin_cliente_update('InvalidSyntheticToken0000',${operator_client_id},'Alteracao Indevida','z-primary@example.invalid','', 'Lead','11999999999','1133334444');")"
-assert_contains "${result}" $'0\tunauthorized'
+assert_contains "${result}" $'0\tunauthorized' "invalid session cannot update"
 assert_scalar "SELECT nome_cliente FROM clientes WHERE id=${operator_client_id};" "Cliente Operador Atualizado"
 result="$(db "CALL sp_admin_cliente_update('SyntheticOperatorMissing1004',${operator_client_id},'Alteracao Indevida','z-primary@example.invalid','', 'Lead','11999999999','1133334444');")"
-assert_contains "${result}" $'0\tforbidden'
+assert_contains "${result}" $'0\tforbidden' "missing edit permission"
 assert_scalar "SELECT nome_cliente FROM clientes WHERE id=${operator_client_id};" "Cliente Operador Atualizado"
 result="$(db "CALL sp_admin_cliente_update('SyntheticOperatorDenied1005',${operator_client_id},'Alteracao Indevida','z-primary@example.invalid','', 'Lead','11999999999','1133334444');")"
-assert_contains "${result}" $'0\tforbidden'
+assert_contains "${result}" $'0\tforbidden' "explicitly denied edit permission"
 assert_scalar "SELECT nome_cliente FROM clientes WHERE id=${operator_client_id};" "Cliente Operador Atualizado"
 
 # D3: quem pode editar preenche o primeiro documento de um Lead, mas nao o substitui.
 result="$(db "CALL sp_admin_cliente_update('SyntheticOperatorAllowed1003',${operator_client_id},'Cliente Operador Atualizado','z-primary@example.invalid','12345678909', 'Lead','11999999999','1133334444');")"
-assert_contains "${result}" $'1\tupdated'
+assert_contains "${result}" $'1\tupdated' "operator fills first Lead document"
 assert_scalar "SELECT documento_fiscal_canonico FROM clientes WHERE id=${operator_client_id};" "12345678909"
-assert_scalar "SELECT COUNT(*) FROM logs_auditoria WHERE registro_id=${operator_client_id} AND funcionario_id=1003 AND acao='document_changed' AND JSON_UNQUOTE(JSON_EXTRACT(detalhes,'$.request_id')) IS NOT NULL AND JSON_LENGTH(detalhes)=1;" "1"
+assert_scalar "SELECT COUNT(*) FROM logs_auditoria WHERE registro_id=${operator_client_id} AND funcionario_id=${operator_allowed_id} AND acao='document_changed' AND JSON_UNQUOTE(JSON_EXTRACT(detalhes,'$.request_id')) IS NOT NULL AND JSON_LENGTH(detalhes)=1;" "1"
 result="$(db "CALL sp_admin_cliente_update('SyntheticOperatorAllowed1003',${operator_client_id},'Cliente Operador Atualizado','z-primary@example.invalid','22233344405', 'Lead','11999999999','1133334444');")"
-assert_contains "${result}" $'0\tforbidden'
+assert_contains "${result}" $'0\tforbidden' "operator cannot replace existing document"
 assert_scalar "SELECT documento_fiscal_canonico FROM clientes WHERE id=${operator_client_id};" "12345678909"
 
 # D3 nao abre excecao para e-mail: ate o primeiro e-mail exige cargo administrativo.
 email_empty_client_id="$(db "INSERT INTO clientes (nome_cliente,status) VALUES ('Lead Sem Email','Lead'); SELECT LAST_INSERT_ID();")"
 result="$(db "CALL sp_admin_cliente_update('SyntheticOperatorAllowed1003',${email_empty_client_id},'Lead Sem Email','first-email@example.invalid','', 'Lead',NULL,NULL);")"
-assert_contains "${result}" $'0\tforbidden'
+assert_contains "${result}" $'0\tforbidden' "operator cannot set first email"
 assert_scalar "SELECT COUNT(*) FROM clientes_emails_autorizados WHERE cliente_id=${email_empty_client_id};" "0"
 
 # Vincular pasta exige a mesma permissao de criar.
 result="$(db "CALL sp_admin_cliente_set_folder('SyntheticOperatorMissing1004',${operator_client_id},'synthetic-folder-id');")"
-assert_contains "${result}" $'0\tforbidden'
+assert_contains "${result}" $'0\tforbidden' "folder link requires create permission"
 assert_scalar "SELECT COUNT(*) FROM clientes WHERE id=${operator_client_id} AND id_pasta_raiz IS NULL;" "1"
 
 # Auditor sem editar recebe forbidden; nenhum efeito e registrado no cliente.
 result="$(db "CALL sp_admin_cliente_update('SyntheticAuditorToken100006',${operator_client_id},'Alteracao Indevida','z-primary@example.invalid','', 'Lead','11999999999','1133334444');")"
-assert_contains "${result}" $'0\tforbidden'
+assert_contains "${result}" $'0\tforbidden' "auditor cannot update"
 assert_scalar "SELECT nome_cliente FROM clientes WHERE id = ${operator_client_id};" "Cliente Operador Atualizado"
 
 # Cliente ativo administrativo fornece alvo para os testes sensiveis.
 result="$(db "CALL sp_admin_cliente_create('SyntheticAdministratorToken1001','Cliente Sensivel','sensitive-old@example.invalid','52998224725','Ativo','11988887777');")"
-assert_contains "${result}" $'1\tcreated'
+assert_contains "${result}" $'1\tcreated' "Administrador creates sensitive test client"
 sensitive_client_id="$(awk -F '\t' 'NR == 1 { print $3 }' <<<"${result}")"
 db "INSERT INTO security_sessoes_clientes (cliente_id,email,token_hash,expira_em) VALUES (${sensitive_client_id},'sensitive-old@example.invalid',SHA2('SyntheticClientSession',256),UTC_TIMESTAMP()+INTERVAL 1 HOUR);" >/dev/null
 
 # D2: operador com editar nao pode trocar e-mail nem documento.
 result="$(db "CALL sp_admin_cliente_update('SyntheticOperatorAllowed1003',${sensitive_client_id},'Cliente Sensivel','blocked-email@example.invalid','52998224725','Ativo','11988887777',NULL);")"
-assert_contains "${result}" $'0\tforbidden'
+assert_contains "${result}" $'0\tforbidden' "operator cannot change email"
 assert_scalar "SELECT COUNT(*) FROM clientes_emails_autorizados WHERE cliente_id=${sensitive_client_id} AND email='sensitive-old@example.invalid';" "1"
 result="$(db "CALL sp_admin_cliente_update('SyntheticOperatorAllowed1003',${sensitive_client_id},'Cliente Sensivel','sensitive-old@example.invalid','11144477735','Ativo','11988887777',NULL);")"
-assert_contains "${result}" $'0\tforbidden'
+assert_contains "${result}" $'0\tforbidden' "operator cannot change existing document"
 assert_scalar "SELECT documento_fiscal_canonico FROM clientes WHERE id=${sensitive_client_id};" "52998224725"
 
 # Administrador troca e-mail: sessoes e links sao revogados na mesma operacao.
 result="$(db "CALL sp_admin_cliente_update('SyntheticAdministratorToken1001',${sensitive_client_id},'Cliente Sensivel','sensitive-new@example.invalid','52998224725','Ativo','11988887777',NULL);")"
-assert_contains "${result}" $'1\tupdated'
+assert_contains "${result}" $'1\tupdated' "Administrador changes email"
 assert_scalar "SELECT COUNT(*) FROM security_sessoes_clientes WHERE cliente_id=${sensitive_client_id} AND revogado_em IS NULL;" "0"
 assert_scalar "SELECT COUNT(*) FROM security_password_reset_clientes WHERE cliente_id=${sensitive_client_id} AND resultado_solicitacao='issued' AND utilizado_em IS NULL AND revogado_em IS NULL;" "0"
-assert_scalar "SELECT COUNT(*) FROM logs_auditoria WHERE registro_id=${sensitive_client_id} AND funcionario_id=1001 AND acao='email_changed' AND JSON_UNQUOTE(JSON_EXTRACT(detalhes,'$.request_id')) IS NOT NULL AND JSON_LENGTH(detalhes)=1;" "1"
+assert_scalar "SELECT COUNT(*) FROM logs_auditoria WHERE registro_id=${sensitive_client_id} AND funcionario_id=${administrator_id} AND acao='email_changed' AND JSON_UNQUOTE(JSON_EXTRACT(detalhes,'$.request_id')) IS NOT NULL AND JSON_LENGTH(detalhes)=1;" "1"
 
 # Admin (sinonimo) troca documento; a auditoria registra somente a ocorrencia.
 result="$(db "CALL sp_admin_cliente_update('SyntheticAdminToken1000000002',${sensitive_client_id},'Cliente Sensivel','sensitive-new@example.invalid','11144477735','Ativo','11988887777',NULL);")"
-assert_contains "${result}" $'1\tupdated'
-assert_scalar "SELECT COUNT(*) FROM logs_auditoria WHERE registro_id=${sensitive_client_id} AND funcionario_id=1000000002 AND acao='document_changed' AND JSON_UNQUOTE(JSON_EXTRACT(detalhes,'$.request_id')) IS NOT NULL AND JSON_LENGTH(detalhes)=1;" "1"
+assert_contains "${result}" $'1\tupdated' "Admin changes document"
+assert_scalar "SELECT COUNT(*) FROM logs_auditoria WHERE registro_id=${sensitive_client_id} AND funcionario_id=${admin_id} AND acao='document_changed' AND JSON_UNQUOTE(JSON_EXTRACT(detalhes,'$.request_id')) IS NOT NULL AND JSON_LENGTH(detalhes)=1;" "1"
 assert_scalar "SELECT COUNT(*) FROM logs_auditoria WHERE acao IN ('email_changed','document_changed') AND (JSON_EXTRACT(detalhes,'$.previous_hash') IS NOT NULL OR JSON_EXTRACT(detalhes,'$.new_hash') IS NOT NULL);" "0"
 assert_scalar "SELECT COUNT(*) FROM logs_auditoria WHERE acao IN ('email_changed','document_changed') AND (detalhes LIKE '%sensitive-old@example.invalid%' OR detalhes LIKE '%sensitive-new@example.invalid%' OR detalhes LIKE '%52998224725%' OR detalhes LIKE '%11144477735%');" "0"
 assert_scalar "SELECT COUNT(*) FROM logs_auditoria WHERE acao='client_action_forbidden';" "17"
@@ -236,9 +241,9 @@ assert_scalar "SELECT COUNT(*) FROM logs_auditoria WHERE acao='client_action_for
 apply_sql 003_down.sql
 assert_scalar "SELECT COUNT(*) FROM information_schema.ROUTINES WHERE ROUTINE_SCHEMA=DATABASE() AND ROUTINE_NAME IN ('sp_admin_client_authorize','sp_admin_cliente_list');" "0"
 result="$(db "CALL sp_admin_cliente_create('SyntheticOperatorMissing1004','Cliente Pos Rollback','rollback-client@example.invalid','', 'Lead', NULL);")"
-assert_contains "${result}" $'1\tcreated'
+assert_contains "${result}" $'1\tcreated' "rollback restores create behavior"
 result="$(db "CALL sp_admin_cliente_update('SyntheticOperatorAllowed1003',${sensitive_client_id},'Cliente Pos Rollback','rollback-email@example.invalid','11144477735','Ativo','11988887777',NULL);")"
-assert_contains "${result}" $'1\tupdated'
+assert_contains "${result}" $'1\tupdated' "rollback restores update behavior"
 
 apply_sql 002_down.sql
 apply_sql 001_down.sql

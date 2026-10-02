@@ -2,7 +2,7 @@
 
 | Campo | Valor |
 |---|---|
-| Estado | ACEITA — ajuste do CI commitado, aguardando push, CI e publicação |
+| Estado | ACEITA — ajuste dos IDs commitado, aguardando push, CI e publicação |
 | Origem | Item 1 do QUADRO; auditoria de segurança de 01/10/2026, achado #3 (ALTA) |
 | Sistema | Sistema A (artefatos versionados em `docs/integration/system_a_client_management/`) |
 | Exige ADR | sim — `docs/adr/0018-autorizacao-por-permissao-clientes-sistema-a.md` (Proposta) |
@@ -480,4 +480,92 @@ acessado; a publicação continua bloqueada até o CI verde.
 
 - "Aceito" do usuário recebido. Diff de produção relido antes do commit: idêntico ao revisado (script +15/−3, teste +13).
 - Commit único com o ajuste e estes registros (mensagem: `fix(ci): wait for authenticated TCP MariaDB before System A validation (T-0003)`).
+- Pendente: push pelo usuário; CI verde; publicação guiada no phpMyAdmin e no n8n.
+
+### [2026-10-02] Claude — Segunda execução do CI (commit `4dbca5c`, run 37019984274)
+
+**Veredito: AJUSTES.** A correção da espera funcionou: o MariaDB ficou pronto cerca de 10 s depois do download da imagem, as migrations 001–003 foram aplicadas e as procedures rodaram. O script parou numa asserção, com a mensagem `ASSERT_SCALAR_FAILED expected=1 actual=0`, sem dizer qual consulta falhou.
+
+**Causa (confirmada pela leitura do script e da base de teste; Docker indisponível localmente):**
+- `test_base_schema.sql` insere os funcionários sem `id` explícito, então o AUTO_INCREMENT gera 1 a 12. O operador permitido é o id `3`, e o próprio script já usa `funcionario_id = 3` nas linhas 101-107.
+- Três asserções de auditoria filtram por IDs derivados do sufixo do token, que não existem:
+  - linha 184: `funcionario_id=1003` (deveria ser `3`): é a primeira a rodar e é a que falhou;
+  - linha 224: `funcionario_id=1001` (deveria ser `1`);
+  - linha 229: `funcionario_id=1000000002` (deveria ser `2`).
+- As asserções anteriores que esperam `1` (linha 138, ≥ 9 negações auditadas; linha 198, pasta não vinculada) foram conferidas na procedure e devem passar. As 9 chamadas negadas passam por `sp_admin_client_authorize`, que grava o evento antes do `COMMIT`.
+- O defeito vem do commit `9b2c079`. O SQL de produção (`001`–`003`) não é afetado.
+
+**Correção pedida ao Codex:**
+1. Corrigir os três IDs para os valores reais (`3`, `1`, `2`). Melhor ainda: obtê-los por consulta (`SELECT id FROM funcionarios WHERE email = '...'`) em vez de número fixo.
+2. Fazer `assert_scalar` e `assert_contains` mostrarem qual verificação falhou, imprimindo a consulta ou um rótulo. Nunca imprimir a senha, que não aparece nas consultas.
+3. Procurar no script outros números fixos que dependam do AUTO_INCREMENT.
+4. Não mudar o SQL de produção nem o sentido de nenhuma asserção.
+5. Teste de ativos: as asserções de auditoria não podem usar IDs de funcionário que não existam no seed.
+
+Depois do ajuste: revisão pelo Claude, commit, push pelo usuário e nova execução do CI. A publicação continua bloqueada.
+
+### [2026-10-02] Codex — Resposta à segunda falha do CI
+
+Os ajustes pedidos após a segunda execução do CI estão concluídos. A tarefa
+retorna para revisão do Claude.
+
+**Correção.**
+
+- Os IDs do Administrador, do Admin e do Operador permitido agora são obtidos
+  da fixture por consultas ao e-mail sintético único. As três asserções de
+  auditoria usam essas variáveis, não os sufixos dos tokens.
+- O mesmo ID resolvido do Operador substituiu o único outro número fixo do
+  script que dependia do AUTO_INCREMENT, usado para expirar e revogar a sessão.
+  A busca confirmou que não resta comparação `funcionario_id = <número>` no
+  validador.
+- `assert_scalar` agora informa a consulta, o valor esperado e o valor obtido.
+  `assert_contains` exige um rótulo por verificação e informa rótulo, trecho
+  esperado e saída obtida. Nenhuma mensagem inclui a senha do banco.
+- O teste de ativos comprova que os e-mails usados nas consultas existem no
+  seed, que as asserções de auditoria usam IDs resolvidos, que não há filtro
+  numérico fixo de funcionário e que as duas funções exibem contexto de falha.
+- Nenhuma migration SQL, asserção funcional ou workflow foi alterado.
+
+**Arquivos alterados nesta resposta.**
+
+- `scripts/validate_system_a_client_management.sh`;
+- `tests/unit/test_system_a_client_management_assets.py`;
+- este arquivo e `docs/colaboracao/QUADRO.md`, somente para registrar e devolver
+  o trabalho à revisão.
+
+Nenhum arquivo foi criado e nenhuma migration foi criada ou alterada.
+
+**Validação.**
+
+- Testes específicos: `26 passed`.
+- Suíte completa: `615 passed, 20 skipped`, com os 2 avisos de depreciação já
+  existentes.
+- Varredura de segredos: canário e release `PASS`.
+- `bash -n scripts/validate_system_a_client_management.sh`: aprovado.
+- `git diff --check`: sem erro; apenas avisos de normalização LF/CRLF.
+
+O ciclo funcional descartável precisa ser reexecutado no CI Ubuntu após commit
+e push. Nenhum banco, API, n8n, Google Drive ou serviço real foi acessado; a
+publicação continua bloqueada até o CI verde.
+
+### [2026-10-02] Claude — Revisão do ajuste dos IDs de funcionário
+
+**Veredito: ACEITA.** Conferido no diff real.
+
+- Os três IDs errados (`1003`, `1001`, `1000000002`) e o `3` fixo das linhas de expiração/revogação foram trocados por variáveis lidas do seed pelo e-mail sintético (`administrator_id`, `admin_id`, `operator_allowed_id`). Não sobrou `funcionario_id = <número>` no script.
+- Nenhuma asserção mudou de sentido e nenhum valor esperado foi alterado. O SQL de produção (`001`–`003`), as migrations e os workflows estão intactos.
+- `assert_contains` passou a exigir rótulo. Com `set -u`, uma chamada sem rótulo quebraria o script, por isso conferi: as 38 chamadas têm rótulo. `assert_scalar` mostra a consulta. Nenhuma consulta contém a senha do banco.
+- Contagem final `client_action_forbidden = 17` conferida: o script tem exatamente 17 chamadas que esperam `forbidden`, cada uma gera um evento (9 no bloco inicial, 2 na edição negada, 6 nas regras D2/D3, pasta e auditor). As `unauthorized` fazem ROLLBACK e não contam.
+- Reexecutado pelo Claude: testes específicos `26 passed`; suíte completa `615 passed, 20 skipped`; `bash -n` aprovado; script em LF.
+
+**Observações não bloqueantes:**
+- `assert_contains` agora imprime a saída inteira da procedure quando falha. Hoje são só dados sintéticos; se o script um dia rodar contra dados reais, isso precisa mudar.
+- Se uma busca de ID voltar vazia, o script falha com erro de sintaxe SQL em vez de uma mensagem clara. Ele falha fechado, então é aceitável.
+
+**Próximo passo:** "aceito" do usuário → commit pelo Claude → push pelo usuário → CI.
+
+### [2026-10-02] Claude — Commit do ajuste dos IDs
+
+- "Aceito" do usuário recebido. Diff de produção relido antes do commit: idêntico ao revisado (script +51/−46, teste +33).
+- Commit único com o ajuste e estes registros (mensagem: `fix(ci): resolve seeded employee ids and label assertions in System A validator (T-0003)`).
 - Pendente: push pelo usuário; CI verde; publicação guiada no phpMyAdmin e no n8n.

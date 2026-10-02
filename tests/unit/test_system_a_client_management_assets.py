@@ -1,4 +1,5 @@
 import json
+import re
 from pathlib import Path
 
 
@@ -308,6 +309,38 @@ def test_mariadb_wait_requires_authenticated_tcp_query_and_fails_closed() -> Non
     assert 'MARIADB_READY_TIMEOUT' in wait
     assert 'docker logs --tail 50 "${CONTAINER}"' in wait
     assert 'exit 1' in wait
+
+
+def test_validation_resolves_seeded_employee_ids_and_reports_assertion_context() -> None:
+    script = VALIDATION_SCRIPT.read_text(encoding='utf-8')
+    schema = BASE_SCHEMA.read_text(encoding='utf-8')
+
+    employee_lookups = {
+        'administrator_id': 'administrator@example.invalid',
+        'admin_id': 'admin@example.invalid',
+        'operator_allowed_id': 'operator-allowed@example.invalid',
+    }
+    for variable, email in employee_lookups.items():
+        assert email in schema
+        expected_lookup = (
+            f'{variable}="$(db "SELECT id FROM funcionarios '
+            f"WHERE email='{email}';\")\""
+        )
+        assert expected_lookup in script
+        assert f'funcionario_id=${{{variable}}}' in script
+
+    assert re.search(r'funcionario_id\s*=\s*\d+', script) is None
+    audit_assertions = [
+        line for line in script.splitlines()
+        if line.startswith('assert_scalar "SELECT COUNT(*) FROM logs_auditoria')
+        and 'funcionario_id=' in line
+    ]
+    assert len(audit_assertions) == 3
+    assert all('funcionario_id=${' in line for line in audit_assertions)
+
+    assert 'local label="$3"' in script
+    assert 'ASSERT_CONTAINS_FAILED label=${label}' in script
+    assert 'ASSERT_SCALAR_FAILED query=${query}' in script
 
 
 def test_prepublication_verification_covers_collations_indexes_and_grants() -> None:
