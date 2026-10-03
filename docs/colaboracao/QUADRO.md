@@ -6,6 +6,7 @@ Protocolo: [README.md](README.md). Atualizado por quem mudar o estado de uma tar
 
 | ID | Título | Estado | Com quem | Arquivo |
 |---|---|---|---|---|
+| T-0006 | Webhooks ativos sem autenticação e sessão revogada aceita (inventário do n8n) | DIAGNÓSTICO — aguardando decisões | Usuário | [T-0006](tarefas/T-0006-webhooks-sem-autenticacao.md) |
 
 ## Fila (ainda sem briefing; ordem sugerida, sujeita à decisão do usuário)
 
@@ -24,7 +25,6 @@ Protocolo: [README.md](README.md). Atualizado por quem mudar o estado de uma tar
 | 14 | Varredura de segredos não detecta credencial dentro de URL (`DATABASE_URL=mysql+pymysql://usuario:senha@host`), o tipo de vazamento mais provável neste projeto | Briefing da T-0002 | Sistema B | Exige tratar os placeholders existentes (`replace_me`, `SUA_SENHA`) sem allowlist |
 | 16 | Índice em `security_sessoes_funcionarios.token_hash` (a autorização da T-0003 varre e trava a tabela) | Pré-publicação da T-0003 | Sistema A | Migration própria; impacto atual desprezível |
 | 18 | Endurecer o workflow de permissões de funcionário: CORS `*`, `NOW()` em vez de UTC, SQL interpolado, gravação sem transação nem auditoria, leitura que ignora `funcionario_id`, fallback por cargo (SG-19) | T-0004, 03/10/2026 | Sistema A | Artefato já versionado em `docs/integration/system_a_permissions/` |
-| 19 | SG-10: inventariar e corrigir workflows que validam sessão sem `revogado_em IS NULL` (ao menos `admin/permissoes/cliente`); sem isso o logout da T-0005 não vale neles | T-0005, 03/10/2026 | Sistema A | Depende de exportação dos workflows pelo usuário |
 
 ## Concluídas
 
