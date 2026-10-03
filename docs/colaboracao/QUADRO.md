@@ -7,7 +7,7 @@ Protocolo: [README.md](README.md). Atualizado por quem mudar o estado de uma tar
 | ID | Título | Estado | Com quem | Arquivo |
 |---|---|---|---|---|
 | T-0004 | Menu do Operador vazio: leitura de permissões do funcionário falha no n8n | IMPLEMENTADA PELO CLAUDE — aguardando aplicação no n8n e teste | Usuário | [T-0004](tarefas/T-0004-menu-operador-leitura-permissoes.md) |
-| T-0005 | "Sair" revoga a sessão no servidor (funcionários e clientes) | IMPLEMENTADA PELO CLAUDE — aguardando push e CI | Usuário (push) | [T-0005](tarefas/T-0005-logout-revoga-sessao.md) |
+| T-0005 | "Sair" revoga a sessão no servidor (funcionários e clientes) | CI VERDE — aguardando publicação guiada | Usuário + Claude | [T-0005](tarefas/T-0005-logout-revoga-sessao.md) |
 
 ## Fila (ainda sem briefing; ordem sugerida, sujeita à decisão do usuário)
 

@@ -2,7 +2,7 @@
 
 | Campo | Valor |
 |---|---|
-| Estado | IMPLEMENTADA PELO CLAUDE — aguardando push e CI |
+| Estado | CI VERDE — aguardando publicação guiada |
 | Origem | QUADRO, fila item 17; teste da T-0003 em 03/10/2026; dossiê `docs/integration-input/DOSSIE_SERDIAL21.md` itens 13 e P1-8 |
 | Sistema | Sistema A (artefatos versionados em `docs/integration/`) |
 | Exige ADR | não — aplica padrão já aceito (procedures `INVOKER` + workflow fino, ADR 0018); decisões D1–D4 registradas aqui |
@@ -86,3 +86,9 @@
 - Migrations: `004` do Sistema A (fora do Alembic, como 001–003).
 
 **Pendências:** push pelo usuário; CI verde com `SESSION_LOGOUT_TESTS=PASS`; publicação conforme o runbook; inventário SG-10 (fila).
+
+### [2026-10-03] Claude — CI verde (commit `3ba048d`, run 37156807733)
+
+Conferido no log: `526 passed`; `CLIENT_MANAGEMENT_*` todos `PASS` (003 continua íntegra); `SESSION_LOGOUT_TESTS=PASS` e `SESSION_LOGOUT_ROLLBACK=PASS` — primeira execução real de `004_up.sql`/`004_down.sql` no MariaDB 11.8.9, incluindo a colação `utf8mb4_uca1400_ai_ci` da tabela de sessões de clientes; `pip-audit` sem vulnerabilidades; varredura de segredos `PASS`.
+
+**Próximo passo:** publicação guiada pelo `docs/integration/SYSTEM_A_SESSION_LOGOUT_RUNBOOK.md`.
