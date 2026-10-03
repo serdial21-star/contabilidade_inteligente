@@ -1,0 +1,275 @@
+{
+  "name": "API - Admin - Logout V1 (Revoga Sessao)",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "admin/logout-v1",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "3ceb0620-688f-407a-9926-d7337fa114c4",
+      "name": "POST Logout",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        -720,
+        0
+      ],
+      "webhookId": "8e87f6ad-3995-4d9f-b67c-228bed565369"
+    },
+    {
+      "parameters": {
+        "jsCode": "const auth = String($input.first().json.headers?.authorization || '');\nconst match = auth.match(/^Bearer\\s+([A-Za-z0-9]{20,128})$/i);\nreturn [{ json: { token: match ? match[1] : '' } }];"
+      },
+      "id": "b56d360e-d293-4c59-88c3-d9e3f83f86a5",
+      "name": "Extrair Token",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -480,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "CALL sp_funcionario_logout($1);",
+        "options": {
+          "queryReplacement": "={{ [$json.token] }}"
+        }
+      },
+      "id": "82e7be9c-7ebd-421a-8f19-ed316553895a",
+      "name": "Revogar Sessao",
+      "type": "n8n-nodes-base.mySql",
+      "typeVersion": 2.1,
+      "position": [
+        -240,
+        0
+      ],
+      "alwaysOutputData": true,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const candidates = $input.all().flatMap((item) => Array.isArray(item.json) ? item.json : [item.json]).filter((value) => value && typeof value === 'object');\nconst ok = candidates.some((value) => value.result === 'logged_out');\nreturn [{ json: { ok } }];"
+      },
+      "id": "42797251-7a7e-454a-8470-c1cc7424ccfc",
+      "name": "Conferir Resultado",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        0,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{ $json.ok === true }}",
+              "value2": true
+            }
+          ]
+        }
+      },
+      "id": "387061ff-4c97-4d04-8648-0f1a757c4288",
+      "name": "Revogacao Executada?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        240,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { success: true } }}",
+        "options": {
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Access-Control-Allow-Origin",
+                "value": "https://serdial21.com"
+              }
+            ]
+          }
+        }
+      },
+      "id": "f04d5461-e80b-4a3f-9d08-dc1944bc6898",
+      "name": "Responder Sucesso",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        480,
+        -96
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { success: false } }}",
+        "options": {
+          "responseCode": 500,
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Access-Control-Allow-Origin",
+                "value": "https://serdial21.com"
+              }
+            ]
+          }
+        }
+      },
+      "id": "c132455f-e704-4dc6-8e7c-f62b1dbe2925",
+      "name": "Responder Falha",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        480,
+        96
+      ]
+    },
+    {
+      "parameters": {
+        "httpMethod": "OPTIONS",
+        "path": "admin/logout-v1",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "23d167a4-f9e5-46d8-b80b-abe4623c6d84",
+      "name": "OPTIONS",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        -240,
+        288
+      ],
+      "webhookId": "9d3b7cd8-4876-4187-9d3e-57b336eb4956"
+    },
+    {
+      "parameters": {
+        "respondWith": "text",
+        "responseBody": "OK",
+        "options": {
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Access-Control-Allow-Origin",
+                "value": "https://serdial21.com"
+              },
+              {
+                "name": "Access-Control-Allow-Methods",
+                "value": "POST, OPTIONS"
+              },
+              {
+                "name": "Access-Control-Allow-Headers",
+                "value": "Content-Type, Authorization"
+              }
+            ]
+          }
+        }
+      },
+      "id": "29ecac50-3883-47b3-904c-f94c5fca451d",
+      "name": "CORS OK",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        0,
+        288
+      ]
+    }
+  ],
+  "connections": {
+    "POST Logout": {
+      "main": [
+        [
+          {
+            "node": "Extrair Token",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extrair Token": {
+      "main": [
+        [
+          {
+            "node": "Revogar Sessao",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Revogar Sessao": {
+      "main": [
+        [
+          {
+            "node": "Conferir Resultado",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Conferir Resultado": {
+      "main": [
+        [
+          {
+            "node": "Revogacao Executada?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Revogacao Executada?": {
+      "main": [
+        [
+          {
+            "node": "Responder Sucesso",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Responder Falha",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OPTIONS": {
+      "main": [
+        [
+          {
+            "node": "CORS OK",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "saveDataErrorExecution": "none",
+    "saveDataSuccessExecution": "none",
+    "saveManualExecutions": false,
+    "saveExecutionProgress": false,
+    "binaryMode": "separate",
+    "availableInMCP": false
+  },
+  "versionId": "6d6bd0c9-c155-40e5-b559-e2e7d246a085",
+  "meta": {
+    "templateCredsSetupCompleted": false
+  },
+  "tags": []
+}

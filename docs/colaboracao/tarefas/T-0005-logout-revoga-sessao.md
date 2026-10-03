@@ -2,7 +2,7 @@
 
 | Campo | Valor |
 |---|---|
-| Estado | BRIEFING — aguardando aprovação do usuário |
+| Estado | IMPLEMENTADA PELO CLAUDE — aguardando push e CI |
 | Origem | QUADRO, fila item 17; teste da T-0003 em 03/10/2026; dossiê `docs/integration-input/DOSSIE_SERDIAL21.md` itens 13 e P1-8 |
 | Sistema | Sistema A (artefatos versionados em `docs/integration/`) |
 | Exige ADR | não — aplica padrão já aceito (procedures `INVOKER` + workflow fino, ADR 0018); decisões D1–D4 registradas aqui |
@@ -66,3 +66,23 @@
 - Escopo: funcionários e clientes.
 - Condução: Claude implementa (como na T-0004), sem Codex; exceção ao fluxo do protocolo decidida pelo usuário.
 - Briefing (D1–D4): pendente.
+- Verificação do token do cliente (usuário, console do navegador após login de cliente): comprimento 50; `/^[0-9A-Za-z]+$/` → `true`. Compatível com a validação `^[0-9A-Za-z]{20,128}$`. Risco encerrado.
+
+### [2026-10-03] Usuário
+- "aprovo" — D1 a D4 aprovadas como propostas.
+
+---
+
+## 3. Implementação (Claude)
+
+### [2026-10-03] Claude — Implementação
+
+- Arquivos criados (`docs/integration/system_a_session_logout/`): `004_up.sql`, `004_down.sql`, `verify_004.sql`, `n8n_admin_logout_v1.json` (`POST admin/logout-v1`), `n8n_client_logout_v1.json` (`POST cliente/logout-v1`), `LOVABLE_PROMPT.md`; `docs/integration/SYSTEM_A_SESSION_LOGOUT_RUNBOOK.md`; `tests/unit/test_system_a_session_logout_assets.py`.
+- Arquivo alterado: `scripts/validate_system_a_client_management.sh` (aplica `004_up.sql` depois dos testes da 003, executa os cenários de logout e `004_down.sql`; novas linhas `SESSION_LOGOUT_TESTS=PASS` e `SESSION_LOGOUT_ROLLBACK=PASS`).
+- Procedures: validam o formato do token; calculam o hash numa variável com a colação da coluna comparada (`utf8mb4_unicode_ci` para funcionários, `utf8mb4_uca1400_ai_ci` para clientes, conforme conferido em produção nesta data), para evitar o erro 1267; travam e revogam só a sessão viva do token (`revogado_em IS NULL` e `expira_em > UTC_TIMESTAMP()`); gravam auditoria só quando revogam, na mesma transação, com `JSON_OBJECT('request_id', ...)` apenas; devolvem sempre `success = 1, result = 'logged_out'`.
+- Decisão técnica não prevista no briefing: sessão **expirada** não é marcada como revogada (critério 3 do briefing); ela já não autentica.
+- Workflows: token só do `Authorization: Bearer`, consulta parametrizada, `200 {"success": true}` quando a procedure executou e `500 {"success": false}` em falha interna (não depende do token, portanto não revela validade), CORS restrito a `https://serdial21.com`, sem retenção de execução, sem credenciais no JSON.
+- Testes: 7 estáticos passam; suíte local `524 passed, 20 skipped` (6 arquivos não coletados por falta de `redis` local, pré-existente); varredura de segredos `PASS`. **Não executado localmente:** o validador MariaDB (sem Docker na máquina). A primeira execução real das procedures será no CI após o push.
+- Migrations: `004` do Sistema A (fora do Alembic, como 001–003).
+
+**Pendências:** push pelo usuário; CI verde com `SESSION_LOGOUT_TESTS=PASS`; publicação conforme o runbook; inventário SG-10 (fila).

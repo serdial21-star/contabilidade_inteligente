@@ -3,6 +3,7 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 ASSET_DIR="${ROOT_DIR}/docs/integration/system_a_client_management"
+LOGOUT_DIR="${ROOT_DIR}/docs/integration/system_a_session_logout"
 CONTAINER="serdial21-client-management-test-$$"
 DB_NAME="serdial21_client_management_test"
 DB_PASSWORD="$(openssl rand -hex 24)"
@@ -24,6 +25,13 @@ for required_file in \
   002_down.sql 001_down.sql verify.sql; do
   test -f "${ASSET_DIR}/${required_file}" || {
     echo "MISSING_FILE=${ASSET_DIR}/${required_file}"
+    exit 1
+  }
+done
+
+for required_file in 004_up.sql 004_down.sql; do
+  test -f "${LOGOUT_DIR}/${required_file}" || {
+    echo "MISSING_FILE=${LOGOUT_DIR}/${required_file}"
     exit 1
   }
 done
@@ -61,6 +69,12 @@ apply_sql() {
   docker exec -i "${CONTAINER}" mariadb \
     --user=root --password="${DB_PASSWORD}" \
     "${DB_NAME}" < "${ASSET_DIR}/$1"
+}
+
+apply_logout_sql() {
+  docker exec -i "${CONTAINER}" mariadb \
+    --user=root --password="${DB_PASSWORD}" \
+    "${DB_NAME}" < "${LOGOUT_DIR}/$1"
 }
 
 assert_contains() {
@@ -237,6 +251,49 @@ assert_scalar "SELECT COUNT(*) FROM logs_auditoria WHERE acao IN ('email_changed
 assert_scalar "SELECT COUNT(*) FROM logs_auditoria WHERE acao='client_action_forbidden';" "17"
 assert_scalar "SELECT COUNT(*) FROM logs_auditoria WHERE acao='client_action_forbidden' AND registro_id IS NOT NULL;" "0"
 
+# T-0005: "Sair" revoga somente a sessao do token, com auditoria minima e
+# resultado identico para token valido, invalido, desconhecido ou expirado.
+apply_logout_sql 004_up.sql
+db "INSERT INTO security_sessoes_funcionarios (funcionario_id, token_hash, expira_em) VALUES
+  (${operator_allowed_id}, SHA2('SyntheticLogoutEmployeeA0001', 256), UTC_TIMESTAMP() + INTERVAL 1 HOUR),
+  (${operator_allowed_id}, SHA2('SyntheticLogoutEmployeeB0002', 256), UTC_TIMESTAMP() + INTERVAL 1 HOUR),
+  (${operator_allowed_id}, SHA2('SyntheticLogoutExpiredEmp0003', 256), UTC_TIMESTAMP() - INTERVAL 1 MINUTE);" >/dev/null
+employee_session_a="$(db "SELECT id FROM security_sessoes_funcionarios WHERE token_hash = SHA2('SyntheticLogoutEmployeeA0001', 256);")"
+assert_contains "$(db "CALL sp_admin_cliente_list('SyntheticLogoutEmployeeA0001');")" $'1\tlisted' "employee session works before logout"
+for token in 'SyntheticLogoutEmployeeA0001' 'SyntheticLogoutEmployeeA0001' 'bad token!' '' 'SyntheticUnknownLogout000009' 'SyntheticLogoutExpiredEmp0003'; do
+  assert_contains "$(db "CALL sp_funcionario_logout('${token}');")" $'1\tlogged_out' "employee logout neutral result"
+done
+assert_contains "$(db "CALL sp_funcionario_logout(NULL);")" $'1\tlogged_out' "employee logout null token"
+assert_scalar "SELECT revogado_em IS NOT NULL FROM security_sessoes_funcionarios WHERE id = ${employee_session_a};" "1"
+assert_scalar "SELECT revogado_em IS NULL FROM security_sessoes_funcionarios WHERE token_hash = SHA2('SyntheticLogoutEmployeeB0002', 256);" "1"
+assert_scalar "SELECT revogado_em IS NULL FROM security_sessoes_funcionarios WHERE token_hash = SHA2('SyntheticLogoutExpiredEmp0003', 256);" "1"
+assert_scalar "SELECT COUNT(*) FROM security_sessoes_funcionarios WHERE token_hash = SHA2('SyntheticAdministratorToken1001', 256) AND revogado_em IS NULL;" "1"
+assert_contains "$(db "CALL sp_admin_cliente_list('SyntheticLogoutEmployeeA0001');")" $'0\tunauthorized' "revoked employee session cannot list"
+assert_contains "$(db "CALL sp_admin_cliente_list('SyntheticLogoutEmployeeB0002');")" $'1\tlisted' "other session of same employee keeps working"
+assert_scalar "SELECT COUNT(*) FROM logs_auditoria WHERE acao = 'employee_logout';" "1"
+assert_scalar "SELECT COUNT(*) FROM logs_auditoria WHERE acao = 'employee_logout' AND funcionario_id = ${operator_allowed_id} AND tabela_afetada = 'security_sessoes_funcionarios' AND registro_id = ${employee_session_a} AND JSON_LENGTH(detalhes) = 1 AND JSON_UNQUOTE(JSON_EXTRACT(detalhes, '$.request_id')) IS NOT NULL;" "1"
+
+second_client_id="$(db "SELECT id FROM clientes WHERE id <> ${sensitive_client_id} ORDER BY id LIMIT 1;")"
+db "INSERT INTO security_sessoes_clientes (cliente_id, token_hash, expira_em) VALUES
+  (${sensitive_client_id}, SHA2('SyntheticLogoutClientA000001', 256), UTC_TIMESTAMP() + INTERVAL 1 HOUR),
+  (${sensitive_client_id}, SHA2('SyntheticLogoutClientB000002', 256), UTC_TIMESTAMP() + INTERVAL 1 HOUR),
+  (${second_client_id}, SHA2('SyntheticLogoutOtherClient03', 256), UTC_TIMESTAMP() + INTERVAL 1 HOUR),
+  (${sensitive_client_id}, SHA2('SyntheticLogoutExpiredCli004', 256), UTC_TIMESTAMP() - INTERVAL 1 MINUTE);" >/dev/null
+for token in 'SyntheticLogoutClientA000001' 'SyntheticLogoutClientA000001' 'bad token!' '' 'SyntheticUnknownLogout000009' 'SyntheticLogoutExpiredCli004' 'SyntheticLogoutEmployeeB0002'; do
+  assert_contains "$(db "CALL sp_cliente_logout('${token}');")" $'1\tlogged_out' "client logout neutral result"
+done
+assert_contains "$(db "CALL sp_cliente_logout(NULL);")" $'1\tlogged_out' "client logout null token"
+assert_scalar "SELECT COUNT(*) FROM security_sessoes_clientes WHERE revogado_em IS NOT NULL AND token_hash IN (SHA2('SyntheticLogoutClientA000001', 256), SHA2('SyntheticLogoutClientB000002', 256), SHA2('SyntheticLogoutOtherClient03', 256), SHA2('SyntheticLogoutExpiredCli004', 256));" "1"
+assert_scalar "SELECT revogado_em IS NOT NULL FROM security_sessoes_clientes WHERE token_hash = SHA2('SyntheticLogoutClientA000001', 256);" "1"
+assert_scalar "SELECT revogado_em IS NULL FROM security_sessoes_funcionarios WHERE token_hash = SHA2('SyntheticLogoutEmployeeB0002', 256);" "1"
+assert_scalar "SELECT COUNT(*) FROM logs_auditoria WHERE acao = 'client_logout';" "1"
+assert_scalar "SELECT COUNT(*) FROM logs_auditoria WHERE acao = 'client_logout' AND funcionario_id IS NULL AND tabela_afetada = 'security_sessoes_clientes' AND registro_id = ${sensitive_client_id} AND JSON_LENGTH(detalhes) = 1;" "1"
+assert_scalar "SELECT COUNT(*) FROM logs_auditoria WHERE acao IN ('employee_logout', 'client_logout') AND (detalhes LIKE '%Synthetic%' OR detalhes REGEXP '[0-9a-f]{64}');" "0"
+
+apply_logout_sql 004_down.sql
+assert_scalar "SELECT COUNT(*) FROM information_schema.ROUTINES WHERE ROUTINE_SCHEMA = DATABASE() AND ROUTINE_NAME IN ('sp_funcionario_logout', 'sp_cliente_logout');" "0"
+assert_scalar "SELECT COUNT(*) FROM logs_auditoria WHERE acao IN ('employee_logout', 'client_logout');" "2"
+
 # O downgrade remove a fronteira nova e restaura create/update de 002.
 apply_sql 003_down.sql
 assert_scalar "SELECT COUNT(*) FROM information_schema.ROUTINES WHERE ROUTINE_SCHEMA=DATABASE() AND ROUTINE_NAME IN ('sp_admin_client_authorize','sp_admin_cliente_list');" "0"
@@ -252,3 +309,5 @@ echo "CLIENT_MANAGEMENT_MIGRATION_003=VALID"
 echo "CLIENT_MANAGEMENT_AUTHORIZATION_TESTS=PASS"
 echo "CLIENT_MANAGEMENT_AUDIT_TESTS=PASS"
 echo "CLIENT_MANAGEMENT_ROLLBACK=PASS"
+echo "SESSION_LOGOUT_TESTS=PASS"
+echo "SESSION_LOGOUT_ROLLBACK=PASS"
