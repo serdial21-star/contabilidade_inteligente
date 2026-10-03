@@ -167,3 +167,7 @@ Aprova a direção, inclusive desativar `admin/tasks` e remover só o webhook do
 ## 3. Implementação (Codex)
 
 (aguardando "execute a tarefa T-0006")
+
+### [2026-10-03] Usuário (registrado pelo Claude)
+- Workflow "Serdial21 - Admin Tasks Kanban v1.0" (`admin/tasks`) desativado.
+- Fuso do n8n: `GENERIC_TIMEZONE`/`TZ` informado como America/Sao_Paulo. O cron do motor de obrigações (`5 6 * * *`) roda às 06:05 no horário de Brasília; nenhuma mudança de fuso é necessária no item 6 do briefing.
