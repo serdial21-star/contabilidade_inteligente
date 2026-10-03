@@ -43,3 +43,12 @@ Os quatro primeiros têm substitutos `-v2` autenticados; o dossiê de 21/09 não
 Valores não transcritos aqui.
 
 **E. Observados e já na fila:** tokens de login gerados com `Math.random` e SQL interpolado nos dois logins (item 7); CORS `*` em vários workflows.
+
+---
+
+## 2. Decisões do usuário
+
+### [2026-10-03] Usuário
+- Contenção: desativar agora os 4 workflows antigos (`portal/meus-documentos`, `portal/meus-chamados`, `admin/novo-cliente` V8, `portal/receber-arquivo` V5).
+- Os outros 5 endpoints sem autenticação (`admin/upload-xml`, `admin/integracao-cnd-v1`, `admin/tasks`, `admin-motor-obrigacoes-v1`, `ferramentas-ia/apuracao-icms`) "todos serão utilizados" — precisam ser protegidos, não desativados.
+- Credenciais expostas: o usuário não sabe onde ficam; o Claude orienta a localização. Serviços identificados pelos nós: token da WhatsApp Cloud API da Meta (`graph.facebook.com/v22.0/<phone_number_id>/messages`, workflow "Automação - Finalizar Ticket") e chave de API do Google usada no Cloud Vision (`vision.googleapis.com/v1/images:annotate`, workflow "LEGADO - Pericia tentativa monolitica").
