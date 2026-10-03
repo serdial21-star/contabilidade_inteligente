@@ -2,7 +2,7 @@
 
 | Campo | Valor |
 |---|---|
-| Estado | CI VERDE — aguardando publicação guiada (phpMyAdmin e n8n) |
+| Estado | CONCLUÍDA — publicada em 03/10/2026 |
 | Origem | Item 1 do QUADRO; auditoria de segurança de 01/10/2026, achado #3 (ALTA) |
 | Sistema | Sistema A (artefatos versionados em `docs/integration/system_a_client_management/`) |
 | Exige ADR | sim — `docs/adr/0018-autorizacao-por-permissao-clientes-sistema-a.md` (Proposta) |
@@ -618,3 +618,43 @@ Observações, não bloqueantes:
 **Correção:** em `n8n_admin_client_list_v2.json`, nó "Normalizar Resultado", o filtro de clientes passa a exigir `is_meta` presente, `Number(value.is_meta) === 0` e `value.id != null`. Teste novo `test_list_workflow_ignores_call_status_packet` (estático, como os demais do arquivo; não há Node no ambiente para executar o JS) — falha com o JSON anterior e passa com o corrigido. Suíte local: `514 passed, 20 skipped`; 6 arquivos não coletados por falta do módulo `redis` no ambiente local (pré-existente, não relacionado; o CI tem o módulo).
 
 **Publicação da correção:** o usuário substitui o código do nó "Normalizar Resultado" no workflow V2.2 ativo e repete a contagem (portal = `COUNT(*)`).
+
+### [2026-10-03] Claude — Listagem publicada e conferida
+
+- Código do nó "Normalizar Resultado" substituído pelo usuário no workflow V2.2 ativo (conteúdo idêntico ao do commit `6ebaf54`).
+- Portal como Administrador: 6 clientes, igual a `SELECT COUNT(*) FROM clientes` = 6. Sem linha vazia.
+- "Lista Clientes V2.1 (Completa)" desativada e mantida como rollback.
+- Pendente: edição (`n8n_admin_client_update_v1.json`) e criação (`n8n_admin_client_create_v3.json`).
+
+### [2026-10-03] Claude — Edição publicada; teste A ok; menu vazio do Operador em investigação
+
+- "Editar Cliente V1 (Seguro)" importado e ativado pelo usuário; workflow anterior desativado e mantido como rollback.
+- Teste A (Administrador, só telefone do "Fenix teste"): portal exibiu "Fenix teste foi atualizado com sucesso!"; listagem continua com 6 clientes.
+- Teste B (Operador trocando e-mail → 403) não executado: logado como Operador, a barra lateral do painel administrativo aparece sem nenhum item de menu (o Kanban carrega normalmente). Os artefatos da T-0003 não tratam de menu; falta saber se o sintoma é anterior à publicação de hoje.
+- Diagnóstico parcial do menu vazio: no navegador do Operador, três chamadas `.../funcionario` (filtro "permiss") retornam 200 com corpo de 0.0 kB; console com 3 erros não transcritos. O usuário informou que nenhum Operador usa o sistema ainda (fase de desenvolvimento), então não há referência de antes da publicação. Os artefatos da T-0003 não tocam esse endpoint nem `permissoes_funcionario_modulos`. Decisão do Claude: tratar fora da T-0003 (QUADRO, fila item 15). Índice de `token_hash` também foi para a fila (item 16).
+- Menu vazio, complemento: endpoint `POST https://n8n.serdial21.com/webhook/admin/permissoes/funcionario`, 200 com corpo `null`; console `[usePermissoes] Resposta inválida do servidor: null` (3x). O defeito já constava do dossiê de integração antes da T-0003 (`docs/integration-input/DOSSIE_SERDIAL21.md`, linha "Permissões funcionário": "Requer correção — Retorno vazio causa tela branca"). Confirmado como anterior e fora do escopo. O usuário colou na conversa os cabeçalhos da requisição com o token Bearer da sessão do Operador; o token não foi registrado em nenhum arquivo, e foi pedida a revogação da sessão.
+- Contenção do token exposto: as sessões da funcionária id 4 (Operador) estavam com `revogado_em` nulo, inclusive as duas de hoje, válidas até 2026-10-04 08:2x UTC. O usuário executou `UPDATE ... SET revogado_em = UTC_TIMESTAMP()` para a funcionária: 22 linhas afetadas (todo o histórico de sessões dela, nenhuma revogada antes). Conferido depois: só o id 4 corresponde ao filtro; 22 sessões, 0 ativas. O token exposto deixou de ser aceito. Pendente: confirmar se o "Sair" foi clicado antes da consulta (se sim, o logout não revoga no servidor → item novo da fila).
+- Logout testado: o usuário entrou como a funcionária id 4 e clicou em "Sair"; a sessão 119 (criada 20:40:51 UTC) permaneceu com `revogado_em` nulo. Confirmado que o "Sair" não revoga a sessão no servidor. Fora do escopo da T-0003; registrado no QUADRO (fila, item 17).
+- Teste B (Operador id 4, troca de e-mail do "Fenix teste" pela tela de edição): portal exibiu "Voce nao tem permissao para esta alteracao." — regra D2 confirmada em produção. Pendente conferir, como Administrador, que o e-mail ficou inalterado, e revogar a sessão aberta para o teste.
+
+### [2026-10-03] Claude — Criação publicada; Drive falhou por passo do runbook omitido na orientação
+
+- Confirmado pelo usuário: e-mail do "Fenix teste" inalterado após o teste B; sessão de teste da funcionária id 4 revogada (1 linha); "Novo Cliente V3 (Seguro)" ativo e anterior desativado; criação do Lead `Teste T-0003` (sem documento) com mensagem de sucesso; listagem com 7 clientes.
+- A pasta não foi criada no Drive; a execução 36668 do "Novo Cliente V3 (Seguro)" terminou em erro. Causa provável: o nó "Criar Pasta Raiz" foi importado com o placeholder `CONFIGURE_ROOT_FOLDER_ID`. O passo 4 do `docs/integration/SYSTEM_A_CLIENT_MANAGEMENT_RUNBOOK.md` manda substituí-lo pelo ID da pasta raiz do workflow antigo; a orientação do Claude nesta publicação omitiu esse passo e também o passo 8 (conferir que nenhum workflow salva dados de execução). Falha de orientação do Claude, não do artefato.
+- Consequência: o cliente `Teste T-0003` (Lead) existe no banco sem pasta vinculada. Sem efeito em clientes reais.
+- Também visíveis na lista de execuções: erros repetidos em "API - Admin - Permissões (Funcionários) v2.2 (Token + Fallback)", coerentes com o item 15 da fila.
+
+### [2026-10-03] Claude — Encerramento
+
+- Usuário substituiu `CONFIGURE_ROOT_FOLDER_ID` no nó "Criar Pasta Raiz" pelo ID da pasta raiz do workflow antigo e informou: "tudo certo agora com o drive".
+- Situação publicada: `003_up.sql` aplicada; "Lista Clientes V2.2 (Autorizada)" (com a correção `6ebaf54`), "Editar Cliente V1 (Seguro)" e "Novo Cliente V3 (Seguro)" ativos; workflows anteriores desativados e preservados com sufixo "(antigo 2026-10-03)" como rollback.
+- Testes em produção: listagem = `COUNT(*)`; edição de telefone pelo Administrador; recusa ao Operador na troca de e-mail (D2), com e-mail inalterado; criação de Lead com pasta no Drive após a correção.
+- Não testado em produção: envio do e-mail de ativação (Lead não dispara); resposta 401/403 da listagem e da criação para Operador sem permissão (todos os Operadores têm a permissão; coberto pelo CI).
+
+**Pendências que não reabrem a tarefa:**
+1. Passo 8 do runbook: confirmar no n8n se as execuções dos três workflows aparecem sem dados de nós (a lista de execuções mostra os registros; os JSONs vêm com `saveDataSuccessExecution`/`saveDataErrorExecution = none`). Se houver dados, ajustar nas configurações dos workflows.
+2. Confirmar se o portal mostrou sucesso na criação que falhou no Drive (execução 36668). Se sim, abrir item na fila (frontend não deve anunciar sucesso de execução com erro).
+3. Decidir o destino do cliente `Teste T-0003` (Lead sem pasta) e do segundo cliente de teste. Nada foi apagado.
+4. Fila: itens 15 (menu do Operador), 16 (índice `token_hash`) e 17 (logout não revoga a sessão).
+
+**Estado: CONCLUÍDA.**

@@ -6,7 +6,6 @@ Protocolo: [README.md](README.md). Atualizado por quem mudar o estado de uma tar
 
 | ID | Título | Estado | Com quem | Arquivo |
 |---|---|---|---|---|
-| T-0003 | Exigir permissão nas operações administrativas de clientes do Sistema A | CI VERDE — aguardando publicação guiada (phpMyAdmin e n8n) | Usuário + Claude | [T-0003](tarefas/T-0003-permissao-operacoes-clientes-sistema-a.md) |
 
 ## Fila (ainda sem briefing; ordem sugerida, sujeita à decisão do usuário)
 
@@ -23,6 +22,9 @@ Protocolo: [README.md](README.md). Atualizado por quem mudar o estado de uma tar
 | 10 | Qualidade automática: adotar Ruff e verificador de tipos (mypy ou pyright) como dependência de desenvolvimento e no CI; alinhar o Python do CI (3.12) ao de produção (3.14) | Análise de ferramentas, 01/10/2026 | Sistema B | Muda dependências: exige justificativa conforme `AGENTS.md` seção 3 |
 | 11 | Segundo limite de requisições por usuário autenticado, aplicado depois da verificação do token | T-0001, decisão de 01/10/2026 | Sistema B | Fazer antes de ampliar o número de usuários atrás do mesmo IP |
 | 14 | Varredura de segredos não detecta credencial dentro de URL (`DATABASE_URL=mysql+pymysql://usuario:senha@host`), o tipo de vazamento mais provável neste projeto | Briefing da T-0002 | Sistema B | Exige tratar os placeholders existentes (`replace_me`, `SUA_SENHA`) sem allowlist |
+| 15 | Menu do Operador vazio no painel administrativo: a chamada de permissões do funcionário (`.../funcionario`) volta 200 com corpo vazio | Teste da T-0003, 03/10/2026 | Sistema A | Defeito anterior já registrado no dossiê (`docs/integration-input/DOSSIE_SERDIAL21.md`: "Requer correção — retorno vazio causa tela branca"). Endpoint `POST /webhook/admin/permissoes/funcionario`; console: `[usePermissoes] Resposta inválida do servidor: null`. Falta ver a execução no n8n |
+| 16 | Índice em `security_sessoes_funcionarios.token_hash` (a autorização da T-0003 varre e trava a tabela) | Pré-publicação da T-0003 | Sistema A | Migration própria; impacto atual desprezível |
+| 17 | "Sair" do painel administrativo não revoga a sessão do funcionário no servidor (`security_sessoes_funcionarios.revogado_em` fica nulo; token vale até expirar, 12 h) | Teste da T-0003, 03/10/2026 | Sistema A | Segurança; confirmado com a sessão 119 do funcionário id 4. Verificar também o logout de clientes |
 
 ## Concluídas
 
@@ -30,3 +32,4 @@ Protocolo: [README.md](README.md). Atualizado por quem mudar o estado de uma tar
 |---|---|---|---|
 | T-0001 | Rate limit por origem confiável e cache JWKS com validade | `14f3450` | 01/10/2026 |
 | T-0002 | CI verde: falsos positivos da varredura de segredos sem allowlist | `06f07d3`, `499ac70`, `cc9ffb0` | 01/10/2026 |
+| T-0003 | Exigir permissão nas operações administrativas de clientes do Sistema A (publicada em 03/10/2026) | `9b2c079`, `4dbca5c`, `7c92dea`, `6ebaf54` | 03/10/2026 |
