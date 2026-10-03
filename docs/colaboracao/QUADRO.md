@@ -7,7 +7,6 @@ Protocolo: [README.md](README.md). Atualizado por quem mudar o estado de uma tar
 | ID | Título | Estado | Com quem | Arquivo |
 |---|---|---|---|---|
 | T-0004 | Menu do Operador vazio: leitura de permissões do funcionário falha no n8n | IMPLEMENTADA PELO CLAUDE — aguardando aplicação no n8n e teste | Usuário | [T-0004](tarefas/T-0004-menu-operador-leitura-permissoes.md) |
-| T-0005 | "Sair" revoga a sessão no servidor (funcionários e clientes) | CI VERDE — aguardando publicação guiada | Usuário + Claude | [T-0005](tarefas/T-0005-logout-revoga-sessao.md) |
 
 ## Fila (ainda sem briefing; ordem sugerida, sujeita à decisão do usuário)
 
@@ -35,3 +34,4 @@ Protocolo: [README.md](README.md). Atualizado por quem mudar o estado de uma tar
 | T-0001 | Rate limit por origem confiável e cache JWKS com validade | `14f3450` | 01/10/2026 |
 | T-0002 | CI verde: falsos positivos da varredura de segredos sem allowlist | `06f07d3`, `499ac70`, `cc9ffb0` | 01/10/2026 |
 | T-0003 | Exigir permissão nas operações administrativas de clientes do Sistema A (publicada em 03/10/2026) | `9b2c079`, `4dbca5c`, `7c92dea`, `6ebaf54` | 03/10/2026 |
+| T-0005 | "Sair" revoga a sessão no servidor, funcionários e clientes (publicada em 03/10/2026) | `3ba048d`, `afb257b` | 03/10/2026 |

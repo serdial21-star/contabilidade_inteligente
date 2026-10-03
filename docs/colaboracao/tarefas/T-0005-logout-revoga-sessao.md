@@ -2,7 +2,7 @@
 
 | Campo | Valor |
 |---|---|
-| Estado | CI VERDE — aguardando publicação guiada |
+| Estado | CONCLUÍDA — publicada em 03/10/2026 |
 | Origem | QUADRO, fila item 17; teste da T-0003 em 03/10/2026; dossiê `docs/integration-input/DOSSIE_SERDIAL21.md` itens 13 e P1-8 |
 | Sistema | Sistema A (artefatos versionados em `docs/integration/`) |
 | Exige ADR | não — aplica padrão já aceito (procedures `INVOKER` + workflow fino, ADR 0018); decisões D1–D4 registradas aqui |
@@ -92,3 +92,30 @@
 Conferido no log: `526 passed`; `CLIENT_MANAGEMENT_*` todos `PASS` (003 continua íntegra); `SESSION_LOGOUT_TESTS=PASS` e `SESSION_LOGOUT_ROLLBACK=PASS` — primeira execução real de `004_up.sql`/`004_down.sql` no MariaDB 11.8.9, incluindo a colação `utf8mb4_uca1400_ai_ci` da tabela de sessões de clientes; `pip-audit` sem vulnerabilidades; varredura de segredos `PASS`.
 
 **Próximo passo:** publicação guiada pelo `docs/integration/SYSTEM_A_SESSION_LOGOUT_RUNBOOK.md`.
+
+### [2026-10-03] Claude — Publicação: banco
+
+- `verify_004.sql` antes: `token_hash` de `security_sessoes_clientes` = `utf8mb4_uca1400_ai_ci` (OK) e de `security_sessoes_funcionarios` = `utf8mb4_unicode_ci` (OK); `logs_auditoria` com as 5 colunas, `funcionario_id` anulável; procedures ausentes.
+- Backup feito pelo usuário antes da migration.
+- `004_up.sql` importada: "Importação finalizada com sucesso, 4 consultas executadas" (2 `DROP IF EXISTS` com o aviso esperado `#1305`, 2 `CREATE PROCEDURE`).
+- `verify_004.sql` depois: `sp_cliente_logout` e `sp_funcionario_logout`, ambas `INVOKER`.
+- Próximo: importar e ativar os dois workflows; teste do endpoint pelo console antes do Lovable.
+- Workflows importados e ativos (usuário). Teste do endpoint de funcionário pelo console (funcionário id 4, duas chamadas seguidas): sessão 123 com `revogado_em = 2026-10-03 22:07:48`; `GET admin/clientes-v2` passou a responder 401 com o mesmo token; exatamente 1 evento `employee_logout` (`funcionario_id = 4`, `registro_id = 123`, `detalhes` só com `request_id`) — a segunda chamada não gerou efeito nem auditoria (idempotência confirmada em produção).
+- Observação: `logs_auditoria.data_hora` (CURRENT_TIMESTAMP do servidor) coincide com `revogado_em` (UTC_TIMESTAMP), indicando que o MySQL de produção roda em UTC; reduz o risco do `NOW()` registrado no item 18 da fila, sem eliminá-lo (depende de configuração do provedor).
+- Teste do endpoint de cliente pelo console do portal: status 200; sessão de cliente 70 (cliente 16) com `revogado_em = 2026-10-03 22:12:41`; 1 evento `client_logout` (`funcionario_id` nulo, `tabela_afetada = security_sessoes_clientes`, `registro_id = 16`, `detalhes` só com `request_id`). Chamada direta do navegador ao n8n aceita pelo CORS restrito.
+- Próximo: prompt do Lovable.
+
+### [2026-10-03] Claude — Frontend publicado, teste final e encerramento
+
+- Lovable aplicou `LOVABLE_PROMPT.md` (painel: chamada direta a `admin/logout-v1`; portal: via `proxy-webhook` em `/cliente/logout-v1`, com Bearer; limpeza local em `finally`) e publicou. O diff não foi revisado pelo Claude; o relatório do Lovable afirmou que os webhooks não existiam no n8n, o que estava incorreto (já ativos).
+- Teste final em `https://serdial21.com` pelo botão "Sair":
+  - cliente 16: sessão 71 criada 22:35:09, revogada 22:35:20 — confirma que o proxy do Supabase repassa `Authorization` e aceita o path novo;
+  - funcionário id 4: sessão 126 revogada 22:36:42.
+- Critérios de aceite 1–7: atendidos (1, 4 e 6 em produção; 2, 3, 5 e 7 no CI, run 37156807733, e 4 também em produção).
+
+**Pendências que não reabrem a tarefa:**
+1. Item 19 da fila (SG-10): workflows que não verificam `revogado_em` continuam aceitando token revogado até `expira_em`.
+2. Revisão do diff do Lovable pelo Claude, se o usuário quiser registrá-lo.
+3. Os testes desta data deixaram sessões revogadas e eventos `employee_logout`/`client_logout` reais na auditoria; são histórico legítimo e não devem ser apagados.
+
+**Estado: CONCLUÍDA.**
