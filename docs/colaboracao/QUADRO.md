@@ -6,7 +6,7 @@ Protocolo: [README.md](README.md). Atualizado por quem mudar o estado de uma tar
 
 | ID | Título | Estado | Com quem | Arquivo |
 |---|---|---|---|---|
-| T-0003 | Exigir permissão nas operações administrativas de clientes do Sistema A | ACEITA — ajuste dos IDs commitado, aguardando push, CI e publicação | Usuário (push) | [T-0003](tarefas/T-0003-permissao-operacoes-clientes-sistema-a.md) |
+| T-0003 | Exigir permissão nas operações administrativas de clientes do Sistema A | CI VERDE — aguardando publicação guiada (phpMyAdmin e n8n) | Usuário + Claude | [T-0003](tarefas/T-0003-permissao-operacoes-clientes-sistema-a.md) |
 
 ## Fila (ainda sem briefing; ordem sugerida, sujeita à decisão do usuário)
 

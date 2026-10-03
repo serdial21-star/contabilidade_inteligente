@@ -2,7 +2,7 @@
 
 | Campo | Valor |
 |---|---|
-| Estado | ACEITA — ajuste dos IDs commitado, aguardando push, CI e publicação |
+| Estado | CI VERDE — aguardando publicação guiada (phpMyAdmin e n8n) |
 | Origem | Item 1 do QUADRO; auditoria de segurança de 01/10/2026, achado #3 (ALTA) |
 | Sistema | Sistema A (artefatos versionados em `docs/integration/system_a_client_management/`) |
 | Exige ADR | sim — `docs/adr/0018-autorizacao-por-permissao-clientes-sistema-a.md` (Proposta) |
@@ -569,3 +569,16 @@ publicação continua bloqueada até o CI verde.
 - "Aceito" do usuário recebido. Diff de produção relido antes do commit: idêntico ao revisado (script +51/−46, teste +33).
 - Commit único com o ajuste e estes registros (mensagem: `fix(ci): resolve seeded employee ids and label assertions in System A validator (T-0003)`).
 - Pendente: push pelo usuário; CI verde; publicação guiada no phpMyAdmin e no n8n.
+
+### [2026-10-02] Claude — CI verde (commit `7c92dea`, run 37022370184)
+
+Primeira execução completa do validador contra o MariaDB 11.8.9 descartável. Conferido no log, não só pelo código de saída:
+
+- testes Python: `515 passed`;
+- `CLIENT_MANAGEMENT_AUTHORIZATION_TESTS=PASS`, `CLIENT_MANAGEMENT_AUDIT_TESTS=PASS`, `CLIENT_MANAGEMENT_ROLLBACK=PASS`;
+- `pip-audit`: sem vulnerabilidades conhecidas;
+- varredura de segredos: canário e release `PASS`.
+
+As procedures das migrations 001–003, inclusive o rollback `003_down.sql`, foram executadas de verdade pela primeira vez. A condição técnica para publicar está cumprida.
+
+**Próximo passo:** publicação guiada, com o usuário executando e o Claude orientando: consultas somente leitura de pré-publicação (`verify.sql` e `SHOW GRANTS` do usuário do n8n), backup, `003_up.sql` no phpMyAdmin, importação dos workflows no n8n e teste guiado, incluindo conferir se a listagem real devolve o mesmo número de clientes da tabela.
