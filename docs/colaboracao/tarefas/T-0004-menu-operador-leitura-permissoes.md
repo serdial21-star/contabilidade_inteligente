@@ -2,7 +2,7 @@
 
 | Campo | Valor |
 |---|---|
-| Estado | IMPLEMENTADA PELO CLAUDE — aguardando aplicação no n8n e teste |
+| Estado | CONCLUÍDA — aplicada em 03/10/2026 |
 | Origem | QUADRO, fila item 15; teste da T-0003 em 03/10/2026 |
 | Sistema | Sistema A (artefato versionado em `docs/integration/system_a_permissions/`) |
 | Exige ADR | não |
@@ -62,3 +62,10 @@ Os Administradores também têm 40 linhas e provavelmente também recebem corpo 
 4. Salvar.
 
 **Teste:** entrar como Operador → menu aparece com os módulos liberados; execução do workflow em "Success"; resposta de `.../permissoes/funcionario` com `success: true` e `modulos`. Repetir como Administrador. Ao terminar, revogar a sessão de teste do Operador (o logout não revoga; fila item 17).
+
+### [2026-10-03] Claude — Aplicação confirmada e encerramento
+
+- O usuário informou que os três ajustes já tinham sido aplicados no workflow ativo e que o menu está funcionando. Não foi transcrito o status das execuções no n8n nem conferido, nó a nó, que o workflow ativo é idêntico ao commit `1672aae`; a evidência é funcional (menu do Operador exibido).
+- Pendências fora do escopo: fila, item 18 (endurecimento do workflow de permissões).
+
+**Estado: CONCLUÍDA.**
