@@ -1,0 +1,203 @@
+{
+  "updatedAt": "2026-03-19T18:08:39.296Z",
+  "createdAt": "2026-03-19T18:08:37.173Z",
+  "id": "hp9fYObtM_n8eSz5Vw_Er",
+  "name": "SERD_GERADOR_OBRIGACOES_AUTO_v1",
+  "description": null,
+  "active": true,
+  "isArchived": false,
+  "nodes": [
+    {
+      "parameters": {
+        "triggerTimes": {
+          "item": [
+            {
+              "mode": "custom",
+              "cronExpression": "5 6 * * *"
+            }
+          ]
+        }
+      },
+      "id": "47f7f600-cdb1-449c-a0ea-e129af689c39",
+      "name": "Cron - Diario 06:05",
+      "type": "n8n-nodes-base.cron",
+      "typeVersion": 1,
+      "position": [
+        16,
+        -96
+      ]
+    },
+    {
+      "parameters": {
+        "path": "admin-motor-obrigacoes-v1",
+        "responseMode": "lastNode",
+        "options": {}
+      },
+      "id": "94fb1d12-9b15-4a53-b656-dd3b3f8b19eb",
+      "name": "Webhook - Executar Manual",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [
+        16,
+        112
+      ],
+      "webhookId": "e789b344-a9a2-455b-9b90-90793c05b548"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO impostos_obrigacoes (\n    cliente_id,\n    tipo_imposto,\n    competencia,\n    data_vencimento,\n    valor,\n    status,\n    observacoes,\n    created_at,\n    updated_at,\n    registro_status,\n    origem_lancamento\n)\nSELECT\n    c.id AS cliente_id,\n    co.nome_obrigacao AS tipo_imposto,\n    DATE_FORMAT(CURDATE(), '%Y-%m') AS competencia,\n    STR_TO_DATE(\n        CONCAT(\n            DATE_FORMAT(CURDATE(), '%Y-%m-'),\n            LPAD(\n                LEAST(\n                    COALESCE(co.dia_vencimento, DAY(LAST_DAY(CURDATE()))),\n                    DAY(LAST_DAY(CURDATE()))\n                ),\n                2,\n                '0'\n            )\n        ),\n        '%Y-%m-%d'\n    ) AS data_vencimento,\n    0.00 AS valor,\n    'pendente' AS status,\n    CONCAT(\n        'Gerado automaticamente pela rotina. ',\n        'Categoria: ', COALESCE(co.categoria, ''),\n        ' | Esfera: ', COALESCE(co.esfera, ''),\n        ' | Área: ', COALESCE(co.area_responsavel, ''),\n        ' | Periodicidade: ', COALESCE(co.periodicidade, ''),\n        ' | Exige cliente: ', CASE WHEN COALESCE(co.exige_cliente, 0) = 1 THEN 'sim' ELSE 'nao' END,\n        ' | Dias antecedência: ', COALESCE(co.dias_antecedencia, 5)\n    ) AS observacoes,\n    NOW() AS created_at,\n    NOW() AS updated_at,\n    'Ativo' AS registro_status,\n    'rotina' AS origem_lancamento\nFROM clientes c\nINNER JOIN catalogo_obrigacoes co\n    ON COALESCE(co.ativo, 1) = 1\n   AND COALESCE(co.status_obrigacao, 'Ativa') = 'Ativa'\nWHERE c.status = 'Ativo'\n  AND LOWER(TRIM(COALESCE(co.periodicidade, ''))) IN (\n      'mensal',\n      'mensalmente',\n      'mes',\n      'mês'\n  )\n  AND co.dia_vencimento IS NOT NULL\n  AND NOT EXISTS (\n      SELECT 1\n      FROM impostos_obrigacoes io\n      WHERE io.cliente_id = c.id\n        AND io.tipo_imposto = co.nome_obrigacao\n        AND io.competencia = DATE_FORMAT(CURDATE(), '%Y-%m')\n        AND io.deleted_at IS NULL\n  );",
+        "options": {}
+      },
+      "id": "646ac1aa-51d8-4e8e-94e4-b950775c414f",
+      "name": "MySQL - Gerar Obrigacoes Mensais",
+      "type": "n8n-nodes-base.mySql",
+      "typeVersion": 2,
+      "position": [
+        368,
+        16
+      ],
+      "credentials": {
+        "mySql": {
+          "id": "A8EKwXIiVjrNd53S",
+          "name": "MySQL account 3"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "UPDATE impostos_obrigacoes\nSET status = 'vencido',\n    updated_at = NOW()\nWHERE status = 'pendente'\n  AND data_vencimento < CURDATE()\n  AND registro_status = 'Ativo'\n  AND deleted_at IS NULL;",
+        "options": {}
+      },
+      "id": "89894bde-68b0-4199-a7ae-92336e2ab1de",
+      "name": "MySQL - Marcar Vencidos",
+      "type": "n8n-nodes-base.mySql",
+      "typeVersion": 2,
+      "position": [
+        656,
+        16
+      ],
+      "credentials": {
+        "mySql": {
+          "id": "A8EKwXIiVjrNd53S",
+          "name": "MySQL account 3"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO logs_auditoria (\n    funcionario_id,\n    acao,\n    tabela_afetada,\n    registro_id,\n    detalhes,\n    ip_origem\n)\nSELECT\n    NULL,\n    'cron_obrigacoes_geracao_mensal',\n    'impostos_obrigacoes',\n    NULL,\n    CONCAT(\n        '{\"competencia\":\"', DATE_FORMAT(CURDATE(), '%Y-%m'),\n        '\",\"geradas_hoje\":',\n        (SELECT COUNT(*)\n         FROM impostos_obrigacoes x\n         WHERE x.competencia = DATE_FORMAT(CURDATE(), '%Y-%m')\n           AND x.origem_lancamento = 'rotina'\n           AND DATE(x.created_at) = CURDATE()\n           AND x.deleted_at IS NULL),\n        ',\"vencidas_ativas\":',\n        (SELECT COUNT(*)\n         FROM impostos_obrigacoes y\n         WHERE y.status = 'vencido'\n           AND y.registro_status = 'Ativo'\n           AND y.deleted_at IS NULL),\n        ',\"executado_em\":\"', NOW(), '\"}'\n    ),\n    'n8n CRON';",
+        "options": {}
+      },
+      "id": "f1d017ac-9a1c-47d1-ab87-e54fd5018a71",
+      "name": "MySQL - Gravar Log",
+      "type": "n8n-nodes-base.mySql",
+      "typeVersion": 2,
+      "position": [
+        960,
+        16
+      ],
+      "credentials": {
+        "mySql": {
+          "id": "A8EKwXIiVjrNd53S",
+          "name": "MySQL account 3"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT\n    DATE_FORMAT(CURDATE(), '%Y-%m') AS competencia,\n    (SELECT COUNT(*)\n     FROM impostos_obrigacoes a\n     WHERE a.competencia = DATE_FORMAT(CURDATE(), '%Y-%m')\n       AND a.origem_lancamento = 'rotina'\n       AND DATE(a.created_at) = CURDATE()\n       AND a.deleted_at IS NULL) AS geradas_hoje,\n    (SELECT COUNT(*)\n     FROM impostos_obrigacoes b\n     WHERE b.competencia = DATE_FORMAT(CURDATE(), '%Y-%m')\n       AND b.origem_lancamento = 'rotina'\n       AND b.registro_status = 'Ativo'\n       AND b.deleted_at IS NULL) AS total_rotina_competencia,\n    (SELECT COUNT(*)\n     FROM impostos_obrigacoes c\n     WHERE c.status = 'vencido'\n       AND c.registro_status = 'Ativo'\n       AND c.deleted_at IS NULL) AS total_vencidas_ativas,\n    NOW() AS executado_em;",
+        "options": {}
+      },
+      "id": "46bba748-1de0-400a-bd06-fb345d8789ab",
+      "name": "MySQL - Resumo Execucao",
+      "type": "n8n-nodes-base.mySql",
+      "typeVersion": 2,
+      "position": [
+        1264,
+        16
+      ],
+      "credentials": {
+        "mySql": {
+          "id": "A8EKwXIiVjrNd53S",
+          "name": "MySQL account 3"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Cron - Diario 06:05": {
+      "main": [
+        [
+          {
+            "node": "MySQL - Gerar Obrigacoes Mensais",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Webhook - Executar Manual": {
+      "main": [
+        [
+          {
+            "node": "MySQL - Gerar Obrigacoes Mensais",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "MySQL - Gerar Obrigacoes Mensais": {
+      "main": [
+        [
+          {
+            "node": "MySQL - Marcar Vencidos",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "MySQL - Marcar Vencidos": {
+      "main": [
+        [
+          {
+            "node": "MySQL - Gravar Log",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "MySQL - Gravar Log": {
+      "main": [
+        [
+          {
+            "node": "MySQL - Resumo Execucao",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": false
+  },
+  "staticData": null,
+  "meta": {
+    "templateCredsSetupCompleted": true
+  },
+  "pinData": {},
+  "versionId": "a64e1def-9ee9-42b0-9bc1-50367e4d9085",
+  "activeVersionId": "a64e1def-9ee9-42b0-9bc1-50367e4d9085",
+  "versionCounter": 6,
+  "triggerCount": 2,
+  "tags": []
+}

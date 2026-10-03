@@ -1,0 +1,476 @@
+{
+  "updatedAt": "2026-03-17T20:16:33.082Z",
+  "createdAt": "2026-03-17T12:41:37.479Z",
+  "id": "7Qy23AfPzYZGOm7aNJtoW",
+  "name": "API Lovable - Apuracao ICMS e CMV v9 (DocumentID Corrigido)",
+  "description": null,
+  "active": true,
+  "isArchived": false,
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "ferramentas-ia/apuracao-icms",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "e96602d7-4906-49f1-a655-8f0dd5092093",
+      "name": "Webhook Lovable",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [
+        -208,
+        -272
+      ],
+      "webhookId": "b9f4b421-c36d-4a42-a6b9-e7a537a0263a"
+    },
+    {
+      "parameters": {
+        "jsCode": "if (!$input.item.binary) throw new Error('ERRO: Nenhum arquivo foi recebido no Webhook.');\n\nconst binaryKeys = Object.keys($input.item.binary || {});\nif (!binaryKeys.length) throw new Error('ERRO: Nenhum binario encontrado no item de entrada.');\n\nconst nomeDoCampo = binaryKeys[0];\nconst binInfo = $input.item.binary[nomeDoCampo] || {};\nconst nomeArquivo = binInfo.fileName || '';\nconst buffer = await this.helpers.getBinaryDataBuffer(0, nomeDoCampo);\n\nlet csvString = '';\ntry {\n  csvString = buffer.toString('utf8');\n  if ((csvString.match(/\\uFFFD/g) || []).length > 5) {\n    csvString = buffer.toString('latin1');\n  }\n} catch (e) {\n  csvString = buffer.toString('latin1');\n}\n\ncsvString = csvString.replace(/^\\uFEFF+/, '');\nconst linhas = csvString.split(/\\r?\\n/);\n\nconst MESES_NUM = {\n  1: 'JANEIRO', 2: 'FEVEREIRO', 3: 'MARCO', 4: 'ABRIL',\n  5: 'MAIO', 6: 'JUNHO', 7: 'JULHO', 8: 'AGOSTO',\n  9: 'SETEMBRO', 10: 'OUTUBRO', 11: 'NOVEMBRO', 12: 'DEZEMBRO'\n};\n\nconst MARCO_KEY = 'MAR\\u00C7O';\n\nconst criarLinhaVazia = (cfop) => ({\n  CFOP: cfop, JANEIRO: 0, FEVEREIRO: 0, [MARCO_KEY]: 0, ABRIL: 0,\n  MAIO: 0, JUNHO: 0, JULHO: 0, AGOSTO: 0, SETEMBRO: 0,\n  OUTUBRO: 0, NOVEMBRO: 0, DEZEMBRO: 0\n});\n\nconst parseValorBR = (valor) => {\n  if (valor === null || valor === undefined) return 0;\n  let s = String(valor).trim().replace(/\\s/g, '');\n  if (!s) return 0;\n  const hasComma = s.includes(',');\n  const hasDot = s.includes('.');\n  if (hasComma && hasDot) {\n    if (s.lastIndexOf(',') > s.lastIndexOf('.')) {\n      s = s.replace(/\\./g, '').replace(',', '.');\n    } else {\n      s = s.replace(/,/g, '');\n    }\n  } else if (hasComma) {\n    s = s.replace(/\\./g, '').replace(',', '.');\n  }\n  s = s.replace(/[^\\d.-]/g, '');\n  const n = parseFloat(s);\n  return Number.isFinite(n) ? n : 0;\n};\n\nconst detectarDelimitador = (linhas) => {\n  const amostra = linhas.slice(0, Math.min(15, linhas.length));\n  let scorePV = 0, scoreVirg = 0;\n  for (const l of amostra) {\n    scorePV += (l.match(/;/g) || []).length;\n    scoreVirg += (l.match(/,/g) || []).length;\n  }\n  return scorePV >= scoreVirg ? ';' : ',';\n};\n\nconst delimiter = detectarDelimitador(linhas);\n\nconst resumo = {};\nconst anosEncontrados = new Set();\nlet mesAtual = null;\nlet emSecaoDados = false;\n\nconst reSecao = /(?:ENTRADAS|SA[I\\u00CDIDAS]DAS)\\s+(\\d{1,2})\\/(\\d{4})/i;\nconst reCfopHeader = /^CFOP[;,]/;\nconst reParar = /^(Subtotais|Total\\b|1\\.\\d{2}\\s|2\\.\\d{2}\\s|3\\.\\d{2}\\s|5\\.\\d{2}\\s|6\\.\\d{2}\\s|7\\.\\d{2}\\s)/i;\n\nfor (const linhaRaw of linhas) {\n  const linha = linhaRaw.trim();\n  if (!linha) continue;\n\n  const mSecao = linha.match(reSecao);\n  if (mSecao) {\n    mesAtual = parseInt(mSecao[1], 10);\n    anosEncontrados.add(parseInt(mSecao[2], 10));\n    emSecaoDados = false;\n    continue;\n  }\n\n  if (reCfopHeader.test(linha)) {\n    emSecaoDados = true;\n    continue;\n  }\n\n  if (reParar.test(linha)) {\n    emSecaoDados = false;\n    continue;\n  }\n\n  if (!emSecaoDados || mesAtual === null) continue;\n\n  const cols = linhaRaw.split(delimiter);\n  const cfop = (cols[0] || '').trim().replace(/\\D/g, '');\n  if (!cfop || cfop.length !== 4) continue;\n\n  const vrContabil = parseValorBR(cols[1]);\n\n  if (!resumo[cfop]) resumo[cfop] = criarLinhaVazia(cfop);\n\n  let nomeMes = MESES_NUM[mesAtual];\n  if (nomeMes === 'MARCO') nomeMes = MARCO_KEY;\n\n  if (nomeMes) {\n    resumo[cfop][nomeMes] = Number((resumo[cfop][nomeMes] + vrContabil).toFixed(2));\n  }\n}\n\nif (anosEncontrados.size > 1) {\n  throw new Error(`ERRO: O arquivo contem dados de anos diferentes (${Array.from(anosEncontrados).sort().join(', ')}). A planilha suporta apenas 1 ano por vez.`);\n}\n\nconst listaAtualizacao = Object.keys(resumo)\n  .sort((a, b) => Number(a) - Number(b))\n  .map(cfop => ({\n    CFOP: resumo[cfop].CFOP,\n    JANEIRO: Number(resumo[cfop].JANEIRO.toFixed(2)),\n    FEVEREIRO: Number(resumo[cfop].FEVEREIRO.toFixed(2)),\n    [MARCO_KEY]: Number(resumo[cfop][MARCO_KEY].toFixed(2)),\n    ABRIL: Number(resumo[cfop].ABRIL.toFixed(2)),\n    MAIO: Number(resumo[cfop].MAIO.toFixed(2)),\n    JUNHO: Number(resumo[cfop].JUNHO.toFixed(2)),\n    JULHO: Number(resumo[cfop].JULHO.toFixed(2)),\n    AGOSTO: Number(resumo[cfop].AGOSTO.toFixed(2)),\n    SETEMBRO: Number(resumo[cfop].SETEMBRO.toFixed(2)),\n    OUTUBRO: Number(resumo[cfop].OUTUBRO.toFixed(2)),\n    NOVEMBRO: Number(resumo[cfop].NOVEMBRO.toFixed(2)),\n    DEZEMBRO: Number(resumo[cfop].DEZEMBRO.toFixed(2))\n  }));\n\nif (!listaAtualizacao.length) {\n  throw new Error(`Nenhum dado valido foi consolidado. Arquivo: ${nomeArquivo}`);\n}\n\nreturn [{\n  json: {\n    listaAtualizacao,\n    totalCFOPs: listaAtualizacao.length\n  }\n}];"
+      },
+      "id": "c1e1e655-4d8f-48b7-a6ff-1bd8a18bd88e",
+      "name": "1. Extrator e Consolidador",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        32,
+        -272
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "copy",
+        "fileId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "1SqY4Fz3AUuS-CoCpYQ5h7xwvuzOLc9vJ3ND7l7l1pYc"
+        },
+        "sameFolder": false,
+        "driveId": {
+          "__rl": true,
+          "mode": "list",
+          "value": "My Drive"
+        },
+        "folderId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "1iBVlj6BruRP7wTnSddYJW15PqBTUbRdg"
+        },
+        "options": {}
+      },
+      "id": "45d1f671-5c4b-4f36-85ae-76f0905ec05e",
+      "name": "2. Copiar Planilha Modelo",
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
+      "position": [
+        256,
+        -272
+      ],
+      "credentials": {
+        "googleDriveOAuth2Api": {
+          "id": "Eq6ojZRPVsKeqAIF",
+          "name": "Google Drive account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "amount": 3
+      },
+      "id": "2f56604f-5f4a-43fc-a055-203e3a29b920",
+      "name": "3. Aguardar Propagacao",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        480,
+        -272
+      ],
+      "webhookId": "0cb27147-310d-4626-b364-a21fe3c7bd7e"
+    },
+    {
+      "parameters": {
+        "jsCode": "const lista = $('1. Extrator e Consolidador').first().json.listaAtualizacao;\nconst spreadsheetId = $('2. Copiar Planilha Modelo').first().json.id;\nif (!spreadsheetId) throw new Error('ID da copia da planilha nao encontrado.');\nreturn lista.map(item => ({ json: { spreadsheetId, ...item } }));"
+      },
+      "id": "76c35de8-3ff2-4ec3-bfbb-f741f78418a9",
+      "name": "4. Preparar Itens para Sheets",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        672,
+        -272
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "appendOrUpdate",
+        "documentId": {
+          "__rl": true,
+          "value": "={{ $json.spreadsheetId }}",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "mode": "name",
+          "value": "RESUMO CFOP"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "CFOP": "={{ $json.CFOP }}",
+            " JANEIRO": "={{ $json.JANEIRO }}",
+            " FEVEREIRO": "={{ $json.FEVEREIRO }}",
+            " MARÇO": "={{ $json[\"MARÇO\"] }}",
+            " ABRIL": "={{ $json.ABRIL }}",
+            " MAIO": "={{ $json.MAIO }}",
+            " JUNHO": "={{ $json.JUNHO }}",
+            " JULHO": "={{ $json.JULHO }}",
+            " AGOSTO": "={{ $json.AGOSTO }}",
+            " SETEMBRO": "={{ $json.SETEMBRO }}",
+            " OUTUBRO": "={{ $json.OUTUBRO }}",
+            " NOVEMBRO": "={{ $json.NOVEMBRO }}",
+            " DEZEMBRO": "={{ $json.DEZEMBRO }}"
+          },
+          "matchingColumns": [
+            "CFOP"
+          ],
+          "schema": [
+            {
+              "id": "CFOP",
+              "displayName": "CFOP",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": " JANEIRO",
+              "displayName": " JANEIRO",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": " FEVEREIRO",
+              "displayName": " FEVEREIRO",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": " MARÇO",
+              "displayName": " MARÇO",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": " ABRIL",
+              "displayName": " ABRIL",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": " MAIO",
+              "displayName": " MAIO",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": " JUNHO",
+              "displayName": " JUNHO",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": " JULHO",
+              "displayName": " JULHO",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": " AGOSTO",
+              "displayName": " AGOSTO",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": " SETEMBRO",
+              "displayName": " SETEMBRO",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": " OUTUBRO",
+              "displayName": " OUTUBRO",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": " NOVEMBRO",
+              "displayName": " NOVEMBRO",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": " DEZEMBRO",
+              "displayName": " DEZEMBRO",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "TOTAL",
+              "displayName": "TOTAL",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "DESCRIÇÃO",
+              "displayName": "DESCRIÇÃO",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "VALOR",
+              "displayName": "VALOR",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false,
+          "valueMode": "any",
+          "columnToMatchOn": "CFOP",
+          "valuesToSend": {
+            "values": [
+              {
+                "column": "CFOP",
+                "value": "={{ $json.CFOP }}"
+              },
+              {
+                "column": "JANEIRO",
+                "value": "={{ $json.JANEIRO }}"
+              },
+              {
+                "column": "FEVEREIRO",
+                "value": "={{ $json.FEVEREIRO }}"
+              },
+              {
+                "column": "MARÇO",
+                "value": "={{ $json[\"MARÇO\"] }}"
+              },
+              {
+                "column": "ABRIL",
+                "value": "={{ $json.ABRIL }}"
+              },
+              {
+                "column": "MAIO",
+                "value": "={{ $json.MAIO }}"
+              },
+              {
+                "column": "JUNHO",
+                "value": "={{ $json.JUNHO }}"
+              },
+              {
+                "column": "JULHO",
+                "value": "={{ $json.JULHO }}"
+              },
+              {
+                "column": "AGOSTO",
+                "value": "={{ $json.AGOSTO }}"
+              },
+              {
+                "column": "SETEMBRO",
+                "value": "={{ $json.SETEMBRO }}"
+              },
+              {
+                "column": "OUTUBRO",
+                "value": "={{ $json.OUTUBRO }}"
+              },
+              {
+                "column": "NOVEMBRO",
+                "value": "={{ $json.NOVEMBRO }}"
+              },
+              {
+                "column": "DEZEMBRO",
+                "value": "={{ $json.DEZEMBRO }}"
+              }
+            ]
+          }
+        },
+        "options": {}
+      },
+      "id": "1824eb41-a688-47b5-8ff5-ec81d1672dc2",
+      "name": "5. Preencher Aba RESUMO CFOP",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4,
+      "position": [
+        896,
+        -272
+      ],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "dIxdPECTdOJGTLx9",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={\n  \"success\": true,\n  \"url\": \"https://docs.google.com/spreadsheets/d/{{ $('2. Copiar Planilha Modelo').first().json.id }}\"\n}",
+        "options": {}
+      },
+      "id": "b90118e9-006d-4948-8944-9e7635c81b9b",
+      "name": "8. Devolver pro Lovable",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        1152,
+        -272
+      ],
+      "executeOnce": true
+    }
+  ],
+  "connections": {
+    "Webhook Lovable": {
+      "main": [
+        [
+          {
+            "node": "1. Extrator e Consolidador",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "1. Extrator e Consolidador": {
+      "main": [
+        [
+          {
+            "node": "2. Copiar Planilha Modelo",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "2. Copiar Planilha Modelo": {
+      "main": [
+        [
+          {
+            "node": "3. Aguardar Propagacao",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "3. Aguardar Propagacao": {
+      "main": [
+        [
+          {
+            "node": "4. Preparar Itens para Sheets",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "4. Preparar Itens para Sheets": {
+      "main": [
+        [
+          {
+            "node": "5. Preencher Aba RESUMO CFOP",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "5. Preencher Aba RESUMO CFOP": {
+      "main": [
+        [
+          {
+            "node": "8. Devolver pro Lovable",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": false
+  },
+  "staticData": null,
+  "meta": {
+    "templateCredsSetupCompleted": true
+  },
+  "pinData": {},
+  "versionId": "4ed05e35-69ef-4a8e-8e88-89e430327781",
+  "activeVersionId": "4ed05e35-69ef-4a8e-8e88-89e430327781",
+  "versionCounter": 244,
+  "triggerCount": 1,
+  "tags": []
+}

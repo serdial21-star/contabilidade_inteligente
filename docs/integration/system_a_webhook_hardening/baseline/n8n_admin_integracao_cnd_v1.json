@@ -1,0 +1,131 @@
+{
+  "updatedAt": "2026-03-19T21:59:10.756Z",
+  "createdAt": "2026-03-19T21:59:10.756Z",
+  "id": "h-NPhnwFz8zImAyYRRHDR",
+  "name": "API - Receber Extração CND (Google Colab)",
+  "description": null,
+  "active": true,
+  "isArchived": false,
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "admin/integracao-cnd-v1",
+        "responseMode": "lastNode",
+        "options": {}
+      },
+      "id": "17562506-e912-448a-b15b-b535e50ba8cc",
+      "name": "Webhook - Integracao Colab",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [
+        0,
+        -80
+      ],
+      "webhookId": "4120ba85-eb05-4954-a181-2ad2bf4b2721"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT id FROM clientes WHERE cnpj_cpf = '{{$json.body.cnpj}}' LIMIT 1;",
+        "options": {}
+      },
+      "id": "c8f2d453-dd80-4a1a-8cfa-f836fccbb236",
+      "name": "MySQL - Buscar Cliente por CNPJ",
+      "type": "n8n-nodes-base.mySql",
+      "typeVersion": 2.4,
+      "position": [
+        256,
+        -80
+      ],
+      "credentials": {
+        "mySql": {
+          "id": "A8EKwXIiVjrNd53S",
+          "name": "MySQL account 3"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const b = $node[\"Webhook - Integracao Colab\"].json.body;\nconst cliente = $json.id;\n\nreturn [{\n  json: {\n    query: `INSERT INTO certidoes_clientes (cliente_id, tipo_id, data_emissao, data_vencimento, status, observacoes) \n            VALUES (${cliente}, ${b.tipo_id}, '${b.data_emissao}', '${b.data_vencimento}', '${b.status}', 'Extraído via IA Gemini')\n            ON DUPLICATE KEY UPDATE data_vencimento = '${b.data_vencimento}', status = '${b.status}', updated_at = NOW();`\n  }\n}];"
+      },
+      "id": "807c9462-cb60-481f-840a-725d4ba9e235",
+      "name": "Code - Montar Upsert CND",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        512,
+        -80
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "={{$json.query}}",
+        "options": {}
+      },
+      "id": "ef2e15fd-2236-461f-9398-167c89153f4a",
+      "name": "MySQL - Salvar CND",
+      "type": "n8n-nodes-base.mySql",
+      "typeVersion": 2.4,
+      "position": [
+        752,
+        -80
+      ],
+      "credentials": {
+        "mySql": {
+          "id": "A8EKwXIiVjrNd53S",
+          "name": "MySQL account 3"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Webhook - Integracao Colab": {
+      "main": [
+        [
+          {
+            "node": "MySQL - Buscar Cliente por CNPJ",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "MySQL - Buscar Cliente por CNPJ": {
+      "main": [
+        [
+          {
+            "node": "Code - Montar Upsert CND",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code - Montar Upsert CND": {
+      "main": [
+        [
+          {
+            "node": "MySQL - Salvar CND",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": false
+  },
+  "staticData": null,
+  "meta": null,
+  "pinData": {},
+  "versionId": "02e76734-1bbe-4110-87df-86d98b1f1934",
+  "activeVersionId": "02e76734-1bbe-4110-87df-86d98b1f1934",
+  "versionCounter": 5,
+  "triggerCount": 1,
+  "tags": []
+}

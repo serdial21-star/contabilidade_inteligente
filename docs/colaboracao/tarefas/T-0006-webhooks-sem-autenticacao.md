@@ -2,7 +2,7 @@
 
 | Campo | Valor |
 |---|---|
-| Estado | DIAGNÓSTICO — aguardando decisões do usuário |
+| Estado | BRIEFING — aguardando aprovação do usuário |
 | Origem | QUADRO, fila item 19 (SG-10); inventário de 03/10/2026 |
 | Sistema | Sistema A (n8n) |
 | Exige ADR | não, para a contenção; a decisão de manter ou proteger cada endpoint é do usuário |
@@ -87,3 +87,70 @@ Aprova a direção, inclusive desativar `admin/tasks` e remover só o webhook do
 - **Item 1 — acesso ao cliente é lacuna de política, não regra existente:** a autorização vigente (ADR 0018, T-0003) é por módulo/ação; nenhuma operação administrativa hoje restringe funcionário por cliente via `permissoes_funcionario_clientes`, e o significado de "nenhuma linha" nessa tabela não está definido. Impor isso só no `upload-xml` seria inventar regra e criaria comportamento inconsistente entre telas. Proposta: nesta tarefa, sessão + permissão do módulo + cliente existente; acesso por cliente vira decisão do usuário (e, se aprovado, ADR própria para todo o painel).
 - **Acréscimo:** os workflows tocados devem passar a usar consultas parametrizadas (o `integracao-cnd` interpola `cnpj` no SQL).
 - **Contenção imediata possível sem implementação:** desativar `admin/tasks` (aprovado, reversível).
+
+### [2026-10-03] Usuário
+- "aprovo formalmente desativar" — aprova desativar `admin/tasks` e remover somente o webhook do motor de obrigações (o cron diário permanece). Substitui, para esses dois, a decisão anterior "todos serão utilizados".
+- Concorda com as demais orientações: fluxo normal do protocolo (Codex implementa, Claude revisa); acesso por cliente fora desta tarefa, como decisão futura para todo o painel; demais pontos da análise do Claude.
+- Matriz de permissões (consulta agregada, primeiras 25 de 40 linhas): o módulo `ferramentas_ia` existe; `ferramentas_ia/criar` liberado para os 7 funcionários.
+
+---
+
+## 1. Briefing (Claude)
+
+### [2026-10-03] Claude — Briefing para o Codex
+
+**Problema.** Ver Diagnóstico e Cruzamento acima. Endpoints do Sistema A que produzem efeito ou expõem dados sem autenticação/autorização no servidor, sessão revogada aceita em `portal/honorarios-v2`, função de IA consumível com a chave pública e proxy sem lista de destinos.
+
+**Objetivo.** Toda chamada a esses endpoints passa a exigir, no servidor e antes de qualquer efeito, a credencial adequada (sessão de funcionário viva e não revogada com permissão de módulo; sessão de cliente viva e não revogada; ou segredo de integração), e os proxies só encaminham destinos previamente listados.
+
+**Base versionada.**
+- Workflows como estão hoje em produção (exportação de 03/10/2026, sem o campo `shared` com dados do dono da conta): `docs/integration/system_a_webhook_hardening/baseline/`.
+- Inventário do site: `docs/integration-input/INVENTARIO_LOVABLE_2026-10-03.md`.
+- Padrões a seguir: T-0003 (`docs/integration/system_a_client_management/`, ADR 0018) e T-0005 (`docs/integration/system_a_session_logout/`).
+
+**Escopo — dentro.** Artefatos novos em `docs/integration/system_a_webhook_hardening/`:
+1. **Migration `005_up.sql`/`005_down.sql`** com uma autorização genérica de funcionário por módulo/ação para uso fora de clientes (não alterar as procedures da T-0003 já publicadas). Mesmas regras da D1 da T-0003: sessão com `revogado_em IS NULL` e `expira_em > UTC_TIMESTAMP()`, funcionário `Ativo`, cargo `Administrador`/`Admin` (sem diferenciar maiúsculas, sem espaços nas pontas) sempre autorizado, demais só com `permitido = 1` para `(modulo, acao)`; sem linha, `permitido = 0`, cargo vazio ou desconhecido → negado. `SQL SECURITY INVOKER`, token validado por formato (`^[0-9A-Za-z]{20,128}$`), hash comparado com a colação da coluna (lição da T-0005), resultado em uma linha (`success`, `result` ∈ `authorized`/`unauthorized`/`forbidden`, `funcionario_id`), auditoria mínima da negação `forbidden` sem token nem hash, com nome de ação próprio (não reutilizar `client_action_forbidden`). Rollback remove só os objetos da 005. `verify_005.sql` somente leitura.
+2. **`admin/upload-xml`** (a partir de `baseline/n8n_admin_upload_xml_v7.json`): primeiro passo chama a autorização com módulo `ferramentas_ia` e ação `criar`; `unauthorized` → 401, `forbidden` → 403, sem tocar Drive nem banco. `cliente_id` precisa ser inteiro positivo de cliente existente (senão 400/404 sem efeito); ele não autoriza a operação. Todas as consultas parametrizadas (`queryReplacement`), inclusive a gravação em `processamento_xml_nfe`. CORS restrito a `https://serdial21.com`.
+3. **`ferramentas-ia/apuracao-icms`** (a partir de `baseline/n8n_ferramentas_ia_apuracao_icms_v9.json`): mesma autorização (`ferramentas_ia`, `criar`) antes de qualquer operação no Drive/Sheets; o token chega como `Authorization: Bearer` (a função `proxy-file-upload` converte o `x-app-token`).
+4. **`portal/honorarios-v2`** (a partir de `baseline/n8n_portal_honorarios_v2.json`): a validação da sessão de cliente passa a exigir `revogado_em IS NULL`; o `cliente_id` continua vindo só da sessão; consultas parametrizadas; CORS restrito.
+5. **`admin/integracao-cnd-v1`** (a partir de `baseline/n8n_admin_integracao_cnd_v1.json`): autenticação do próprio nó Webhook por **Header Auth** com credencial do n8n (cabeçalho com nome definido no artefato; valor nunca versionado), de modo que a rejeição ocorra antes de qualquer nó; consultas parametrizadas (hoje `cnpj` é interpolado); CNPJ tratado como string, preservando zeros à esquerda.
+6. **Motor de obrigações** (a partir de `baseline/n8n_gerador_obrigacoes_auto_v1.json`): remover o nó "Webhook - Executar Manual" e sua conexão; nada mais muda. Não alterar fuso: o valor de `GENERIC_TIMEZONE` do container será informado pelo usuário e registrado; se divergir do esperado, é decisão do usuário.
+7. **Prompt para o Lovable** (`LOVABLE_PROMPT.md`):
+   - `ai-analyst`: o chamador passa a enviar `x-app-token` com `admin_auth_token` (como `sistema-b-bridge-token`); a função valida a sessão e a permissão `ferramentas_ia`/`criar` no servidor antes de chamar o gateway de IA (modelo: `client-logo`, que consulta `admin/permissoes/funcionario`; cargo Administrador/Admin autorizado), e responde 401/403 sem chamar a IA;
+   - `proxy-webhook`: lista exata de **path + método** permitidos, igual ao conjunto de chamadas via proxy do inventário; destino montado no servidor a partir de base constante; qualquer outro → 404 sem encaminhar; manter `verify_jwt = false` (o `Authorization` leva o token do Serdial21, não um JWT do Supabase) — registrar a justificativa;
+   - `proxy-file-upload` e `proxy-document-download`: **verificar** e, só se necessário, ajustar para que o destino seja base constante + path exato + método, sem aceitar URL do cliente;
+   - remover a busca "legado" da Biblioteca (`listar-arquivos`);
+   - `HelpdeskTicketForm`: sem usuário autenticado, bloquear o envio com mensagem para entrar no sistema; nunca usar e-mail fixo ou outra identidade.
+8. **Trecho para o Google Colab** (`COLAB_SNIPPET.md`): enviar o cabeçalho de integração lendo o valor dos Secrets do Colab (`google.colab.userdata`), sem valor no notebook.
+9. **Runbook** `docs/integration/SYSTEM_A_WEBHOOK_HARDENING_RUNBOOK.md` com publicação e rollback (abaixo).
+
+**Escopo — fora.** Item 20 (endpoints inexistentes); acesso por cliente (`permissoes_funcionario_clientes`); demais workflows já autenticados; troca de `NOW()` nos workflows não tocados; logins (item 7); `admin/tasks` (só desativação, ação do usuário); bucket `client-logos`.
+
+**Restrições.** `AGENTS.md` 6.4 (autorização no servidor; ID não autoriza), 6.7 (efeito e auditoria na mesma transação; nada de efeito antes da autorização), 6.9 (nenhum segredo versionado), 6.10; ADR 0018 (D1 e fail-closed); OWASP Authorization Cheat Sheet (verificação no servidor a cada requisição) e OWASP SSRF Prevention Cheat Sheet (lista de destinos e URL montada no servidor) — citar data de acesso nos artefatos.
+
+**Critérios de aceite.**
+1. Sem token, token malformado, sessão inexistente, expirada ou revogada → 401 em `upload-xml` e `apuracao-icms`, sem nenhum nó de Drive, Sheets ou banco executado depois da autorização.
+2. Funcionário ativo sem `ferramentas_ia`/`criar` → 403 sem efeito, com auditoria da negação; Administrador/Admin → autorizado.
+3. `upload-xml` com `cliente_id` inválido ou inexistente → erro sem efeito.
+4. `honorarios-v2` recusa sessão de cliente revogada; o cliente consultado é sempre o da sessão.
+5. `integracao-cnd-v1` sem o cabeçalho ou com valor errado → rejeitado pelo n8n antes de qualquer nó.
+6. Motor: só o webhook foi removido; o cron e os nós SQL estão idênticos ao baseline.
+7. Nenhuma consulta dos workflows alterados interpola valor vindo da requisição.
+8. Nenhum segredo, token, e-mail real ou dado de cliente nos artefatos; `saveDataSuccessExecution`/`saveDataErrorExecution = none`; workflows exportados inativos e sem credenciais.
+9. Rollback da 005 remove só seus objetos.
+
+**Testes exigidos.**
+- Validador MariaDB do CI (estender o existente): autorização genérica com Administrador, Admin com espaços, Operador com e sem permissão, `permitido = 0`, sem linha, cargo vazio/desconhecido, funcionário inativo, sessão expirada, revogada, inexistente e token malformado; auditoria só na negação `forbidden`, sem token/hash; rollback.
+- Testes estáticos dos JSONs (como `tests/unit/test_system_a_*`): ordem dos nós (autorização antes de qualquer efeito), mapeamento 401/403, parâmetros sem interpolação, Header Auth no CND, ausência do webhook no motor com o resto idêntico ao baseline, CORS sem `*`, sem retenção, sem credenciais.
+- Testes do prompt/snippet: presença das regras obrigatórias (lista path+método, 401/403 antes da IA, bloqueio sem usuário, segredo lido de Secrets).
+
+**Riscos.**
+- Funcionário que usa as ferramentas sem `ferramentas_ia`/`criar` perde acesso — hoje os 7 têm.
+- A troca do CND exige publicar o workflow e atualizar o Colab juntos; entre um e outro as gravações do Colab falham (sem perda: o Colab pode reenviar).
+- A lista do `proxy-webhook` pode bloquear uma chamada que o inventário não captou: testar todas as telas depois.
+- Os endpoints do item 20 continuam inexistentes; não incluí-los na lista não muda o comportamento atual (já falham).
+
+**Ações do usuário.**
+- Já: desativar "Serdial21 - Admin Tasks Kanban v1.0" (renomear com "(DESATIVADO 2026-10-03)"); informar `docker exec n8n-n8n-1 printenv GENERIC_TIMEZONE TZ`.
+- Depois do CI verde e do aceite: publicação conforme o runbook — `verify_005` → backup → `005_up` → workflows (honorários, upload-xml, apuração, motor) → credencial Header Auth + workflow CND + Secret do Colab, juntos → Lovable (revisar o diff) → teste de todas as telas do painel e do portal.
+- Rollback por peça: reativar o workflow anterior (renomeado, não apagado); `005_down.sql`; reverter publicação no Lovable.
