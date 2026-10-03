@@ -2,7 +2,7 @@
 
 | Campo | Valor |
 |---|---|
-| Estado | BRIEFING — aguardando aprovação do usuário |
+| Estado | APROVADA — aguardando implementação pelo Codex |
 | Origem | QUADRO, fila item 19 (SG-10); inventário de 03/10/2026 |
 | Sistema | Sistema A (n8n) |
 | Exige ADR | não, para a contenção; a decisão de manter ou proteger cada endpoint é do usuário |
@@ -154,3 +154,16 @@ Aprova a direção, inclusive desativar `admin/tasks` e remover só o webhook do
 - Já: desativar "Serdial21 - Admin Tasks Kanban v1.0" (renomear com "(DESATIVADO 2026-10-03)"); informar `docker exec n8n-n8n-1 printenv GENERIC_TIMEZONE TZ`.
 - Depois do CI verde e do aceite: publicação conforme o runbook — `verify_005` → backup → `005_up` → workflows (honorários, upload-xml, apuração, motor) → credencial Header Auth + workflow CND + Secret do Colab, juntos → Lovable (revisar o diff) → teste de todas as telas do painel e do portal.
 - Rollback por peça: reativar o workflow anterior (renomeado, não apagado); `005_down.sql`; reverter publicação no Lovable.
+
+---
+
+## 2. Decisões do usuário (continuação)
+
+### [2026-10-03] Usuário
+- "aprovo o briefing da T-0006" — inclui a exigência de `ferramentas_ia`/`criar` para executar as três ferramentas de IA.
+
+---
+
+## 3. Implementação (Codex)
+
+(aguardando "execute a tarefa T-0006")
