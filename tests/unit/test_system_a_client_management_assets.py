@@ -121,6 +121,20 @@ def test_list_workflow_returns_all_statuses_and_display_fields() -> None:
     assert 'MIN(e.email) AS email' not in procedure
 
 
+def test_list_workflow_ignores_call_status_packet() -> None:
+    # O CALL devolve, depois do result set, um pacote de status sem is_meta;
+    # tratá-lo como cliente gerou uma linha vazia na publicação de 03/10/2026.
+    workflow = _workflow(LIST_WORKFLOW)
+    code = next(
+        node['parameters']['jsCode']
+        for node in workflow['nodes']
+        if node['name'] == 'Normalizar Resultado'
+    )
+    assert "Number(value.is_meta || 0) === 0" not in code
+    assert "hasOwnProperty.call(value, 'is_meta') && Number(value.is_meta) === 0" in code
+    assert 'value.id != null' in code
+
+
 def test_edit_migration_authenticates_actor_and_handles_nullable_status() -> None:
     migration = EDIT_UP.read_text(encoding='utf-8')
     procedure = migration.split('CREATE PROCEDURE sp_admin_cliente_update', 1)[1]

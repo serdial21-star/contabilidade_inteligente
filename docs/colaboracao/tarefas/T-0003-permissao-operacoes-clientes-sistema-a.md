@@ -582,3 +582,39 @@ Primeira execução completa do validador contra o MariaDB 11.8.9 descartável. 
 As procedures das migrations 001–003, inclusive o rollback `003_down.sql`, foram executadas de verdade pela primeira vez. A condição técnica para publicar está cumprida.
 
 **Próximo passo:** publicação guiada, com o usuário executando e o Claude orientando: consultas somente leitura de pré-publicação (`verify.sql` e `SHOW GRANTS` do usuário do n8n), backup, `003_up.sql` no phpMyAdmin, importação dos workflows no n8n e teste guiado, incluindo conferir se a listagem real devolve o mesmo número de clientes da tabela.
+
+### [2026-10-03] Claude — Pré-publicação conferida (verify.sql antes da 003, transcrito do phpMyAdmin)
+
+`verify.sql` executado em produção **antes** da 003, de propósito, como foto de referência. Resultado:
+
+- colação padrão do schema `utf8mb4_unicode_ci`; `funcionarios.cargo/status`, `permissoes_funcionario_modulos.modulo/acao` e `security_sessoes_funcionarios.token_hash` todas `utf8mb4_unicode_ci` — sem risco de erro 1267 nas variáveis das procedures;
+- `documento_fiscal_canonico` (varchar(20), STORED GENERATED) e `uq_clientes_documento_fiscal_canonico` presentes; `documentos_duplicados = 0`;
+- 5 procedures presentes, todas INVOKER; `sp_admin_client_authorize` e `sp_admin_cliente_list` ausentes, como esperado (ambas nascem na 003);
+- `permissoes_funcionario_modulos`: estrutura e índices idênticos ao diagnóstico de 01/10;
+- `SHOW GRANTS` de `u621451815_serdial21user@127.0.0.1`: `ALL PRIVILEGES ON u621451815_serdial21.*`. O usuário da credencial MySQL do n8n é o mesmo nome (informado pelo usuário); o host da entrada usada pelo n8n não foi listado, mas as procedures INVOKER atuais já funcionam pelo n8n.
+- assinaturas de `sp_admin_cliente_create` (6), `sp_admin_cliente_update` (8) e `sp_admin_cliente_set_folder` (3) não mudam na 003: os workflows atuais continuam funcionando no intervalo entre a 003 e a importação.
+
+Observações, não bloqueantes:
+
+1. `security_sessoes_clientes` está com `TABLE_COLLATION = utf8mb4_uca1400_ai_ci` (as demais `utf8mb4_unicode_ci`); indica MariaDB 11.x em produção. A 003 só faz `UPDATE` nela por `cliente_id` e `revogado_em`, sem comparação de texto.
+2. `security_sessoes_funcionarios` não tem índice em `token_hash`. `sp_admin_client_authorize` busca por `token_hash ... FOR UPDATE`, o que varre e trava a tabela de sessões durante a transação. O schema do CI reproduz isso, então o comportamento foi testado; com 7 funcionários o impacto é desprezível. Proposta para a fila: migration própria criando o índice (fora da T-0003).
+
+**Próximo passo:** backup com procedures, depois `003_up.sql`.
+
+### [2026-10-03] Claude — 003_up.sql aplicada em produção
+
+- Importada pelo usuário via phpMyAdmin (aba Importar): "Importação finalizada com sucesso, 10 consultas executadas" (5 `DROP PROCEDURE IF EXISTS` + 5 `CREATE PROCEDURE`). Os avisos `#1305 does not exist` para `sp_admin_cliente_list` e `sp_admin_client_authorize` são esperados (`IF EXISTS` em procedures novas).
+- `verify.sql` reexecutado: 7 procedures presentes, todas `SECURITY_TYPE = INVOKER`, incluindo `sp_admin_client_authorize` e `sp_admin_cliente_list`; colações, índices e `documentos_duplicados = 0` inalterados em relação à foto anterior.
+- Efeito imediato: criação e edição já passam pela checagem de permissão (os workflows atuais chamam as procedures novas, com a mesma assinatura). A listagem só fica protegida quando o workflow V2.2 for ativado no n8n.
+- Backup prévio: aguardando confirmação explícita do usuário para registro. (Confirmado pelo usuário em 2026-10-03: "sim backup feito", antes da 003; arquivo guardado fora do repositório.)
+- Pendente: importação dos três workflows no n8n (ordem: listagem, edição, criação) e teste guiado.
+
+### [2026-10-03] Claude — Teste da listagem: linha vazia; correção feita pelo Claude (exceção ao protocolo, decidida pelo usuário)
+
+**Achado no teste pós-publicação** (risco previsto na revisão): com "Lista Clientes V2.2 (Autorizada)" ativa, o portal mostrou 7 linhas para `SELECT COUNT(*) FROM clientes` = 6; a sétima veio vazia. Causa: o `CALL` devolve, depois do result set, o pacote de status do MySQL (sem `is_meta`), que o n8n entrega como mais um item; o filtro `Number(value.is_meta || 0) === 0` o classificava como cliente. Criação e edição não são afetadas (localizam a linha por `request_id`). Não há falha de autorização nem vazamento.
+
+**Decisão:** manter a V2.2 ativa (voltar à V2.1 reabriria a listagem sem checagem de permissão). O usuário escolheu a opção A: o Claude corrige diretamente, em vez de briefing ao Codex, por ser uma linha sem efeito em autorização. Exceção ao fluxo do protocolo registrada aqui; sem revisão cruzada de outro agente.
+
+**Correção:** em `n8n_admin_client_list_v2.json`, nó "Normalizar Resultado", o filtro de clientes passa a exigir `is_meta` presente, `Number(value.is_meta) === 0` e `value.id != null`. Teste novo `test_list_workflow_ignores_call_status_packet` (estático, como os demais do arquivo; não há Node no ambiente para executar o JS) — falha com o JSON anterior e passa com o corrigido. Suíte local: `514 passed, 20 skipped`; 6 arquivos não coletados por falta do módulo `redis` no ambiente local (pré-existente, não relacionado; o CI tem o módulo).
+
+**Publicação da correção:** o usuário substitui o código do nó "Normalizar Resultado" no workflow V2.2 ativo e repete a contagem (portal = `COUNT(*)`).
