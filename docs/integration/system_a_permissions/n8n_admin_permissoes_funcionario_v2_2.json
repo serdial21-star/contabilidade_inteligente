@@ -1,0 +1,731 @@
+{
+  "name": "API - Admin - Permissões (Funcionários) v2.2 (Token + Fallback) (Com Sessão, leitura corrigida)",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "admin/permissoes/funcionario",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "d74f6849-f02a-4a94-9891-2a501dc56e43",
+      "name": "Ler Permissões Func.",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [
+        240,
+        208
+      ],
+      "webhookId": "af2afd50-ed88-4aaf-a2fb-20bc1440fdb9"
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "admin/permissoes/funcionario/salvar",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "49640624-f031-4e2d-a456-262196c6d2a6",
+      "name": "Salvar Permissões Func.",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [
+        240,
+        464
+      ],
+      "webhookId": "a0db2381-c1d3-463a-aa8c-61f801c19a8e"
+    },
+    {
+      "parameters": {
+        "jsCode": "const body = $input.first().json.body || {};\nconst funcId = Number(body.funcionario_id);\nif (!Number.isInteger(funcId) || funcId <= 0) throw new Error('funcionario_id inválido');\n\nconst modulos = body.modulos || {};\nconst clientes = body.clientes_acesso || {};\n// nomes de módulo/ação: só letras, números e sublinhado\nconst chaveOk = (s) => /^[A-Za-z0-9_]{1,50}$/.test(s);\n\nlet queries = `DELETE FROM permissoes_funcionario_modulos WHERE funcionario_id = ${funcId};\\n`;\nqueries += `DELETE FROM permissoes_funcionario_clientes WHERE funcionario_id = ${funcId};\\n`;\n\n// Montar Inserts de Módulos\nfor (const [mod, acoes] of Object.entries(modulos)) {\n  if (!chaveOk(mod)) throw new Error('módulo inválido');\n  for (const [acao, valor] of Object.entries(acoes || {})) {\n    if (!chaveOk(acao)) throw new Error('ação inválida');\n    const permitido = valor ? 1 : 0;\n    queries += `INSERT INTO permissoes_funcionario_modulos (funcionario_id, modulo, acao, permitido) VALUES (${funcId}, '${mod}', '${acao}', ${permitido});\\n`;\n  }\n}\n\n// Montar Inserts de Clientes\nfor (const [cliId, valor] of Object.entries(clientes)) {\n  const cid = Number(cliId);\n  if (!Number.isInteger(cid) || cid <= 0) throw new Error('cliente inválido');\n  const permitido = valor ? 1 : 0;\n  queries += `INSERT INTO permissoes_funcionario_clientes (funcionario_id, cliente_id, permitido) VALUES (${funcId}, ${cid}, ${permitido});\\n`;\n}\n\nreturn [{ json: { queries: queries } }];"
+      },
+      "id": "10464e28-b4f1-4cea-8cd8-c19246097581",
+      "name": "Gerar SQL Otimizado",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 1,
+      "position": [
+        1712,
+        464
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "={{ $json.queries }}"
+      },
+      "id": "69a9bbf0-0da7-4bd7-9f67-07911c760909",
+      "name": "Executar Transação",
+      "type": "n8n-nodes-base.mySql",
+      "typeVersion": 1,
+      "position": [
+        1936,
+        464
+      ],
+      "credentials": {
+        "mySql": {
+          "id": "A8EKwXIiVjrNd53S",
+          "name": "MySQL account 3"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "{\n  \"success\": true,\n  \"message\": \"Permissões do funcionário salvas com sucesso.\"\n}",
+        "options": {
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Access-Control-Allow-Origin",
+                "value": "*"
+              }
+            ]
+          }
+        }
+      },
+      "id": "74ebbc77-aab2-4142-8ed6-05c0cfde2ed2",
+      "name": "Responder Salvamento",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        2160,
+        464
+      ]
+    },
+    {
+      "parameters": {
+        "httpMethod": "OPTIONS",
+        "path": "admin/permissoes/funcionario",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "b417a92c-f82a-4e64-aab5-5220f9cde089",
+      "name": "OPTIONS - Permissões",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        0,
+        0
+      ],
+      "webhookId": "e7982274-68d2-4234-8a91-65ba5ac2d9a3"
+    },
+    {
+      "parameters": {
+        "respondWith": "text",
+        "responseBody": "OK",
+        "options": {
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Access-Control-Allow-Origin",
+                "value": "*"
+              },
+              {
+                "name": "Access-Control-Allow-Methods",
+                "value": "POST, OPTIONS"
+              },
+              {
+                "name": "Access-Control-Allow-Headers",
+                "value": "Content-Type, Authorization"
+              }
+            ]
+          }
+        }
+      },
+      "id": "39b8fdf2-ad4e-47d8-9c70-f327ea70569e",
+      "name": "CORS OK - Permissões",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        1472,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const auth = ($input.first().json.headers?.authorization || $input.first().json.headers?.Authorization || '').toString();\nconst token = auth.replace(/^Bearer\\s+/i,'').replace(/[^a-zA-Z0-9._-]/g,'');\nreturn [{ json: { token } }];"
+      },
+      "id": "8dc73050-9de4-4940-99ab-0b320bb7125d",
+      "name": "Extrair Token",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1248,
+        192
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT f.id, f.cargo FROM security_sessoes_funcionarios s JOIN funcionarios f ON s.funcionario_id = f.id WHERE s.token_hash = SHA2('{{ $json.token }}', 256) AND s.expira_em > NOW() AND s.revogado_em IS NULL AND f.status = 'Ativo' LIMIT 1;",
+        "options": {}
+      },
+      "id": "64b36a05-f6fa-4a0b-92a2-18f05f809842",
+      "name": "Validar Sessão",
+      "type": "n8n-nodes-base.mySql",
+      "typeVersion": 2,
+      "position": [
+        1472,
+        192
+      ],
+      "alwaysOutputData": true,
+      "credentials": {
+        "mySql": {
+          "id": "A8EKwXIiVjrNd53S",
+          "name": "MySQL account 3"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{ $json.id ? true : false }}",
+              "value2": true
+            }
+          ]
+        }
+      },
+      "id": "923e78a0-8dc4-4e6a-88a5-51d4c8a7107b",
+      "name": "Sessão Válida?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        1712,
+        192
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT modulo, acao, permitido FROM permissoes_funcionario_modulos WHERE funcionario_id = {{ $json.id }};",
+        "options": {}
+      },
+      "id": "aaca275a-34d2-4e6b-9b7a-39cffda74632",
+      "name": "Buscar Módulos",
+      "type": "n8n-nodes-base.mySql",
+      "typeVersion": 2,
+      "position": [
+        1920,
+        96
+      ],
+      "credentials": {
+        "mySql": {
+          "id": "A8EKwXIiVjrNd53S",
+          "name": "MySQL account 3"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT cliente_id, permitido FROM permissoes_funcionario_clientes WHERE funcionario_id = {{ $node['Validar Sessão'].json.id }};",
+        "options": {}
+      },
+      "id": "2be2abf2-8ddf-497d-9f7c-42bdc5e5edc9",
+      "name": "Buscar Clientes Acesso",
+      "type": "n8n-nodes-base.mySql",
+      "typeVersion": 2,
+      "position": [
+        2144,
+        96
+      ],
+      "credentials": {
+        "mySql": {
+          "id": "A8EKwXIiVjrNd53S",
+          "name": "MySQL account 3"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "function toBool(v) {\n  if (v === true) return true;\n  if (v === false) return false;\n  if (v === 1 || v === '1') return true;\n  if (v === 0 || v === '0') return false;\n  if (typeof v === 'string') return ['true','sim','yes','y','ok'].includes(v.toLowerCase().trim());\n  return Boolean(v);\n}\n\nconst cargoRaw = ($node[\"Validar Sessão\"].json.cargo || '').toString().trim();\nconst cargo = cargoRaw.toLowerCase(); // case-insensitive\n\n// Ler linhas do banco (podem vir vazias)\nconst rowsMod = $items(\"Buscar Módulos\").map(i => i.json || {});\nconst rowsCli = $items(\"Buscar Clientes Acesso\").map(i => i.json || {});\n\nlet modulos = {};\nfor (const r of rowsMod) {\n  const modulo = (r.modulo || '').toString().trim();\n  const acao = (r.acao || '').toString().trim();\n  if (!modulo || !acao) continue;\n  if (!modulos[modulo]) modulos[modulo] = {};\n  modulos[modulo][acao] = toBool(r.permitido);\n}\n\nlet clientesAcesso = {};\nfor (const r of rowsCli) {\n  if (r.cliente_id == null) continue;\n  clientesAcesso[String(r.cliente_id)] = toBool(r.permitido);\n}\n\n// Fallback mínimo por cargo quando vier vazio\nconst hasModulos = modulos && Object.keys(modulos).length > 0;\n\nfunction fallbackPorCargo(c) {\n  // c em lower\n  if (c.includes('admin')) {\n    // admin tudo liberado (pode ser refinado depois)\n    return {\n      dashboard: { visualizar: true, criar: true, editar: true, excluir: true },\n      clientes: { visualizar: true, criar: true, editar: true, excluir: true },\n      tickets: { visualizar: true, criar: true, editar: true, excluir: true },\n      entregas: { visualizar: true, criar: true, editar: true, excluir: true },\n      inbox: { visualizar: true, criar: true, editar: true, excluir: true },\n      evidencias: { visualizar: true, criar: true, editar: true, excluir: true },\n      listas: { visualizar: true, criar: true, editar: true, excluir: true },\n      funcionarios: { visualizar: true, criar: true, editar: true, excluir: true },\n      auditoria: { visualizar: true }\n    };\n  }\n  if (c.includes('auditor')) {\n    return {\n      dashboard: { visualizar: true },\n      clientes: { visualizar: true },\n      tickets: { visualizar: true },\n      entregas: { visualizar: true },\n      inbox: { visualizar: true },\n      evidencias: { visualizar: true },\n      listas: { visualizar: true },\n      auditoria: { visualizar: true }\n    };\n  }\n // operador (default) - sem permissao cadastrada = so visualizar, ate um admin liberar\n  return {\n    dashboard: { visualizar: true },\n    clientes: { visualizar: true },\n    tickets: { visualizar: true },\n    entregas: { visualizar: true },\n    inbox: { visualizar: true },\n    evidencias: { visualizar: true },\n    listas: { visualizar: true }\n  };\n\nif (!hasModulos) {\n  modulos = fallbackPorCargo(cargo);\n}\n\n// Retornar em dois formatos (root e data) para compatibilidade\nreturn [{\n  json: {\n    success: true,\n    modulos,\n    clientesAcesso,\n    data: { modulos, clientesAcesso }\n  }\n}];\n"
+      },
+      "id": "14836e43-a2ab-42c6-bc71-d8a58571cbcc",
+      "name": "Montar Permissões",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2368,
+        96
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}",
+        "options": {
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Access-Control-Allow-Origin",
+                "value": "*"
+              },
+              {
+                "name": "Access-Control-Allow-Methods",
+                "value": "POST, OPTIONS"
+              },
+              {
+                "name": "Access-Control-Allow-Headers",
+                "value": "Content-Type, Authorization"
+              }
+            ]
+          }
+        }
+      },
+      "id": "02ba3723-98b9-4f37-9882-39bc8fb9e227",
+      "name": "Responder Leitura",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        2592,
+        96
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "{\"success\": false, \"message\": \"Sessão inválida ou expirada.\", \"code\": \"UNAUTHORIZED\"}",
+        "options": {
+          "responseCode": 401,
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Access-Control-Allow-Origin",
+                "value": "*"
+              },
+              {
+                "name": "Access-Control-Allow-Methods",
+                "value": "POST, OPTIONS"
+              },
+              {
+                "name": "Access-Control-Allow-Headers",
+                "value": "Content-Type, Authorization"
+              }
+            ]
+          }
+        }
+      },
+      "id": "d4272d4c-915d-4ffc-99f1-210122d58acb",
+      "name": "Responder Erro (401)",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        1920,
+        320
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const auth = $input.first().json.headers?.authorization || '';\n// Mantém só letras e números: nada estranho consegue chegar ao SQL da validação.\nconst token = auth.replace(/^Bearer\\s+/i, '').replace(/[^a-zA-Z0-9]/g, '');\nreturn [{ json: { token }, pairedItem: { item: 0 } }];"
+      },
+      "id": "c31f4466-2521-4cd9-8615-5f12b96f3df2",
+      "name": "Extrair Token (Salvar)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        448,
+        464
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT f.id, f.nome_funcionario, f.cargo FROM security_sessoes_funcionarios s JOIN funcionarios f ON f.id = s.funcionario_id WHERE s.token_hash = SHA2('{{ $json.token }}', 256) AND s.expira_em > NOW() AND s.revogado_em IS NULL AND f.status = 'Ativo' LIMIT 1;",
+        "options": {}
+      },
+      "id": "6ec14ac8-1c21-4e14-a902-9d7a36054f0c",
+      "name": "Validar Sessão Admin (Salvar)",
+      "type": "n8n-nodes-base.mySql",
+      "typeVersion": 2.1,
+      "position": [
+        656,
+        464
+      ],
+      "alwaysOutputData": true,
+      "credentials": {
+        "mySql": {
+          "id": "A8EKwXIiVjrNd53S",
+          "name": "MySQL account 3"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{ $json.id ? true : false }}",
+              "value2": true
+            }
+          ]
+        }
+      },
+      "id": "41783a3e-0cab-4bd7-b2ac-1a4858b7e281",
+      "name": "Sessão Válida? (Salvar)",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        864,
+        464
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { success: false, message: \"Sessão expirada ou inválida. Faça login novamente.\" } }}",
+        "options": {
+          "responseCode": 401,
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Access-Control-Allow-Origin",
+                "value": "*"
+              }
+            ]
+          }
+        }
+      },
+      "id": "4416315f-8f50-49f9-b781-9144d204f9e1",
+      "name": "Não Autorizado (Salvar)",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        864,
+        672
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "return $(\"Salvar Permissões Func.\").all().map((it, i) => {\n  const saida = { json: it.json, pairedItem: { item: i } };\n  if (it.binary) saida.binary = it.binary;\n  return saida;\n});"
+      },
+      "id": "bb4d0874-08ab-425b-966d-a4a9378445a8",
+      "name": "Restaurar Requisição (Salvar)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1280,
+        464
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{ ['administrador', 'admin'].includes(String($json.cargo || '').trim().toLowerCase()) }}",
+              "value2": true
+            }
+          ]
+        }
+      },
+      "id": "4b24efc2-0416-4889-ae39-05fe1233acce",
+      "name": "É Administrador? (Salvar)",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        1072,
+        464
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { success: false, message: \"Acesso restrito a administradores.\" } }}",
+        "options": {
+          "responseCode": 403,
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Access-Control-Allow-Origin",
+                "value": "*"
+              }
+            ]
+          }
+        }
+      },
+      "id": "b1ca835f-d74d-41b7-ae29-d57bddcfe389",
+      "name": "Sem Permissão (Salvar)",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        1072,
+        672
+      ]
+    },
+    {
+      "parameters": {
+        "httpMethod": "OPTIONS",
+        "path": "admin/permissoes/funcionario/salvar",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "e5ff0a89-0963-4b7f-a5de-d4eb4fcc33af",
+      "name": "OPTIONS - Salvar Permissões",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        1568,
+        1024
+      ],
+      "webhookId": "31f58468-0395-4fa2-984e-7d385f61dbb1"
+    },
+    {
+      "parameters": {
+        "respondWith": "text",
+        "responseBody": "OK",
+        "options": {
+          "responseCode": 200,
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Access-Control-Allow-Origin",
+                "value": "*"
+              },
+              {
+                "name": "Access-Control-Allow-Methods",
+                "value": "POST, OPTIONS"
+              },
+              {
+                "name": "Access-Control-Allow-Headers",
+                "value": "Content-Type, Authorization"
+              }
+            ]
+          }
+        }
+      },
+      "id": "ad6fbe85-2f7c-4ce2-8f10-1384b8437cae",
+      "name": "CORS OK - Salvar",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        1776,
+        1024
+      ]
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Ler Permissões Func.": {
+      "main": [
+        [
+          {
+            "node": "Extrair Token",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Salvar Permissões Func.": {
+      "main": [
+        [
+          {
+            "node": "Extrair Token (Salvar)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Gerar SQL Otimizado": {
+      "main": [
+        [
+          {
+            "node": "Executar Transação",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Executar Transação": {
+      "main": [
+        [
+          {
+            "node": "Responder Salvamento",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extrair Token": {
+      "main": [
+        [
+          {
+            "node": "Validar Sessão",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validar Sessão": {
+      "main": [
+        [
+          {
+            "node": "Sessão Válida?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Sessão Válida?": {
+      "main": [
+        [
+          {
+            "node": "Buscar Módulos",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Responder Erro (401)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Buscar Módulos": {
+      "main": [
+        [
+          {
+            "node": "Buscar Clientes Acesso",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Buscar Clientes Acesso": {
+      "main": [
+        [
+          {
+            "node": "Montar Permissões",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Montar Permissões": {
+      "main": [
+        [
+          {
+            "node": "Responder Leitura",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OPTIONS - Permissões": {
+      "main": [
+        [
+          {
+            "node": "CORS OK - Permissões",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extrair Token (Salvar)": {
+      "main": [
+        [
+          {
+            "node": "Validar Sessão Admin (Salvar)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validar Sessão Admin (Salvar)": {
+      "main": [
+        [
+          {
+            "node": "Sessão Válida? (Salvar)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Restaurar Requisição (Salvar)": {
+      "main": [
+        [
+          {
+            "node": "Gerar SQL Otimizado",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Sessão Válida? (Salvar)": {
+      "main": [
+        [
+          {
+            "node": "É Administrador? (Salvar)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Não Autorizado (Salvar)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "É Administrador? (Salvar)": {
+      "main": [
+        [
+          {
+            "node": "Restaurar Requisição (Salvar)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Sem Permissão (Salvar)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OPTIONS - Salvar Permissões": {
+      "main": [
+        [
+          {
+            "node": "CORS OK - Salvar",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": false
+  },
+  "versionId": "332bf552-6d74-4c67-86fc-2540061b34cb",
+  "meta": {
+    "instanceId": "09f67c6ad885284941575233f307d4ff003398dd6cce7ae1b2a6e52f5b12474b"
+  },
+  "id": "dCcJRgFvhNLNibB3ksRLr",
+  "tags": []
+}
