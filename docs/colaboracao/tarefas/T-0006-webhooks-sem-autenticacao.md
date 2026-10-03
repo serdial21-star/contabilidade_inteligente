@@ -52,3 +52,8 @@ Valores não transcritos aqui.
 - Contenção: desativar agora os 4 workflows antigos (`portal/meus-documentos`, `portal/meus-chamados`, `admin/novo-cliente` V8, `portal/receber-arquivo` V5).
 - Os outros 5 endpoints sem autenticação (`admin/upload-xml`, `admin/integracao-cnd-v1`, `admin/tasks`, `admin-motor-obrigacoes-v1`, `ferramentas-ia/apuracao-icms`) "todos serão utilizados" — precisam ser protegidos, não desativados.
 - Credenciais expostas: o usuário não sabe onde ficam; o Claude orienta a localização. Serviços identificados pelos nós: token da WhatsApp Cloud API da Meta (`graph.facebook.com/v22.0/<phone_number_id>/messages`, workflow "Automação - Finalizar Ticket") e chave de API do Google usada no Cloud Vision (`vision.googleapis.com/v1/images:annotate`, workflow "LEGADO - Pericia tentativa monolitica").
+
+### [2026-10-03] Claude — Chamadores identificados e inventário do site
+
+- Tela "Ferramentas IA" do painel (captura do usuário): "Extrator Fiscal XML (NF-e)" → `admin/upload-xml`; "Análise de Apuração de ICMS e CMV" → `ferramentas-ia/apuracao-icms`. "Analista de Balanço IA" e "Inteligência Fiscal" não têm workflow no n8n; provavelmente Lovable/Supabase — autenticação não verificada.
+- A pedido do usuário, prompt somente leitura para o Lovable descrever o site inteiro (rotas, todas as chamadas externas e como se autenticam, edge functions, Supabase, sessão): `docs/integration-input/PROMPT_INVENTARIO_LOVABLE_2026-10-03.md`. O resultado define o briefing de proteção dos endpoints.
