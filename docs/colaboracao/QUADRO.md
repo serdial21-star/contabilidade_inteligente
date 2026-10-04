@@ -6,7 +6,7 @@ Protocolo: [README.md](README.md). Atualizado por quem mudar o estado de uma tar
 
 | ID | Título | Estado | Com quem | Arquivo |
 |---|---|---|---|---|
-| T-0008 | Portal do cliente: detalhe e complemento de chamados e documentos (parte do item 20) | DIAGNÓSTICO — aguardando informações | Usuário | [T-0008](tarefas/T-0008-portal-detalhe-complemento-chamados-documentos.md) |
+| T-0008 | Portal do cliente: detalhe e complemento de chamados e documentos (parte do item 20) | BRIEFING — aguardando decisões | Usuário | [T-0008](tarefas/T-0008-portal-detalhe-complemento-chamados-documentos.md) |
 
 ## Fila (ainda sem briefing; ordem sugerida, sujeita à decisão do usuário)
 

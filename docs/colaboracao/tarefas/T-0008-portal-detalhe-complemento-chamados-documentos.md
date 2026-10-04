@@ -2,10 +2,10 @@
 
 | Campo | Valor |
 |---|---|
-| Estado | DIAGNÓSTICO — aguardando informações do usuário |
+| Estado | BRIEFING — aguardando decisões e aprovação do usuário |
 | Origem | QUADRO, fila item 20 (primeira parte); escolhida pelo usuário em 04/10/2026 para destravar os testes práticos com clientes |
 | Sistema | Sistema A (n8n, MySQL, frontend Lovable) |
-| Exige ADR | a definir após o diagnóstico (depende de haver ou não estrutura de dados para mensagens/complementos) |
+| Exige ADR | não — decisões D1–D5 registradas aqui; migration 006 não destrutiva |
 | Exige ação do usuário | sim — prompt somente leitura no Lovable, consultas somente leitura no banco, exportação de workflows |
 
 ---
@@ -37,3 +37,33 @@ Sem segredos (apenas nomes/ids de credenciais). Achados:
 - **Documentos:** `inbox_documentos` (id, cliente_id, titulo, area_responsavel, competencia, status, nome_arquivo, tipo_documento, link_externo_url, criado_em). Nenhum workflow lido grava conversa/complemento de documento; aguardando a consulta ao banco para saber se existe tabela própria.
 - **Observações de segurança nos workflows existentes (fora do escopo; registrar na fila):** CORS `*` e SQL por interpolação nos cinco; `NOW()` na validação de sessão; "Listagens Gerais V2" e "Responder Ticket" validam só a sessão de funcionário, sem permissão de módulo (`tickets`/`documentos`); "Listagens Gerais V2" devolve todos os chamados e documentos de todos os clientes sem filtro; número de ticket gerado com `Math.random`.
 - Pendentes para o briefing: relatório do Lovable (contrato das quatro chamadas) e estrutura das tabelas (consulta ao `information_schema`).
+
+### [2026-10-04] Claude — Estrutura do banco e contrato da tela (recebidos do usuário)
+
+- `information_schema` (colunas, sem dados): `tickets_mensagens` (id, ticket_id, `remetente_tipo enum('Cliente','Equipe')`, `remetente_id int NOT NULL`, mensagem text NOT NULL, `anexo_url varchar(255)`, criado_em) — **sem coluna de nome do anexo**; `inbox_documentos` (id, titulo, area_responsavel, competencia, tipo_documento, link_externo_url, status, `observacao_escritorio`, `observacao_cliente`, ticket_id, entrega_id, cliente_id, criado_em, atualizado_em, origem_documento, nome_arquivo) — **sem tabela de complementos de documento**; `tickets_master` (inclui competencia, data_limite, pessoa_responsavel, data_entrega, responsavel_interno).
+- Relatório do Lovable (somente leitura): as quatro chamadas saem pelo `portalFetch` → `proxy-webhook` (`POST`, JSON, `Authorization: Bearer auth_token`); tipos `Chamado`, `Documento`, `Complemento {id, mensagem, arquivo_url?, arquivo_nome?, criado_em, autor?, tipo?: 'cliente'|'equipe'}`; respostas `{success, data}` e `{success, message?}`; complemento envia `{ticket_id|documento_id, mensagem, arquivo_base64?: 'data:<tipo>;base64,...', arquivo_nome?}`, um arquivo por envio, a tela não valida tipo nem tamanho; chamado fechado quando `status` = `concluído`/`concluido`; documento fechado quando `processado`/`concluído`/`rejeitado`; painel usa `historico` (sem anexo) em `/admin/tickets-v2` e não tem tela de complementos de documento.
+
+---
+
+## 1. Briefing (Claude)
+
+### [2026-10-04] Claude — Briefing para aprovação
+
+**Objetivo.** No portal, o cliente vê o detalhe e o histórico de chamados e documentos e consegue complementá-los (mensagem e/ou um anexo); a equipe vê esses complementos no painel; tudo isolado por cliente, auditado e sem retenção.
+
+**Decisões propostas (precisam do usuário).**
+- **D1 — Complementos de documento em tabela própria** (`inbox_documentos_complementos`: id, documento_id, cliente_id, remetente_tipo `Cliente`/`Equipe`, remetente_id, mensagem, anexo_url, anexo_nome, criado_em), append-only, criada por migration `006`. Alternativa rejeitada: gravar em `inbox_documentos.observacao_cliente` (sobrescreve, perde histórico — contraria `AGENTS.md` 6.7).
+- **D2 — Nome do anexo em `tickets_mensagens`**: nova coluna anulável `anexo_nome varchar(255)` na mesma migration `006` (não destrutiva; linhas antigas ficam nulas).
+- **D3 — Arquivos aceitos**: PDF, JPG/JPEG e PNG (e XML nos documentos), conferidos pelo conteúdo (assinatura do arquivo), não só pela extensão; **tamanho máximo a definir** — proposta 10 MB, limitada ao menor limite técnico do caminho (Edge Function e n8n), que o Codex deve verificar e registrar.
+- **D4 — Complemento do cliente não muda o status** do chamado/documento; só atualiza `atualizado_em` e aparece no histórico. Mudança automática de status seria regra nova sem fonte.
+- **D5 — A equipe passa a ver os complementos de documento no painel**: `admin/documentos-v2` devolve o histórico de cada documento e um prompt do Lovable mostra esse histórico no painel de documentos. Sem isso, complementos de documento ficariam invisíveis para a equipe.
+
+**Escopo — dentro** (artefatos em `docs/integration/system_a_portal_detalhes/`):
+1. Migration `006_up.sql`/`006_down.sql`/`verify_006.sql` (D1, D2), com procedures `SQL SECURITY INVOKER` para as quatro operações do portal, no padrão das 003–005: sessão de cliente viva e não revogada (UTC); cliente **sempre** o da sessão; `ticket_id`/`documento_id` inteiro positivo; recurso de outro cliente ou inexistente → mesmo resultado `not_found`; complemento recusado se o item estiver fechado (`closed`); mensagem até 5000 caracteres; complemento exige mensagem ou anexo; inserção, `atualizado_em` e auditoria (`client_ticket_complement`/`client_document_complement`, sem conteúdo da mensagem) na mesma transação.
+2. Quatro workflows n8n (`portal/detalhe-chamado`, `portal/complementar-chamado`, `portal/detalhe-documento`, `portal/complementar-documento`): token só do `Authorization`; consultas parametrizadas; anexo decodificado do base64, tipo verificado pelo conteúdo e tamanho conferido **antes** de qualquer gravação; upload ao Drive do próprio cliente na subpasta da área (mesmo roteador dos workflows atuais); a procedure grava o registro somente depois do upload bem-sucedido; respostas no contrato do Lovable (`complementos` com `tipo` `'cliente'`/`'equipe'`, `arquivo_url`, `arquivo_nome`, ordem cronológica); detalhe do chamado inclui o anexo de abertura de `evidencias_protocolos`; CORS restrito; sem retenção.
+3. D5: alteração mínima de `admin/documentos-v2` para incluir `complementos` por documento (somente esse acréscimo; o endurecimento geral fica no item 25) e prompt do Lovable para exibi-los no painel.
+4. Testes: validador MariaDB do CI (isolamento entre clientes, sessão revogada/expirada, item fechado, limites, auditoria, rollback); testes estáticos dos workflows; teste real pela tela com dois clientes de teste.
+
+**Escopo — fora.** Item 25 (endurecer os workflows existentes de chamados/documentos); abas Certidões/Livros/Obrigações e Inteligência Fiscal (item 20); notificação por e-mail de complementos.
+
+**Riscos.** Upload grande em base64 via proxy pode estourar limite da Edge Function — por isso D3 depende da verificação técnica. Falha entre o upload no Drive e a gravação no banco deixa arquivo órfão no Drive (sem registro): aceitável, registrado; o inverso (registro sem arquivo) não pode acontecer.
