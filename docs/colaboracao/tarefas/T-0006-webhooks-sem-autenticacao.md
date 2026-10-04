@@ -2,7 +2,7 @@
 
 | Campo | Valor |
 |---|---|
-| Estado | CI VERDE — aguardando publicação guiada |
+| Estado | PUBLICAÇÃO PARCIAL — ajuste pedido ao Codex (binário no upload-xml/apuração) |
 | Origem | QUADRO, fila item 19 (SG-10); inventário de 03/10/2026 |
 | Sistema | Sistema A (n8n) |
 | Exige ADR | não, para a contenção; a decisão de manter ou proteger cada endpoint é do usuário |
@@ -287,3 +287,28 @@ Conferida pelo usuário no depurador oficial da Meta (valor não transcrito): to
 - CI verde no commit `db66ac4` (run 37164674045), conferido no log: `538 passed`; `CLIENT_MANAGEMENT_ROLLBACK=PASS`; `SESSION_LOGOUT_TESTS=PASS`; `SESSION_LOGOUT_ROLLBACK=PASS`; `WEBHOOK_HARDENING_AUTHORIZATION_TESTS=PASS` e `WEBHOOK_HARDENING_ROLLBACK=PASS` (primeira execução real da 005 no MariaDB 11.8.9); `pip-audit` sem vulnerabilidades; varredura de segredos `PASS`.
 
 **Próximo passo:** publicação guiada pelo `docs/integration/SYSTEM_A_WEBHOOK_HARDENING_RUNBOOK.md`.
+
+### [2026-10-03] Claude — Publicação: banco e honorários
+
+- `verify_005.sql` antes: `token_hash` de funcionários `utf8mb4_unicode_ci` (OK); 12 colunas esperadas; procedure ausente. Grants já conferidos na T-0003 (`ALL PRIVILEGES` no banco).
+- Backup feito pelo usuário. `005_up.sql` importada: 2 consultas, aviso esperado `#1305`.
+- `portal/honorarios-v2` endurecido importado e ativo; anterior desativado e renomeado "(antigo 2026-10-03)". Teste pelo console do portal com a mesma sessão de cliente: honorários 200 → logout 200 → honorários **401**. Sessão revogada recusada (critério de aceite 4). Tela Honorários carregou antes do teste.
+
+### [2026-10-03] Claude — Publicação: defeito no upload-xml; ajuste pedido ao Codex
+
+**Teste sem login (`admin/upload-xml`):** 401; execução parou em "Responder Autorizacao", sem Drive nem banco. Critério 1 atendido.
+
+**Teste autorizado (Administrador, cliente "Fenix teste", 1 XML):** o site recebeu resposta vazia ("Unexpected end of JSON input"). Execução 36819 (salva com a retenção de erros ligada temporariamente pelo usuário): erro em "Separar XMLs" — "Nenhum arquivo XML encontrado. Esperado: arquivos0, arquivos1, arquivos2..." (n8n 2.6.4, `binaryDataMode: filesystem`, Code executado no task runner).
+
+**Causa.** "Restaurar Upload Autorizado" devolve `binary: $('Receber XML').first().binary`. No task runner do n8n 2.6.4 os dados binários de outro nó não ficam disponíveis por `$()` no Code; o item segue sem arquivos. Testes estáticos e CI não executam o n8n e não pegam o caso; a revisão do Claude também não pegou. O `apuracao-icms` endurecido usa o mesmo nó e falharia igual — **não foi importado**; o workflow anterior de apuração segue ativo (sem autenticação) até a correção.
+
+**Estado em produção.** `upload-xml` novo ativo e funcional só para recusar; anterior desativado. O Extrator Fiscal XML fica indisponível até a correção — preferido a reativar o anterior sem autenticação (sistema em fase de testes, sem operadores em uso, conforme o usuário).
+
+**Ajuste pedido ao Codex (upload-xml e apuracao-icms).**
+1. Remover a restauração de binário por Code (`$('<nó>').binary`). Encaminhar o item original do Webhook por um ramo paralelo até um nó **Merge** (modo *Choose Branch*, saída = dados do Webhook), cuja outra entrada é a saída "verdadeira" da última verificação (autorizado e, no upload, cliente existente). Ramos de recusa (401/403/400/404) continuam respondendo e não alcançam o Merge.
+2. No upload, o `cliente_id` usado adiante passa a ser o do corpo original; isso é aceitável porque o valor bruto já foi validado por `^[1-9][0-9]*$` e pela existência do cliente — registrar essa equivalência no artefato.
+3. Nenhum Code entre o Webhook e o primeiro consumidor dos arquivos ("Separar XMLs" / "1. Extrator e Consolidador") pode ser o portador dos binários.
+4. Testes estáticos: proibir `$(...).binary`/`.first().binary` em Code; exigir o Merge com as duas entradas descritas; manter a ordem "autorização antes de efeito".
+5. Validação real obrigatória antes do aceite: o usuário importa a versão corrigida e repete o teste autorizado com um XML; sem essa execução real, não há aceite.
+
+**Retenção.** As execuções aparecem com dados (a configuração "não salvar" dos JSONs não se manteve na importação, ou foi alterada). Pendente: o usuário informar o estado das quatro opções "Save..." do workflow, voltar "failed" para *Do not save* e apagar as execuções salvas (contêm o XML enviado).
