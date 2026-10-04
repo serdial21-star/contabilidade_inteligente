@@ -353,3 +353,21 @@ No upload, a nota do próprio Merge registra a equivalência do `cliente_id`: o 
 - n8n: "SERD_GERADOR_OBRIGACOES_AUTO_v1 DESATIVADO 2026-10-03" (anterior) e o novo só com cron; execução 36831 do novo em 04/10 06:05 (Brasília), sucesso.
 - `logs_auditoria` (`cron_obrigacoes_geracao_mensal`): uma execução por dia às 09:05 UTC (30/09 a 04/10); **nenhuma execução extra em 03/10 à noite** — o GET de teste que respondeu 500 não disparou a geração. Sem efeito a corrigir.
 - Motor publicado (critério de aceite 6 em produção).
+
+### [2026-10-04] Codex — Regex de arquivo único espelhado no repositório
+
+**Implementação.** No nó "Separar XMLs" do artefato endurecido de `admin/upload-xml`, troquei o filtro `/^arquivos\d+$/i` por `/^arquivos\d*$/i`. O workflow passa a aceitar tanto o campo sem índice (`arquivos`), observado e validado no teste real com um XML, quanto campos indexados (`arquivos0`, `arquivos1` etc.). A ordenação existente e o restante do workflow foram preservados.
+
+**Teste acrescentado.** O teste estático localiza o código do nó "Separar XMLs", exige o regex com `\d*` e cobre aceitação de `arquivos`, `arquivos0` e `arquivos12`, além da rejeição de `arquivo` e `arquivos12extra`.
+
+**Resultados.** Teste específico da T-0006: `14 passed`; conjunto relacionado do Sistema A: `63 passed`; suíte completa: `640 passed, 20 skipped`, com dois avisos preexistentes de depreciação em FastAPI/Starlette; varredura de segredos: `SECRET_SCANNER_CANARY_DETECTION: PASS` e `RELEASE_SECRET_SCAN: PASS`; `git diff --check`: aprovado. Nenhum teste contra banco ou serviço real foi executado.
+
+**Arquivos alterados.** `docs/integration/system_a_webhook_hardening/n8n_admin_upload_xml_v7_hardened.json`, `tests/unit/test_system_a_webhook_hardening_assets.py` e este registro. Nenhum arquivo ou migration foi criado.
+
+**Pendências.** O espelhamento solicitado está concluído e o teste real já consta na entrada do Claude de 03/10/2026. Os três defeitos funcionais observados naquele teste permanecem fora deste ajuste e devem ser tratados em item próprio da fila.
+
+### [2026-10-04] Claude — Revisão do espelhamento e aceite do upload-xml
+
+- Diff conferido contra `a60339b`: só o nó "Separar XMLs" mudou, e a única diferença no código é `/^arquivos\d+$/i` → `/^arquivos\d*$/i`; conexões e configurações idênticas. Teste estático novo cobre `arquivos`, `arquivos0`, `arquivos12` e rejeita `arquivo`/`arquivos12extra`. `14 passed`; varredura de segredos `PASS`. Repositório e produção agora coincidem neste workflow.
+- Evidência real (03/10): sem login → 401 sem efeito; com login → XMLs arquivados no Drive do cliente de teste e notas gravadas em `processamento_xml_nfe` (ids 21–25, `status_conferencia = Pendente`, conferido pelo usuário em 04/10).
+- **`admin/upload-xml`: ACEITO e publicado.** Defeitos funcionais anteriores à T-0006 (arquivamento na raiz em vez de `01_FISCAL`, cópia nova a cada envio, tela mostrando "0 nota(s)") vão para o item 22 da fila.

@@ -168,6 +168,19 @@ def test_upload_code_nodes_do_not_restore_cross_node_binary_data() -> None:
             assert '.first().binary' not in code
 
 
+def test_upload_accepts_single_and_indexed_xml_binary_fields() -> None:
+    workflow = _workflow(UPLOAD)
+    code = _node(workflow, 'Separar XMLs')['parameters']['jsCode']
+
+    field_pattern = re.compile(r'^arquivos\d*$', re.IGNORECASE)
+    assert '/^arquivos\\d*$/i.test(key)' in code
+    assert field_pattern.fullmatch('arquivos')
+    assert field_pattern.fullmatch('arquivos0')
+    assert field_pattern.fullmatch('arquivos12')
+    assert field_pattern.fullmatch('arquivo') is None
+    assert field_pattern.fullmatch('arquivos12extra') is None
+
+
 def test_all_changed_mysql_queries_bind_request_values() -> None:
     for path in (UPLOAD, APURACAO, HONORARIOS, CND):
         workflow = _workflow(path)
