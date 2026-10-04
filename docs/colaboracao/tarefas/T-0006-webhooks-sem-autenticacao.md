@@ -380,3 +380,8 @@ No upload, a nota do próprio Merge registra a equivalência do `cliente_id`: o 
 - Decisões do usuário registradas: compartilhamento das planilhas geradas pela **opção C** (pasta compartilhada com a equipe; cada geração cria cópia editável; o modelo nunca é alterado) — tarefa separada, depois da publicação.
 - **Ajuste pedido ao Codex no `LOVABLE_PROMPT.md`:** todas as edge functions passam a responder CORS por lista exata de origens (sem `*`): ecoar `Access-Control-Allow-Origin` só quando a origem da requisição estiver na lista; incluir `Vary: Origin`; preflight `OPTIONS` coerente com os métodos e cabeçalhos usados (`authorization`, `x-app-token`, `content-type`, `apikey`, `x-client-info`); origem fora da lista sem cabeçalho de liberação. Lista de origens: a confirmar pelo usuário (observadas: `https://serdial21.com`, `https://serdialconnect-hub.lovable.app`). O relatório do Lovable deve listar, por função, a configuração de CORS antes e depois.
 - Nova ordem: ajuste do prompt (Codex) → revisão → Lovable → troca do workflow da apuração → testes com CSV (com e sem login).
+
+### [2026-10-04] Usuário (registrado pelo Claude) — Origens do sistema
+
+- Teste com CSV ("Registro de Apuracao de ICMS.csv") falhou da mesma forma: preflight de `proxy-file-upload` bloqueado por `Access-Control-Allow-Origin: https://serdialconnect-hub.lovable.app` diferente de `https://serdial21.com`. Confirma que o bloqueio independe do formato.
+- Origens confirmadas pelo usuário ("todos os links acima acessam"): `https://serdial21.com`, `https://www.serdial21.com`, `https://serdialconnect-hub.lovable.app`. Essa é a lista exata a usar no ajuste de CORS do `LOVABLE_PROMPT.md`.
