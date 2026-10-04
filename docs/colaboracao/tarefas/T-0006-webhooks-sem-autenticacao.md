@@ -2,7 +2,7 @@
 
 | Campo | Valor |
 |---|---|
-| Estado | ACEITA — aguardando push e CI; depois publicação guiada |
+| Estado | CI VERDE — aguardando publicação guiada |
 | Origem | QUADRO, fila item 19 (SG-10); inventário de 03/10/2026 |
 | Sistema | Sistema A (n8n) |
 | Exige ADR | não, para a contenção; a decisão de manter ou proteger cada endpoint é do usuário |
@@ -279,3 +279,11 @@ Os quatro ajustes foram atendidos sem alterar os workflows nem a migration 005.
 ### [2026-10-03] Claude — Credencial da Meta (item D do diagnóstico)
 
 Conferida pelo usuário no depurador oficial da Meta (valor não transcrito): token do tipo User, app "Automação Serdial21", escopos de WhatsApp Business, **Válido: Falso**, expirado em 03/03/2026. Não há o que revogar; resta apagar o valor dos três nós do workflow inativo "Automação - Finalizar Ticket" (ou excluí-lo). Nenhum workflow ativo usa a API do WhatsApp. Chave do Google (Cloud Vision): pendente.
+
+### [2026-10-03] Claude — Credenciais, limpeza e CI verde
+
+- Usuário: chave do Google excluída e valores removidos dos nós dos dois workflows inativos ("apagado, tudo feito"). Item D do diagnóstico encerrado.
+- A cópia da exportação dos 149 workflows foi apagada da pasta temporária do Claude, com autorização do usuário. No repositório ficam só os cinco baselines, sem segredos e sem o campo `shared`.
+- CI verde no commit `db66ac4` (run 37164674045), conferido no log: `538 passed`; `CLIENT_MANAGEMENT_ROLLBACK=PASS`; `SESSION_LOGOUT_TESTS=PASS`; `SESSION_LOGOUT_ROLLBACK=PASS`; `WEBHOOK_HARDENING_AUTHORIZATION_TESTS=PASS` e `WEBHOOK_HARDENING_ROLLBACK=PASS` (primeira execução real da 005 no MariaDB 11.8.9); `pip-audit` sem vulnerabilidades; varredura de segredos `PASS`.
+
+**Próximo passo:** publicação guiada pelo `docs/integration/SYSTEM_A_WEBHOOK_HARDENING_RUNBOOK.md`.
