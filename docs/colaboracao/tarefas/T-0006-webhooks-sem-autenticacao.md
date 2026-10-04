@@ -347,3 +347,9 @@ No upload, a nota do próprio Merge registra a equivalência do `cliente_id`: o 
 - Pendentes: consulta de `processamento_xml_nfe`; espelhar `\d*` no repositório (Codex); motor de obrigações respondeu 500 ao GET de teste — verificar se o antigo segue ativo e se executou; apuração ICMS; prompt do Lovable.
 - O ajuste do Codex (Merge no upload-xml e na apuração, runbook, testes) foi commitado sem aceite, como trabalho em andamento, para não se perder.
 - Retomada: `docs/CHECKPOINT_SESSAO_2026-10-03.md`, seção 4.
+
+### [2026-10-04] Claude — Motor de obrigações conferido
+
+- n8n: "SERD_GERADOR_OBRIGACOES_AUTO_v1 DESATIVADO 2026-10-03" (anterior) e o novo só com cron; execução 36831 do novo em 04/10 06:05 (Brasília), sucesso.
+- `logs_auditoria` (`cron_obrigacoes_geracao_mensal`): uma execução por dia às 09:05 UTC (30/09 a 04/10); **nenhuma execução extra em 03/10 à noite** — o GET de teste que respondeu 500 não disparou a geração. Sem efeito a corrigir.
+- Motor publicado (critério de aceite 6 em produção).
