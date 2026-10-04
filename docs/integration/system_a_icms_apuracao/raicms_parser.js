@@ -29,7 +29,20 @@ function formatCents(cents) {
   const absolute = Math.abs(cents);
   return `${cents < 0 ? '-' : ''}${Math.trunc(absolute / 100)},${String(absolute % 100).padStart(2, '0')}`;
 }
-function moneyValues(line) { return [...String(line).matchAll(MONEY_PATTERN)].map((m) => parseMoneyToCents(m[0])); }
+function tokenizeDataLine(line) {
+  const values = [];
+  let source = cleanLine(line);
+  const moneyAhead = '(?=-?(?:\\d{1,3}(?:\\.\\d{3})+|\\d+),\\d{2})';
+  const leadingSummary = source.match(new RegExp(`^(00[1-9]|01[0-4])${moneyAhead}`));
+  const leadingCfop = leadingSummary ? null : source.match(new RegExp(`^(\\d{4})${moneyAhead}`));
+  const leadingLabel = leadingSummary?.[1] ?? leadingCfop?.[1];
+  if (leadingLabel) source = `${leadingLabel} ${source.slice(leadingLabel.length)}`;
+  const label = cleanLine(source.replace(MONEY_PATTERN, (value) => {
+    values.push(parseMoneyToCents(value));
+    return ' ';
+  }).replace(/[;|]+/g, ' ').replace(/\s+/g, ' '));
+  return { values, label, normalized: fold(label) };
+}
 function valuesObject(values) { return Object.fromEntries(COLUMNS.map((column, i) => [column, values[i]])); }
 function rowVector(row) { return COLUMNS.map((column) => row[column]); }
 function addVectors(vectors) {
@@ -115,18 +128,18 @@ function parseText(source, origin) {
   const globalUnrecognized = [];
   let currentPeriod = null; let currentSection = null; let currentType = null;
   for (const record of records) {
-    const line = cleanLine(record.line); const normalized = fold(line); const title = titleInfo(line);
+    const line = cleanLine(record.line); const title = titleInfo(line);
     if (title) {
       if (origin === 'csv') { currentPeriod = periods.get(title.competencia); currentSection = title.secao; currentType = title.resumoTipo; }
       continue;
     }
+    const tokenized = tokenizeDataLine(line); const values = tokenized.values; const label = tokenized.label; const normalized = tokenized.normalized;
     if (/^(CFOP|SUBTOTAIS?\b|OPERACOES COM |DEBITO DO IMPOSTO |VALORES\b|\*+$|\*+ SEM MOVIMENTACAO \*+$)/.test(normalized)) continue;
-    const values = moneyValues(line);
     const period = periods.get(record.competence ?? currentPeriod?.competencia);
     const section = record.section ?? currentSection;
     const type = record.summaryType ?? currentType;
     if (!period) { if (/\d/.test(line)) globalUnrecognized.push({ linha: record.lineNumber, conteudo: line }); continue; }
-    const cfopMatch = line.match(/^\s*(\d{4})(?=\D|$)/);
+    const cfopMatch = label.match(/^(\d{4})$/);
     if (cfopMatch && values.length === 5) {
       const cfop = cfopMatch[1];
       if (!ENTRY_GROUPS.includes(cfop[0]) && !EXIT_GROUPS.includes(cfop[0])) throw new Error(`CFOP inválido na linha ${record.lineNumber}: ${cfop}.`);
@@ -134,32 +147,31 @@ function parseText(source, origin) {
       period._cfops.add(cfop);
       (ENTRY_GROUPS.includes(cfop[0]) ? period.entradas : period.saidas).push({ cfop, ...valuesObject(values) }); continue;
     }
-    const subtotal = normalized.match(/^([123567])\.00\b/);
+    const subtotal = normalized.match(/^([123567])\.00\s+(?:DO ESTADO|DE O\.?\s*ESTADOS|DO EXTERIOR)$/);
     if (subtotal && values.length === 5) {
       const group = subtotal[1]; const side = ENTRY_GROUPS.includes(group) ? 'entradas' : 'saidas';
       if (period.subtotais[side][group]) throw new Error(`Subtotal ${group}.00 repetido em ${period.competencia}.`);
       period.subtotais[side][group] = valuesObject(values); continue;
     }
-    if (/\bTOTAL\b/.test(normalized) && values.length === 5) {
+    if (/^(?:(?:ENTRADAS|SAIDAS)\s+)?TOTAL(?:\s+(?:ENTRADAS|SAIDAS))?$/.test(normalized) && values.length === 5) {
       let side = /ENTRADAS/.test(normalized) ? 'entradas' : (/SAIDAS/.test(normalized) ? 'saidas' : null);
       if (!side && ['entradas', 'saidas'].includes(section)) side = section;
       if (side && !period.totais[side]) period.totais[side] = valuesObject(values);
       else period._totals.push({ values, line, lineNumber: record.lineNumber });
       continue;
     }
-    if (DETAILS.some((label) => normalized.startsWith(label)) && values.length === 1) {
+    if (DETAILS.some((detailLabel) => normalized.startsWith(detailLabel)) && values.length === 1) {
       if (!type) throw new Error(`Detalhamento 012 sem título de resumo na linha ${record.lineNumber}.`);
       if (!period.resumos[type]) period.resumos[type] = newSummary();
-      const monetary = line.match(MONEY_PATTERN)?.[0] ?? '';
-      period.resumos[type].deducoes_detalhadas.push({ descricao: (monetary ? line.slice(0, line.lastIndexOf(monetary)) : line).replace(/[;|\s]+$/, ''), valor: values[0] }); continue;
+      period.resumos[type].deducoes_detalhadas.push({ descricao: label, valor: values[0] }); continue;
     }
-    const summaryCode = normalized.match(/^\s*(00[1-9]|01[0-4])(?:\D|$)/);
-    if (summaryCode && values.length) {
+    const summaryCode = normalized.match(/^(00[1-9]|01[0-4])\s+\D.+$/);
+    if (summaryCode && values.length === 1) {
       if (!type) throw new Error(`Código de resumo sem título reconhecido na linha ${record.lineNumber}.`);
       if (!period.resumos[type]) period.resumos[type] = newSummary();
       const code = summaryCode[1];
       if (period.resumos[type].valores[code] !== undefined) throw new Error(`Código de resumo repetido em ${period.competencia}/${type}: ${code}.`);
-      period.resumos[type].valores[code] = values.at(-1); continue;
+      period.resumos[type].valores[code] = values[0]; continue;
     }
     if (/\d/.test(line)) period.nao_interpretadas.push({ linha: record.lineNumber, conteudo: line });
   }
@@ -230,7 +242,7 @@ function runN8n(items) {
   try {
     const input = items[0]?.json ?? {}; const model = input.origem === 'pdf_texto' ? parsePdfText(input.texto) : parseCsv(input.texto); const checked = validate(model);
     const hasCfops = model.periodos.some((period) => period.entradas.length || period.saidas.length); const noMovement = checked.valido && !hasCfops;
-    return [{ json: { success: checked.valido, gerarPlanilha: checked.valido && hasCfops, semMovimentacao: noMovement, message: noMovement ? 'Sem movimentação de CFOP no período informado.' : (checked.valido ? 'Arquivo conferido.' : 'O arquivo não pôde ser conferido.'), modelo: model, divergencias: checked.divergencias, alertas: checked.alertas, listaAtualizacao: checked.valido && hasCfops ? spreadsheetRows(model) : [], totalCFOPs: checked.valido && hasCfops ? new Set(model.periodos.flatMap((period) => [...period.entradas, ...period.saidas].map((row) => row.cfop))).size : 0 } }];
+    return [{ json: { success: checked.valido && hasCfops, gerarPlanilha: checked.valido && hasCfops, semMovimentacao: noMovement, message: noMovement ? 'Sem movimentação de CFOP no período informado.' : (checked.valido ? 'Arquivo conferido.' : 'O arquivo não pôde ser conferido.'), modelo: model, divergencias: checked.divergencias, alertas: checked.alertas, listaAtualizacao: checked.valido && hasCfops ? spreadsheetRows(model) : [], totalCFOPs: checked.valido && hasCfops ? new Set(model.periodos.flatMap((period) => [...period.entradas, ...period.saidas].map((row) => row.cfop))).size : 0 } }];
   } catch (error) {
     return [{ json: { success: false, gerarPlanilha: false, semMovimentacao: false, message: 'O arquivo não pôde ser conferido.', divergencias: [{ campo: 'arquivo', esperado: 'CSV válido ou PDF com texto útil', encontrado: error.message }], alertas: [], listaAtualizacao: [], totalCFOPs: 0 } }];
   }

@@ -141,6 +141,30 @@ test('PDF sem movimentação distribui totais iguais entre entradas e saídas', 
   assert.equal(validate(model).valido, true);
 });
 
+test('texto realista do n8n aceita valores antes ou depois de rótulos grudados', () => {
+  const model = parsePdfText(JSON.parse(fixture('raicms_pdf_n8n_rotulos_grudados.json')));
+  assert.deepEqual(model.periodos.map((period) => period.competencia), ['01/2026', '02/2026']);
+  assert.equal(model.periodos[0].entradas[0].cfop, '1102');
+  assert.equal(model.periodos[0].saidas[0].cfop, '5102');
+  assert.equal(model.periodos[0].resumos.proprio.valores['001'], 27000);
+  assert.equal(model.periodos[0].resumos.proprio.deducoes_detalhadas.length, 2);
+  assert.deepEqual(model.periodos[1].nao_interpretadas, []);
+  assert.equal(validate(model).valido, true);
+});
+
+test('rótulo ambíguo e quantidade monetária inesperada continuam bloqueando', () => {
+  const pages = JSON.parse(fixture('raicms_pdf_n8n_rotulos_grudados.json'));
+  pages[0] = pages[0].replace(
+    'ENTRADAS 01/2026',
+    '1,00 2,00 3,00 4,001102\n1,00 1,00 1,00 1,00 1,001102 5102\nENTRADAS 01/2026',
+  );
+  const model = parsePdfText(pages);
+  const result = validate(model);
+  assert.equal(result.valido, false);
+  assert.ok(model.periodos[0].nao_interpretadas.some((item) => item.conteudo.endsWith('1102')));
+  assert.ok(model.periodos[0].nao_interpretadas.some((item) => item.conteudo.endsWith('1102 5102')));
+});
+
 test('página numérica sem título e anos distintos falham fechado', () => {
   assert.throws(() => parsePdfText(['1102 1,00 1,00 0,18 0,00 0,00']), /não possui título/);
   const pages = JSON.parse(fixture('raicms_pdf_paginas.json'));
@@ -148,14 +172,15 @@ test('página numérica sem título e anos distintos falham fechado', () => {
   assert.throws(() => parsePdfText(pages), /anos diferentes/);
 });
 
-test('arquivo inteiro sem CFOP é válido, mas não gera planilha', () => {
+test('arquivo inteiro sem CFOP responde como nada a gerar, sem divergências', () => {
   const text = fixture('raicms_sem_movimentacao.csv');
   assert.equal(validate(parseCsv(text)).valido, true);
   const result = runN8n([{ json: { origem: 'csv', texto: text } }])[0].json;
-  assert.equal(result.success, true);
+  assert.equal(result.success, false);
   assert.equal(result.gerarPlanilha, false);
   assert.equal(result.semMovimentacao, true);
   assert.match(result.message, /Sem movimentação de CFOP/);
+  assert.deepEqual(result.divergencias, []);
   assert.deepEqual(result.listaAtualizacao, []);
 });
 

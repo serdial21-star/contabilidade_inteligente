@@ -2,7 +2,7 @@
 
 | Campo | Valor |
 |---|---|
-| Estado | AJUSTE PEDIDO — texto real do Extract From File (ordem invertida e rótulos grudados) e resposta sem movimentação |
+| Estado | ACEITA NA REVISÃO — aguardando push, reimportação e novo teste real |
 | Origem | QUADRO, fila item 23 (primeira etapa); pedido do usuário em 04/10/2026 |
 | Sistema | Sistema A (workflow n8n `ferramentas-ia/apuracao-icms`, artefato versionado) |
 | Exige ADR | não — decisões registradas aqui |
@@ -221,3 +221,23 @@ O parser só reconhece rótulos no início da linha (`^([123567])\.00`, `TOTAL
 1. **(ALTA) Tokenização independente de ordem e de espaço.** Separar cada linha em valores monetários (padrão já existente) e rótulo (o texto restante, com espaços normalizados), aceitando o rótulo antes **ou** depois dos valores e **grudado** no primeiro/último valor. Classificar o rótulo: CFOP (exatamente 4 dígitos, primeiro em {1,2,3,5,6,7}); grupo `N.00` com "do Estado"/"de O. Estados"/"do Exterior"; "Total"; código de resumo 001–014 seguido de texto; detalhamentos da 012. Garantir que um valor grudado num rótulo numérico não seja mal lido (ex.: `21.249,241102` → valor `21.249,24` e CFOP `1102`; `6,29001 Por saídas…` → valor `6,29` e código `001`). Rótulo ambíguo ou linha com quantidade inesperada de valores → `nao_interpretadas` (continua bloqueando).
 2. **Fixtures sintéticas com as formas reais acima**, para entradas, saídas, subtotais, total, CFOP com valores antes e grudado, e resumo com valor antes do código; nos testes, a página sem movimentação no formato do n8n (duas linhas "Total" em ordens diferentes).
 3. **(MÉDIA) Resposta "sem movimentação".** A tela só exibe `message` quando a resposta é de falha; com `200`/`success: true` sem `url` mostra "Resposta inesperada da API". Responder `422` com `success: false` e `message: "Sem movimentação de CFOP no período informado."` (sem divergências), documentando que 422 aqui significa "nada a gerar", não erro de conferência.
+
+### [2026-10-04] Codex — Resposta ao ajuste do teste real no n8n
+
+**Resultado.** Implementei a tokenização das linhas antes da classificação. Cada linha agora é separada em valores monetários e rótulo normalizado, independentemente de o rótulo vir antes ou depois dos valores ou estar grudado ao primeiro/último valor. CFOP, grupos, totais, códigos 001–014 e detalhamentos da 012 são classificados a partir do rótulo separado. CFOP/código numérico grudado ao primeiro valor é desambiguado antes da extração monetária; rótulo não único ou quantidade inesperada de valores continua em `nao_interpretadas` e bloqueia a conferência.
+
+O caso integralmente sem CFOP agora mantém a conferência determinística válida internamente, mas o contrato HTTP retorna `success: false`, `semMovimentacao: true`, mensagem “Sem movimentação de CFOP no período informado.” e divergências vazias. O nó de resposta usa sempre `422` nesse ramo; aqui o status significa “nada a gerar” para compatibilidade com a tela, não erro nas somas.
+
+**Arquivo criado nesta rodada.** `fixtures/raicms_pdf_n8n_rotulos_grudados.json`, integralmente sintético, com rótulos antes/depois dos valores, concatenação sem espaço, CFOP e resumo numéricos grudados, dois períodos e página sem movimentação com os dois formatos de `Total` observados.
+
+**Arquivos alterados nesta rodada.** `raicms_parser.js`, `raicms_parser.test.js`, `README.md`, o código idêntico do nó “1. Extrator e Consolidador” e o nó “Responder Arquivo Nao Conferido” no workflow v10, `tests/unit/test_system_a_icms_apuracao_assets.py`, `docs/colaboracao/QUADRO.md` e este registro. Nenhuma migration foi criada.
+
+**Testes.** `node --test`: 20 aprovados; teste estático específico: 6 aprovados; suíte Python de `tests/unit`, `tests/integration` e `tests/api`: 546 aprovados, com dois avisos preexistentes de depreciação FastAPI/Starlette.
+
+**Limitações e pendências.** Não executei n8n, Drive, Sheets, banco, Lovable nem arquivos fiscais reais. O workflow precisa ser reimportado/substituído no n8n e os quatro testes reais da entrada anterior devem ser repetidos pelo usuário, inclusive o PDF mensal cuja primeira recusa não teve causa identificada.
+
+### [2026-10-04] Claude — Quarta revisão (texto real do n8n)
+
+- `node --test` 20/20; `tests/unit/test_system_a_icms_apuracao_assets.py` 6/6; `tests/unit` 323; varredura `PASS`; nó Code idêntico ao módulo; "sem movimentação" e divergência → `422` com `success: false` e `message`; sem retenção; nenhum valor da amostra real nas fixtures.
+- Simulação local (fora do repositório) com a estrutura dos arquivos reais, agora incluindo o formato literal observado no Extract From File: **seis cenários válidos** — mês CSV; mês PDF; anual CSV; anual PDF; anual PDF no formato do n8n (valores antes, rótulos grudados, duas linhas "Total" em ordens diferentes); mês PDF com CFOP e resumo invertidos e grudados (`…21.249,241102`, `6,29001 Por saídas…`), que produz o mesmo modelo do CSV.
+- **Veredito: ACEITO o código.** Aceite final da tarefa: reimportar o workflow e repetir os quatro arquivos pela tela (mês CSV e PDF → planilha; anual CSV e PDF → mensagem de sem movimentação) e um CSV com valor alterado (→ divergências).

@@ -80,7 +80,8 @@ def test_failed_validation_can_only_respond_422_without_effects() -> None:
     ]
     response = _node(workflow, 'Responder Arquivo Nao Conferido')
     assert response['type'] == 'n8n-nodes-base.respondToWebhook'
-    assert '$json.semMovimentacao === true ? 200 : 422' in response['parameters']['options']['responseCode']
+    assert response['parameters']['options']['responseCode'] == 422
+    assert 'success: false' in response['parameters']['responseBody']
     assert 'divergencias' in response['parameters']['responseBody']
     assert 'O arquivo não pôde ser conferido' in response['parameters']['responseBody']
     condition = _node(workflow, 'Conferencia valida?')['parameters']['conditions']['boolean'][0]
