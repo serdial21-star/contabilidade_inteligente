@@ -2,7 +2,7 @@
 
 | Campo | Valor |
 |---|---|
-| Estado | BRIEFING — aguardando aprovação do usuário |
+| Estado | APROVADA — aguardando implementação pelo Codex |
 | Origem | QUADRO, fila item 23 (primeira etapa); pedido do usuário em 04/10/2026 |
 | Sistema | Sistema A (workflow n8n `ferramentas-ia/apuracao-icms`, artefato versionado) |
 | Exige ADR | não — decisões registradas aqui |
@@ -76,3 +76,12 @@
 ### [2026-10-04] Usuário
 - "segue todas suas orientações" — implementar no n8n; conferência que não fecha bloqueia; provedor de IA a definir pelo Claude após verificar a política de dados. Sem outros modelos de relatório disponíveis; autorizado usar o leiaute do SPED Fiscal como referência.
 - Briefing: pendente de aprovação.
+
+### [2026-10-04] Usuário
+- "aprovo o briefing da T-0007".
+
+---
+
+## 3. Implementação (Codex)
+
+(aguardando "execute a tarefa T-0007")
