@@ -2,7 +2,7 @@
 
 | Campo | Valor |
 |---|---|
-| Estado | PUBLICAÇÃO PARCIAL — retomar pelo checkpoint de 03/10/2026 |
+| Estado | CONCLUÍDA — publicada em 03–04/10/2026 |
 | Origem | QUADRO, fila item 19 (SG-10); inventário de 03/10/2026 |
 | Sistema | Sistema A (n8n) |
 | Exige ADR | não, para a contenção; a decisão de manter ou proteger cada endpoint é do usuário |
@@ -417,3 +417,16 @@ O preflight `OPTIONS` deve ocorrer antes de autenticação ou qualquer chamada a
 - Observação: as Edge Functions entram no ar ao serem reimplantadas pelo Lovable, antes da publicação do site; durante a janela, o "Analista de Balanço IA" do site publicado recusa (o site antigo não envia `x-app-token`).
 - Não verificado pelo Claude: o diff de código do Lovable linha a linha (só o relatório). Mitigação: teste de todas as telas após publicar.
 - **Veredito: liberado para publicar**, seguido do roteiro de testes de telas.
+
+### [2026-10-04] Claude — Publicação final e encerramento
+
+- Lovable publicado. Testes do usuário em `https://serdial21.com`: todas as telas abrem; seletores de Tickets/Configurações (listas) ok; Analista de Balanço IA ok (sessão e permissão validadas no servidor).
+- Apuração ICMS: com o bloqueio de CORS removido, a requisição chega ao n8n; com PDF falha por desenho (workflow só lê CSV — item 23); com CSV gera a planilha. Workflow trocado pela versão endurecida (Merge): com login → "Planilha Gerada com Sucesso!"; sem login → **401**.
+- Situação final dos endpoints do diagnóstico:
+  - protegidos e publicados: `admin/upload-xml`, `ferramentas-ia/apuracao-icms`, `portal/honorarios-v2` (revogação), `ai-analyst`, `proxy-webhook` (24 rotas), CORS das 7 Edge Functions;
+  - desativados: `portal/meus-documentos`, `portal/meus-chamados`, `admin/novo-cliente` V8, `portal/receber-arquivo` V5, `admin/tasks`, `admin/integracao-cnd-v1` (CND adiado — artefato com Header Auth e trecho do Colab ficam versionados para uso futuro);
+  - motor de obrigações só com cron;
+  - credenciais expostas: token Meta expirado; chave Google excluída; valores removidos.
+- Pendências que não reabrem a tarefa: apagar as execuções com erro do workflow anterior da apuração (guardam o arquivo enviado); itens 18, 20, 22, 23 e 24 da fila; nova verificação de segurança do Lovable antes de divulgar mais amplamente (sugestão do próprio Lovable).
+
+**Estado: CONCLUÍDA.**
