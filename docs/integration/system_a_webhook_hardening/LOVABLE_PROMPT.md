@@ -62,7 +62,21 @@ O destino deve ser base constante + path escolhido no servidor. Não aceite URL 
 - Remova `handleBuscarBiblioteca` e toda chamada legada a `listar-arquivos`, inclusive o e-mail fixo e controles que existam apenas para esse fluxo. Não substitua por outro identificador. Preserve as abas e chamadas autenticadas atuais.
 - Em `HelpdeskTicketForm`, elimine o fallback de e-mail. Sem usuário autenticado e e-mail da sessão, bloqueie o envio, mostre mensagem para entrar novamente e não faça requisição.
 
-## 5. Verificação antes de publicar
+## 5. CORS de todas as Edge Functions
+
+Substitua origem fixa, wildcard ou configuração divergente por uma política CORS única e fail-closed em **todas** as Edge Functions. A allowlist exata é:
+
+- `https://serdial21.com`
+- `https://www.serdial21.com`
+- `https://serdialconnect-hub.lovable.app`
+
+Para cada requisição, leia o cabeçalho `Origin` e somente emita `Access-Control-Allow-Origin` quando o valor corresponder exatamente a uma das três origens acima; nesse caso, ecoe a origem validada. Não use `*`, correspondência parcial, sufixo, regex ampla nem fallback. Para origem ausente ou fora da allowlist, não emita `Access-Control-Allow-Origin`.
+
+Inclua `Vary: Origin` nas respostas das Edge Functions para impedir reutilização incorreta por caches. Trate `OPTIONS` antes da lógica de negócio, sem autenticar, chamar n8n, banco, storage ou provedor de IA. O preflight deve anunciar apenas os métodos realmente aceitos pela função e estes cabeçalhos usados pelo sistema: `authorization`, `x-app-token`, `content-type`, `apikey`, `x-client-info`. As respostas normais, de erro e de preflight devem usar a mesma decisão de origem.
+
+Não amplie os métodos, cabeçalhos, endpoints ou permissões existentes para corrigir CORS. Centralize a construção dos cabeçalhos se isso puder ser feito sem alterar os contratos das funções, evitando que uma função volte a ter origem fixa divergente.
+
+## 6. Verificação antes de publicar
 
 Mostre no relatório:
 
@@ -72,6 +86,9 @@ Mostre no relatório:
 - evidência de que `_method` inválido ou não permitido para o path não executa `fetch` e de que a allowlist usa o método efetivamente encaminhado;
 - evidência de `401`/`403` em `ai-analyst` antes da chamada ao gateway;
 - evidência de que `admin_user`, cargo e `localStorage` não participam da autorização do `ai-analyst`;
+- lista de todas as Edge Functions e, para cada uma, a configuração de CORS antes e depois;
+- testes de preflight para as três origens permitidas e pelo menos uma origem externa, comprovando `Access-Control-Allow-Origin` somente para correspondência exata, `Vary: Origin`, os cinco cabeçalhos permitidos e a ausência de efeito externo durante `OPTIONS`;
+- confirmação de que não restou origem fixa divergente, wildcard ou reflexão de origem não validada em nenhuma Edge Function;
 - confirmação de que nenhum segredo, token ou e-mail fixo foi adicionado.
 
 Referências consultadas em 03/10/2026: OWASP Authorization Cheat Sheet e OWASP Server Side Request Forgery Prevention Cheat Sheet. A autorização é verificada no servidor a cada requisição; destinos conhecidos usam allowlist e URL construída no servidor.

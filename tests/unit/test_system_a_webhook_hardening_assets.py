@@ -271,6 +271,19 @@ def test_lovable_prompt_and_colab_snippet_cover_security_contract() -> None:
     assert 'método efetivamente encaminhado' in prompt
     assert '_method' in prompt
     assert 'um `POST` externo permitido não pode sair do proxy como `DELETE`' in prompt
+    assert 'CORS de todas as Edge Functions' in prompt
+    for origin in (
+        'https://serdial21.com',
+        'https://www.serdial21.com',
+        'https://serdialconnect-hub.lovable.app',
+    ):
+        assert origin in prompt
+    assert 'Vary: Origin' in prompt
+    assert 'Para origem ausente ou fora da allowlist, não emita' in prompt
+    assert 'Não use `*`' in prompt
+    assert '`authorization`, `x-app-token`, `content-type`, `apikey`, `x-client-info`' in prompt
+    assert 'Trate `OPTIONS` antes da lógica de negócio' in prompt
+    assert 'configuração de CORS antes e depois' in prompt
 
     snippet = COLAB.read_text(encoding='utf-8')
     assert 'from google.colab import userdata' in snippet

@@ -385,3 +385,23 @@ No upload, a nota do próprio Merge registra a equivalência do `cliente_id`: o 
 
 - Teste com CSV ("Registro de Apuracao de ICMS.csv") falhou da mesma forma: preflight de `proxy-file-upload` bloqueado por `Access-Control-Allow-Origin: https://serdialconnect-hub.lovable.app` diferente de `https://serdial21.com`. Confirma que o bloqueio independe do formato.
 - Origens confirmadas pelo usuário ("todos os links acima acessam"): `https://serdial21.com`, `https://www.serdial21.com`, `https://serdialconnect-hub.lovable.app`. Essa é a lista exata a usar no ajuste de CORS do `LOVABLE_PROMPT.md`.
+
+### [2026-10-04] Codex — Ajuste de CORS incorporado ao prompt do Lovable
+
+**Implementação.** Acrescentei ao `LOVABLE_PROMPT.md` uma política CORS fail-closed para todas as Edge Functions, com allowlist exata das três origens confirmadas pelo usuário: `https://serdial21.com`, `https://www.serdial21.com` e `https://serdialconnect-hub.lovable.app`. O prompt exige correspondência exata e reflexão apenas da origem validada, proíbe wildcard e correspondências amplas, determina ausência de `Access-Control-Allow-Origin` para origem ausente ou não permitida e exige `Vary: Origin`.
+
+O preflight `OPTIONS` deve ocorrer antes de autenticação ou qualquer chamada a n8n, banco, storage ou IA, anunciar somente os métodos reais da função e permitir os cabeçalhos `authorization`, `x-app-token`, `content-type`, `apikey` e `x-client-info`. A mesma decisão de origem vale para respostas normais, de erro e de preflight. O relatório solicitado ao Lovable agora deve apresentar a configuração antes/depois de cada Edge Function e testes positivos para as três origens e negativo para uma origem externa.
+
+**Teste atualizado.** A cobertura estática do prompt exige a seção global de CORS, as três origens, `Vary: Origin`, o comportamento para origem ausente/externa, a proibição de `*`, os cinco cabeçalhos, o tratamento antecipado de `OPTIONS` e o relatório antes/depois.
+
+**Resultados.** Teste específico da T-0006: `14 passed`; conjunto relacionado do Sistema A: `63 passed`; suíte completa: `640 passed, 20 skipped`, com dois avisos preexistentes de depreciação em FastAPI/Starlette; varredura de segredos: `SECRET_SCANNER_CANARY_DETECTION: PASS` e `RELEASE_SECRET_SCAN: PASS`; `git diff --check`: aprovado. Nenhum banco, API, n8n, Supabase, Lovable ou outro serviço real foi acessado.
+
+**Arquivos alterados.** `docs/integration/system_a_webhook_hardening/LOVABLE_PROMPT.md`, `tests/unit/test_system_a_webhook_hardening_assets.py` e este registro. Nenhum arquivo ou migration foi criado.
+
+**Pendente para a próxima etapa aprovada.** Revisão do Claude; depois, aplicação do prompt no Lovable, revisão do diff gerado e testes reais de preflight antes da troca do workflow da apuração. Este ajuste apenas especifica e testa o contrato versionado no repositório; não altera diretamente as Edge Functions publicadas.
+
+### [2026-10-04] Claude — Revisão do ajuste de CORS no prompt
+
+- Seção 5 do `LOVABLE_PROMPT.md` conferida: allowlist exata das três origens confirmadas; eco só da origem validada; sem `*`, sufixo ou regex; `Vary: Origin`; `OPTIONS` antes de qualquer lógica; mesma decisão em respostas normais, de erro e de preflight; relatório com CORS antes/depois por função. Teste estático `14 passed`; varredura `PASS`. O usuário escolheu a opção 2 (Claude acrescentar), mas o Codex já estava implementando; o Claude não editou o arquivo para não sobrepor o trabalho.
+- Ponto de atenção para a revisão do relatório do Lovable: o preflight anuncia só cinco cabeçalhos; se a versão do supabase-js do site enviar outro cabeçalho, o navegador bloqueia — conferir no relatório e nos testes de preflight antes de publicar.
+- **Veredito: ACEITO** o prompt para aplicação no Lovable.
