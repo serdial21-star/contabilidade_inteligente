@@ -275,3 +275,7 @@ Os quatro ajustes foram atendidos sem alterar os workflows nem a migration 005.
 - Testes relacionados rodados pelo Claude: `49 passed`; sintaxe do validador aprovada. Workflows e 005 sem alteração desde a primeira revisão (o Codex declarou; os testes estáticos que os cobrem continuam passando).
 
 **Veredito: ACEITA.** Condição para publicar: CI verde com `WEBHOOK_HARDENING_AUTHORIZATION_TESTS=PASS` e `WEBHOOK_HARDENING_ROLLBACK=PASS` (primeira execução real da 005).
+
+### [2026-10-03] Claude — Credencial da Meta (item D do diagnóstico)
+
+Conferida pelo usuário no depurador oficial da Meta (valor não transcrito): token do tipo User, app "Automação Serdial21", escopos de WhatsApp Business, **Válido: Falso**, expirado em 03/03/2026. Não há o que revogar; resta apagar o valor dos três nós do workflow inativo "Automação - Finalizar Ticket" (ou excluí-lo). Nenhum workflow ativo usa a API do WhatsApp. Chave do Google (Cloud Vision): pendente.
