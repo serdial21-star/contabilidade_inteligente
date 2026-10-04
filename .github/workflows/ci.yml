@@ -7,8 +7,11 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with: {python-version: '3.12'}
+      - uses: actions/setup-node@v4
+        with: {node-version: '22'}
       - run: python -m pip install --upgrade pip
       - run: python -m pip install -e '.[dev]' pip-audit
+      - run: node --test docs/integration/system_a_icms_apuracao/raicms_parser.test.js
       - run: python -m pytest tests/unit tests/integration tests/api -q
       - run: bash scripts/validate_system_a_client_management.sh
       - run: python -m pip_audit

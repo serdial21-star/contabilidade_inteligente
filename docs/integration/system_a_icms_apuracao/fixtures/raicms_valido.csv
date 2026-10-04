@@ -1,0 +1,34 @@
+ENTRADAS 01/2026
+CFOP;Vr. Contábil;Base de Cálculo;Imposto Creditado;Isentas/Não Tribut.;Outras
+Operações com Crédito do Imposto;Débito do Imposto Coluna Auxiliar Somas
+1102;1.234,56;1.000,00;180,00;100,00;134,56
+****
+1.00 do Estado;1.234,56;1.000,00;180,00;100,00;134,56
+2.00 de O. Estados;0,00;0,00;0,00;0,00;0,00
+3.00 do Exterior;0,00;0,00;0,00;0,00;0,00
+Total;1.234,56;1.000,00;180,00;100,00;134,56
+SAÍDAS 01/2026
+CFOP;Vr. Contábil;Base de Cálculo;Imposto Debitado;Isentas/Não Tribut.;Outras
+5102;2.000,00;1.500,00;270,00;200,00;300,00
+5.00 do Estado;2.000,00;1.500,00;270,00;200,00;300,00
+6.00 de O. Estados;0,00;0,00;0,00;0,00;0,00
+7.00 do Exterior;0,00;0,00;0,00;0,00;0,00
+Total;2.000,00;1.500,00;270,00;200,00;300,00
+Resumo Apuração - ICMS 01/2026
+Valores
+001;Débitos por saídas;270,00
+002;Outros débitos;0,00
+003;Estornos de créditos;0,00
+004;Total dos débitos;270,00
+005;Créditos por entradas;180,00
+006;Outros créditos;0,00
+007;Estornos de débitos;0,00
+008;Total dos créditos;180,00
+009;Saldo credor anterior;0,00
+010;Total créditos e saldo anterior;180,00
+011;Saldo devedor apurado;90,00
+012;Deduções;10,00
+; Adicional relativo ao fundo de combate a pobreza;2,00
+; Dedução relativa ao incentivo a cultura;3,00
+013;ICMS a recolher;80,00
+014;Saldo credor a transportar;0,00
