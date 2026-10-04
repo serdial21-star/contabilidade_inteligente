@@ -405,3 +405,15 @@ O preflight `OPTIONS` deve ocorrer antes de autenticação ou qualquer chamada a
 - Seção 5 do `LOVABLE_PROMPT.md` conferida: allowlist exata das três origens confirmadas; eco só da origem validada; sem `*`, sufixo ou regex; `Vary: Origin`; `OPTIONS` antes de qualquer lógica; mesma decisão em respostas normais, de erro e de preflight; relatório com CORS antes/depois por função. Teste estático `14 passed`; varredura `PASS`. O usuário escolheu a opção 2 (Claude acrescentar), mas o Codex já estava implementando; o Claude não editou o arquivo para não sobrepor o trabalho.
 - Ponto de atenção para a revisão do relatório do Lovable: o preflight anuncia só cinco cabeçalhos; se a versão do supabase-js do site enviar outro cabeçalho, o navegador bloqueia — conferir no relatório e nos testes de preflight antes de publicar.
 - **Veredito: ACEITO** o prompt para aplicação no Lovable.
+
+### [2026-10-04] Claude — Revisão do relatório do Lovable (Edge Functions e frontend)
+
+- **Primeira entrega:** o Lovable mudou por conta própria a listagem de `useListas` de `GET /admin/listas?categoria=` para `POST` com `acao: listar_opcoes` e pediu alteração no n8n. Recusado: no workflow "[CRUD] Gestão de Listas Dinâmicas", `POST /admin/listas` cria itens (inventário de 03/10). Pedida a volta ao contrato original com exceção estrita no proxy.
+- **Correção conferida:** listagem de volta a `GET /admin/listas?categoria=`, aceita só para `departamento`, `status_ticket`, `prioridade`, `tipo_documento`, `tipo_entrega`; parâmetro ausente, repetido, extra ou fora da lista → 404 sem `fetch`; URL montada no servidor com `encodeURIComponent`. Criar/editar/excluir (`POST`/`PUT`/`DELETE` com `acao`) inalterados. Nenhuma mudança no n8n.
+- `proxy-webhook`: 24 endereços, todos com call site e coincidentes com o inventário de 03/10; o resto → 404 sem chegar ao n8n (testado ao vivo pelo Lovable).
+- `ai-analyst`: `x-app-token` validado no servidor por `admin/permissoes/funcionario`; 401 sem/inválido, 403 sem `ferramentas_ia.criar`; nenhuma chamada à IA antes; sem uso de dados do navegador.
+- CORS: as 7 funções na política única (3 origens exatas, `Vary: Origin`, `OPTIONS` antes de qualquer lógica). Antes: `*` no `client-logo`, sufixos `*.lovable.app`/`*.serdial21.com` e fallback para a primeira origem.
+- Frontend: removidos a aba legada "Entregas" da Biblioteca (`listar-arquivos`, sem token, e-mail fixo; workflow já inativo no n8n) e o e-mail fixo do formulário de chamado (envio bloqueado sem sessão).
+- Observação: as Edge Functions entram no ar ao serem reimplantadas pelo Lovable, antes da publicação do site; durante a janela, o "Analista de Balanço IA" do site publicado recusa (o site antigo não envia `x-app-token`).
+- Não verificado pelo Claude: o diff de código do Lovable linha a linha (só o relatório). Mitigação: teste de todas as telas após publicar.
+- **Veredito: liberado para publicar**, seguido do roteiro de testes de telas.
