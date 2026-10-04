@@ -1,0 +1,407 @@
+{
+    "name":  "[WEBHOOK] POST /portal/honorarios-v2 (Corrigido)",
+    "description":  null,
+    "active":  false,
+    "isArchived":  false,
+    "nodes":  [
+                  {
+                      "parameters":  {
+                                         "httpMethod":  "POST",
+                                         "path":  "portal/honorarios-v2",
+                                         "responseMode":  "responseNode",
+                                         "options":  {
+
+                                                     }
+                                     },
+                      "id":  "a0e52e63-735f-4894-b9df-c2d5d0f82afe",
+                      "name":  "Webhook POST",
+                      "type":  "n8n-nodes-base.webhook",
+                      "typeVersion":  1,
+                      "position":  [
+                                       -720,
+                                       128
+                                   ],
+                      "webhookId":  "ccc92002-e95b-4655-bcf5-80232cc1962f"
+                  },
+                  {
+                      "parameters":  {
+                                         "httpMethod":  "OPTIONS",
+                                         "path":  "portal/honorarios-v2",
+                                         "responseMode":  "responseNode",
+                                         "options":  {
+
+                                                     }
+                                     },
+                      "id":  "41f45e87-c823-4a83-8fc0-1bc1229307d2",
+                      "name":  "Webhook OPTIONS",
+                      "type":  "n8n-nodes-base.webhook",
+                      "typeVersion":  1,
+                      "position":  [
+                                       -720,
+                                       352
+                                   ],
+                      "webhookId":  "582a1aac-4822-4efc-bf34-b1f955b846ff"
+                  },
+                  {
+                      "parameters":  {
+                                         "respondWith":  "json",
+                                         "responseBody":  "{}",
+                                         "options":  {
+                                                         "responseCode":  200,
+                                                         "responseHeaders":  {
+                                                                                 "entries":  [
+                                                                                                 {
+                                                                                                     "name":  "Access-Control-Allow-Origin",
+                                                                                                     "value":  "https://serdial21.com"
+                                                                                                 },
+                                                                                                 {
+                                                                                                     "name":  "Access-Control-Allow-Methods",
+                                                                                                     "value":  "POST, OPTIONS"
+                                                                                                 },
+                                                                                                 {
+                                                                                                     "name":  "Access-Control-Allow-Headers",
+                                                                                                     "value":  "Content-Type, Authorization"
+                                                                                                 }
+                                                                                             ]
+                                                                             }
+                                                     }
+                                     },
+                      "id":  "8e758083-b868-465c-b1bb-a85cacc41ec0",
+                      "name":  "Responder CORS",
+                      "type":  "n8n-nodes-base.respondToWebhook",
+                      "typeVersion":  1,
+                      "position":  [
+                                       -480,
+                                       352
+                                   ]
+                  },
+                  {
+                      "parameters":  {
+                                         "jsCode":  "const data = $input.first().json;\nconst headers = data.headers || {};\nconst authHeader = String(headers[\u0027authorization\u0027] || headers[\u0027Authorization\u0027] || \u0027\u0027);\nconst match = authHeader.match(/^Bearer\\s+([A-Za-z0-9]{20,128})$/i);\nreturn [{ json: { _token: match ? match[1] : \u0027\u0027, _invalido: !match } }];"
+                                     },
+                      "id":  "8dbe1707-2b9f-46a0-9eba-55f9b5823a8b",
+                      "name":  "Extrair token",
+                      "type":  "n8n-nodes-base.code",
+                      "typeVersion":  2,
+                      "position":  [
+                                       -480,
+                                       128
+                                   ]
+                  },
+                  {
+                      "parameters":  {
+                                         "conditions":  {
+                                                            "boolean":  [
+                                                                            {
+                                                                                "value1":  "={{ $json._invalido }}",
+                                                                                "value2":  true
+                                                                            }
+                                                                        ]
+                                                        }
+                                     },
+                      "id":  "585de9cb-187c-4af6-93ca-0084bffa969c",
+                      "name":  "Token ausente?",
+                      "type":  "n8n-nodes-base.if",
+                      "typeVersion":  1,
+                      "position":  [
+                                       -240,
+                                       128
+                                   ]
+                  },
+                  {
+                      "parameters":  {
+                                         "respondWith":  "json",
+                                         "responseBody":  "{\"success\": false, \"message\": \"Token nao fornecido\"}",
+                                         "options":  {
+                                                         "responseCode":  401,
+                                                         "responseHeaders":  {
+                                                                                 "entries":  [
+                                                                                                 {
+                                                                                                     "name":  "Access-Control-Allow-Origin",
+                                                                                                     "value":  "https://serdial21.com"
+                                                                                                 }
+                                                                                             ]
+                                                                             }
+                                                     }
+                                     },
+                      "id":  "930f670b-37a3-49a5-94fa-81f88018d3fb",
+                      "name":  "Responder 401 sem token",
+                      "type":  "n8n-nodes-base.respondToWebhook",
+                      "typeVersion":  1,
+                      "position":  [
+                                       0,
+                                       0
+                                   ]
+                  },
+                  {
+                      "parameters":  {
+                                         "operation":  "executeQuery",
+                                         "query":  "SELECT cliente_id FROM security_sessoes_clientes WHERE token_hash = SHA2($1, 256) AND expira_em \u003e UTC_TIMESTAMP() AND revogado_em IS NULL LIMIT 1;",
+                                         "options":  {
+                                                         "queryReplacement":  "={{ [$json._token] }}"
+                                                     }
+                                     },
+                      "id":  "9cd4ac61-0e90-4b78-ab43-a3e67ad36eba",
+                      "name":  "SQL validar token",
+                      "type":  "n8n-nodes-base.mySql",
+                      "typeVersion":  2.4,
+                      "position":  [
+                                       0,
+                                       208
+                                   ],
+                      "alwaysOutputData":  true
+                  },
+                  {
+                      "parameters":  {
+                                         "conditions":  {
+                                                            "number":  [
+                                                                           {
+                                                                               "value1":  "={{ $json.cliente_id }}",
+                                                                               "operation":  "isNotEmpty"
+                                                                           }
+                                                                       ]
+                                                        }
+                                     },
+                      "id":  "789e0d56-b908-4d09-ad17-1f63f821e6bc",
+                      "name":  "Token valido?",
+                      "type":  "n8n-nodes-base.if",
+                      "typeVersion":  1,
+                      "position":  [
+                                       240,
+                                       208
+                                   ]
+                  },
+                  {
+                      "parameters":  {
+                                         "respondWith":  "json",
+                                         "responseBody":  "{\"success\": false, \"message\": \"Token invalido ou expirado\"}",
+                                         "options":  {
+                                                         "responseCode":  401,
+                                                         "responseHeaders":  {
+                                                                                 "entries":  [
+                                                                                                 {
+                                                                                                     "name":  "Access-Control-Allow-Origin",
+                                                                       "value":  "https://serdial21.com"
+                                                                                                 }
+                                                                                             ]
+                                                                             }
+                                                     }
+                                     },
+                      "id":  "73c88c0a-8358-43d9-81d6-086b9c0d4f32",
+                      "name":  "Responder 401 token invalido",
+                      "type":  "n8n-nodes-base.respondToWebhook",
+                      "typeVersion":  1,
+                      "position":  [
+                                       480,
+                                       384
+                                   ]
+                  },
+                  {
+                      "parameters":  {
+                                         "operation":  "executeQuery",
+                                         "query":  "SELECT hp.id, hp.competencia, hp.valor, hp.data_vencimento, hp.data_pagamento, hp.status, hp.link_comprovante, hp.link_boleto, hp.link_nota_fiscal, hp.link_recibo, hp.tipo_documento_fiscal, hp.numero_nota_fiscal, hp.numero_recibo, hc.descricao AS origem FROM honorarios_parcelas hp JOIN honorarios_contratos hc ON hc.id = hp.contrato_id WHERE hp.cliente_id = $1 ORDER BY hp.data_vencimento DESC LIMIT 50;",
+                                         "options":  {
+                                                         "queryReplacement":  "={{ [$json.cliente_id] }}"
+                                                     }
+                                     },
+                      "id":  "efd09fb2-da38-4c9c-af0f-b7e5169c6aaf",
+                      "name":  "SQL historico parcelas",
+                      "type":  "n8n-nodes-base.mySql",
+                      "typeVersion":  2.4,
+                      "position":  [
+                                       480,
+                                       80
+                                   ]
+                  },
+                  {
+                      "parameters":  {
+                                         "operation":  "executeQuery",
+                                         "query":  "SELECT competencia, valor, data_vencimento, status FROM honorarios_parcelas WHERE cliente_id = $1 AND status IN (\u0027pendente\u0027, \u0027atrasado\u0027) ORDER BY data_vencimento ASC LIMIT 1;",
+                                         "options":  {
+                                                         "queryReplacement":  "={{ [$(\u0027SQL validar token\u0027).first().json.cliente_id] }}"
+                                                     }
+                                     },
+                      "id":  "08ec643f-c707-4c30-9230-38d55543c537",
+                      "name":  "SQL proxima fatura",
+                      "type":  "n8n-nodes-base.mySql",
+                      "typeVersion":  2.4,
+                      "position":  [
+                                       720,
+                                       80
+                                   ]
+                  },
+                  {
+                      "parameters":  {
+                                         "jsCode":  "const parcelas = $(\u0027SQL historico parcelas\u0027).all().map(i =\u003e i.json);\nconst proximaArr = $(\u0027SQL proxima fatura\u0027).all();\nconst proxima = proximaArr.length \u003e 0 ? proximaArr[0].json : null;\nconst atrasadas = parcelas.filter(p =\u003e p.status === \u0027atrasado\u0027).length;\n\nreturn [{ json: {\n  success: true,\n  proxima_fatura: proxima,\n  situacao: {\n    em_dia: atrasadas === 0,\n    parcelas_atrasadas: atrasadas\n  },\n  parcelas: parcelas,\n  total: parcelas.length\n}}];"
+                                     },
+                      "id":  "49fa312d-70f9-4efc-a146-dc26e8a70400",
+                      "name":  "Montar resposta",
+                      "type":  "n8n-nodes-base.code",
+                      "typeVersion":  2,
+                      "position":  [
+                                       960,
+                                       80
+                                   ]
+                  },
+                  {
+                      "parameters":  {
+                                         "respondWith":  "json",
+                                         "responseBody":  "={{ JSON.stringify($json) }}",
+                                         "options":  {
+                                                         "responseHeaders":  {
+                                                                                 "entries":  [
+                                                                                                 {
+                                                                                                     "name":  "Access-Control-Allow-Origin",
+                                                                                                     "value":  "https://serdial21.com"
+                                                                                                 },
+                                                                                                 {
+                                                                                                     "name":  "Content-Type",
+                                                                                                     "value":  "application/json"
+                                                                                                 }
+                                                                                             ]
+                                                                             }
+                                                     }
+                                     },
+                      "id":  "fe70dc01-ec82-45f0-8c13-b0387d3a5c3b",
+                      "name":  "Responder dados",
+                      "type":  "n8n-nodes-base.respondToWebhook",
+                      "typeVersion":  1,
+                      "position":  [
+                                       1200,
+                                       80
+                                   ]
+                  }
+              ],
+    "connections":  {
+                        "Webhook POST":  {
+                                             "main":  [
+                                                          [
+                                                              {
+                                                                  "node":  "Extrair token",
+                                                                  "type":  "main",
+                                                                  "index":  0
+                                                              }
+                                                          ]
+                                                      ]
+                                         },
+                        "Webhook OPTIONS":  {
+                                                "main":  [
+                                                             [
+                                                                 {
+                                                                     "node":  "Responder CORS",
+                                                                     "type":  "main",
+                                                                     "index":  0
+                                                                 }
+                                                             ]
+                                                         ]
+                                            },
+                        "Extrair token":  {
+                                              "main":  [
+                                                           [
+                                                               {
+                                                                   "node":  "Token ausente?",
+                                                                   "type":  "main",
+                                                                   "index":  0
+                                                               }
+                                                           ]
+                                                       ]
+                                          },
+                        "Token ausente?":  {
+                                               "main":  [
+                                                            [
+                                                                {
+                                                                    "node":  "Responder 401 sem token",
+                                                                    "type":  "main",
+                                                                    "index":  0
+                                                                }
+                                                            ],
+                                                            [
+                                                                {
+                                                                    "node":  "SQL validar token",
+                                                                    "type":  "main",
+                                                                    "index":  0
+                                                                }
+                                                            ]
+                                                        ]
+                                           },
+                        "SQL validar token":  {
+                                                  "main":  [
+                                                               [
+                                                                   {
+                                                                       "node":  "Token valido?",
+                                                                       "type":  "main",
+                                                                       "index":  0
+                                                                   }
+                                                               ]
+                                                           ]
+                                              },
+                        "Token valido?":  {
+                                              "main":  [
+                                                           [
+                                                               {
+                                                                   "node":  "SQL historico parcelas",
+                                                                   "type":  "main",
+                                                                   "index":  0
+                                                               }
+                                                           ],
+                                                           [
+                                                               {
+                                                                   "node":  "Responder 401 token invalido",
+                                                                   "type":  "main",
+                                                                   "index":  0
+                                                               }
+                                                           ]
+                                                       ]
+                                          },
+                        "SQL historico parcelas":  {
+                                                       "main":  [
+                                                                    [
+                                                                        {
+                                                                            "node":  "SQL proxima fatura",
+                                                                            "type":  "main",
+                                                                            "index":  0
+                                                                        }
+                                                                    ]
+                                                                ]
+                                                   },
+                        "SQL proxima fatura":  {
+                                                   "main":  [
+                                                                [
+                                                                    {
+                                                                        "node":  "Montar resposta",
+                                                                        "type":  "main",
+                                                                        "index":  0
+                                                                    }
+                                                                ]
+                                                            ]
+                                               },
+                        "Montar resposta":  {
+                                                "main":  [
+                                                             [
+                                                                 {
+                                                                     "node":  "Responder dados",
+                                                                     "type":  "main",
+                                                                     "index":  0
+                                                                 }
+                                                             ]
+                                                         ]
+                                            }
+                    },
+    "settings":  {
+                     "executionOrder":  "v1",
+                     "binaryMode":  "separate",
+                     "availableInMCP":  false,
+                     "saveDataErrorExecution":  "none",
+                     "saveDataSuccessExecution":  "none",
+                     "saveManualExecutions":  false,
+                     "saveExecutionProgress":  false
+                 },
+    "staticData":  null,
+    "meta":  null,
+    "pinData":  {
+
+                },
+    "tags":  [
+
+             ]
+}

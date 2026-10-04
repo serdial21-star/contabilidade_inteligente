@@ -1,0 +1,540 @@
+{
+    "name":  "API Lovable - Apuracao ICMS e CMV v9 (DocumentID Corrigido)",
+    "description":  null,
+    "active":  false,
+    "isArchived":  false,
+    "nodes":  [
+                  {
+                      "parameters":  {
+                                         "httpMethod":  "POST",
+                                         "path":  "ferramentas-ia/apuracao-icms",
+                                         "responseMode":  "responseNode",
+                                         "options":  {
+
+                                                     }
+                                     },
+                      "id":  "e96602d7-4906-49f1-a655-8f0dd5092093",
+                      "name":  "Webhook Lovable",
+                      "type":  "n8n-nodes-base.webhook",
+                      "typeVersion":  1,
+                      "position":  [
+                                       -208,
+                                       -272
+                                   ],
+                      "webhookId":  "b9f4b421-c36d-4a42-a6b9-e7a537a0263a"
+                  },
+                  {
+                      "parameters":  {
+                                         "jsCode":  "if (!$input.item.binary) throw new Error(\u0027ERRO: Nenhum arquivo foi recebido no Webhook.\u0027);\n\nconst binaryKeys = Object.keys($input.item.binary || {});\nif (!binaryKeys.length) throw new Error(\u0027ERRO: Nenhum binario encontrado no item de entrada.\u0027);\n\nconst nomeDoCampo = binaryKeys[0];\nconst binInfo = $input.item.binary[nomeDoCampo] || {};\nconst nomeArquivo = binInfo.fileName || \u0027\u0027;\nconst buffer = await this.helpers.getBinaryDataBuffer(0, nomeDoCampo);\n\nlet csvString = \u0027\u0027;\ntry {\n  csvString = buffer.toString(\u0027utf8\u0027);\n  if ((csvString.match(/\\uFFFD/g) || []).length \u003e 5) {\n    csvString = buffer.toString(\u0027latin1\u0027);\n  }\n} catch (e) {\n  csvString = buffer.toString(\u0027latin1\u0027);\n}\n\ncsvString = csvString.replace(/^\\uFEFF+/, \u0027\u0027);\nconst linhas = csvString.split(/\\r?\\n/);\n\nconst MESES_NUM = {\n  1: \u0027JANEIRO\u0027, 2: \u0027FEVEREIRO\u0027, 3: \u0027MARCO\u0027, 4: \u0027ABRIL\u0027,\n  5: \u0027MAIO\u0027, 6: \u0027JUNHO\u0027, 7: \u0027JULHO\u0027, 8: \u0027AGOSTO\u0027,\n  9: \u0027SETEMBRO\u0027, 10: \u0027OUTUBRO\u0027, 11: \u0027NOVEMBRO\u0027, 12: \u0027DEZEMBRO\u0027\n};\n\nconst MARCO_KEY = \u0027MAR\\u00C7O\u0027;\n\nconst criarLinhaVazia = (cfop) =\u003e ({\n  CFOP: cfop, JANEIRO: 0, FEVEREIRO: 0, [MARCO_KEY]: 0, ABRIL: 0,\n  MAIO: 0, JUNHO: 0, JULHO: 0, AGOSTO: 0, SETEMBRO: 0,\n  OUTUBRO: 0, NOVEMBRO: 0, DEZEMBRO: 0\n});\n\nconst parseValorBR = (valor) =\u003e {\n  if (valor === null || valor === undefined) return 0;\n  let s = String(valor).trim().replace(/\\s/g, \u0027\u0027);\n  if (!s) return 0;\n  const hasComma = s.includes(\u0027,\u0027);\n  const hasDot = s.includes(\u0027.\u0027);\n  if (hasComma \u0026\u0026 hasDot) {\n    if (s.lastIndexOf(\u0027,\u0027) \u003e s.lastIndexOf(\u0027.\u0027)) {\n      s = s.replace(/\\./g, \u0027\u0027).replace(\u0027,\u0027, \u0027.\u0027);\n    } else {\n      s = s.replace(/,/g, \u0027\u0027);\n    }\n  } else if (hasComma) {\n    s = s.replace(/\\./g, \u0027\u0027).replace(\u0027,\u0027, \u0027.\u0027);\n  }\n  s = s.replace(/[^\\d.-]/g, \u0027\u0027);\n  const n = parseFloat(s);\n  return Number.isFinite(n) ? n : 0;\n};\n\nconst detectarDelimitador = (linhas) =\u003e {\n  const amostra = linhas.slice(0, Math.min(15, linhas.length));\n  let scorePV = 0, scoreVirg = 0;\n  for (const l of amostra) {\n    scorePV += (l.match(/;/g) || []).length;\n    scoreVirg += (l.match(/,/g) || []).length;\n  }\n  return scorePV \u003e= scoreVirg ? \u0027;\u0027 : \u0027,\u0027;\n};\n\nconst delimiter = detectarDelimitador(linhas);\n\nconst resumo = {};\nconst anosEncontrados = new Set();\nlet mesAtual = null;\nlet emSecaoDados = false;\n\nconst reSecao = /(?:ENTRADAS|SA[I\\u00CDIDAS]DAS)\\s+(\\d{1,2})\\/(\\d{4})/i;\nconst reCfopHeader = /^CFOP[;,]/;\nconst reParar = /^(Subtotais|Total\\b|1\\.\\d{2}\\s|2\\.\\d{2}\\s|3\\.\\d{2}\\s|5\\.\\d{2}\\s|6\\.\\d{2}\\s|7\\.\\d{2}\\s)/i;\n\nfor (const linhaRaw of linhas) {\n  const linha = linhaRaw.trim();\n  if (!linha) continue;\n\n  const mSecao = linha.match(reSecao);\n  if (mSecao) {\n    mesAtual = parseInt(mSecao[1], 10);\n    anosEncontrados.add(parseInt(mSecao[2], 10));\n    emSecaoDados = false;\n    continue;\n  }\n\n  if (reCfopHeader.test(linha)) {\n    emSecaoDados = true;\n    continue;\n  }\n\n  if (reParar.test(linha)) {\n    emSecaoDados = false;\n    continue;\n  }\n\n  if (!emSecaoDados || mesAtual === null) continue;\n\n  const cols = linhaRaw.split(delimiter);\n  const cfop = (cols[0] || \u0027\u0027).trim().replace(/\\D/g, \u0027\u0027);\n  if (!cfop || cfop.length !== 4) continue;\n\n  const vrContabil = parseValorBR(cols[1]);\n\n  if (!resumo[cfop]) resumo[cfop] = criarLinhaVazia(cfop);\n\n  let nomeMes = MESES_NUM[mesAtual];\n  if (nomeMes === \u0027MARCO\u0027) nomeMes = MARCO_KEY;\n\n  if (nomeMes) {\n    resumo[cfop][nomeMes] = Number((resumo[cfop][nomeMes] + vrContabil).toFixed(2));\n  }\n}\n\nif (anosEncontrados.size \u003e 1) {\n  throw new Error(`ERRO: O arquivo contem dados de anos diferentes (${Array.from(anosEncontrados).sort().join(\u0027, \u0027)}). A planilha suporta apenas 1 ano por vez.`);\n}\n\nconst listaAtualizacao = Object.keys(resumo)\n  .sort((a, b) =\u003e Number(a) - Number(b))\n  .map(cfop =\u003e ({\n    CFOP: resumo[cfop].CFOP,\n    JANEIRO: Number(resumo[cfop].JANEIRO.toFixed(2)),\n    FEVEREIRO: Number(resumo[cfop].FEVEREIRO.toFixed(2)),\n    [MARCO_KEY]: Number(resumo[cfop][MARCO_KEY].toFixed(2)),\n    ABRIL: Number(resumo[cfop].ABRIL.toFixed(2)),\n    MAIO: Number(resumo[cfop].MAIO.toFixed(2)),\n    JUNHO: Number(resumo[cfop].JUNHO.toFixed(2)),\n    JULHO: Number(resumo[cfop].JULHO.toFixed(2)),\n    AGOSTO: Number(resumo[cfop].AGOSTO.toFixed(2)),\n    SETEMBRO: Number(resumo[cfop].SETEMBRO.toFixed(2)),\n    OUTUBRO: Number(resumo[cfop].OUTUBRO.toFixed(2)),\n    NOVEMBRO: Number(resumo[cfop].NOVEMBRO.toFixed(2)),\n    DEZEMBRO: Number(resumo[cfop].DEZEMBRO.toFixed(2))\n  }));\n\nif (!listaAtualizacao.length) {\n  throw new Error(`Nenhum dado valido foi consolidado. Arquivo: ${nomeArquivo}`);\n}\n\nreturn [{\n  json: {\n    listaAtualizacao,\n    totalCFOPs: listaAtualizacao.length\n  }\n}];"
+                                     },
+                      "id":  "c1e1e655-4d8f-48b7-a6ff-1bd8a18bd88e",
+                      "name":  "1. Extrator e Consolidador",
+                      "type":  "n8n-nodes-base.code",
+                      "typeVersion":  2,
+                      "position":  [
+                                       32,
+                                       -272
+                                   ]
+                  },
+                  {
+                      "parameters":  {
+                                         "operation":  "copy",
+                                         "fileId":  {
+                                                        "__rl":  true,
+                                                        "mode":  "id",
+                                                        "value":  "1SqY4Fz3AUuS-CoCpYQ5h7xwvuzOLc9vJ3ND7l7l1pYc"
+                                                    },
+                                         "sameFolder":  false,
+                                         "driveId":  {
+                                                         "__rl":  true,
+                                                         "mode":  "list",
+                                                         "value":  "My Drive"
+                                                     },
+                                         "folderId":  {
+                                                          "__rl":  true,
+                                                          "mode":  "id",
+                                                          "value":  "1iBVlj6BruRP7wTnSddYJW15PqBTUbRdg"
+                                                      },
+                                         "options":  {
+
+                                                     }
+                                     },
+                      "id":  "45d1f671-5c4b-4f36-85ae-76f0905ec05e",
+                      "name":  "2. Copiar Planilha Modelo",
+                      "type":  "n8n-nodes-base.googleDrive",
+                      "typeVersion":  3,
+                      "position":  [
+                                       256,
+                                       -272
+                                   ]
+                  },
+                  {
+                      "parameters":  {
+                                         "amount":  3
+                                     },
+                      "id":  "2f56604f-5f4a-43fc-a055-203e3a29b920",
+                      "name":  "3. Aguardar Propagacao",
+                      "type":  "n8n-nodes-base.wait",
+                      "typeVersion":  1.1,
+                      "position":  [
+                                       480,
+                                       -272
+                                   ],
+                      "webhookId":  "0cb27147-310d-4626-b364-a21fe3c7bd7e"
+                  },
+                  {
+                      "parameters":  {
+                                         "jsCode":  "const lista = $(\u00271. Extrator e Consolidador\u0027).first().json.listaAtualizacao;\nconst spreadsheetId = $(\u00272. Copiar Planilha Modelo\u0027).first().json.id;\nif (!spreadsheetId) throw new Error(\u0027ID da copia da planilha nao encontrado.\u0027);\nreturn lista.map(item =\u003e ({ json: { spreadsheetId, ...item } }));"
+                                     },
+                      "id":  "76c35de8-3ff2-4ec3-bfbb-f741f78418a9",
+                      "name":  "4. Preparar Itens para Sheets",
+                      "type":  "n8n-nodes-base.code",
+                      "typeVersion":  2,
+                      "position":  [
+                                       672,
+                                       -272
+                                   ]
+                  },
+                  {
+                      "parameters":  {
+                                         "operation":  "appendOrUpdate",
+                                         "documentId":  {
+                                                            "__rl":  true,
+                                                            "value":  "={{ $json.spreadsheetId }}",
+                                                            "mode":  "id"
+                                                        },
+                                         "sheetName":  {
+                                                           "__rl":  true,
+                                                           "mode":  "name",
+                                                           "value":  "RESUMO CFOP"
+                                                       },
+                                         "columns":  {
+                                                         "mappingMode":  "defineBelow",
+                                                         "value":  {
+                                                                       "CFOP":  "={{ $json.CFOP }}",
+                                                                       " JANEIRO":  "={{ $json.JANEIRO }}",
+                                                                       " FEVEREIRO":  "={{ $json.FEVEREIRO }}",
+                                                                       " MARÇO":  "={{ $json[\"MARÇO\"] }}",
+                                                                       " ABRIL":  "={{ $json.ABRIL }}",
+                                                                       " MAIO":  "={{ $json.MAIO }}",
+                                                                       " JUNHO":  "={{ $json.JUNHO }}",
+                                                                       " JULHO":  "={{ $json.JULHO }}",
+                                                                       " AGOSTO":  "={{ $json.AGOSTO }}",
+                                                                       " SETEMBRO":  "={{ $json.SETEMBRO }}",
+                                                                       " OUTUBRO":  "={{ $json.OUTUBRO }}",
+                                                                       " NOVEMBRO":  "={{ $json.NOVEMBRO }}",
+                                                                       " DEZEMBRO":  "={{ $json.DEZEMBRO }}"
+                                                                   },
+                                                         "matchingColumns":  [
+                                                                                 "CFOP"
+                                                                             ],
+                                                         "schema":  [
+                                                                        {
+                                                                            "id":  "CFOP",
+                                                                            "displayName":  "CFOP",
+                                                                            "required":  false,
+                                                                            "defaultMatch":  false,
+                                                                            "display":  true,
+                                                                            "type":  "string",
+                                                                            "canBeUsedToMatch":  true,
+                                                                            "removed":  false
+                                                                        },
+                                                                        {
+                                                                            "id":  " JANEIRO",
+                                                                            "displayName":  " JANEIRO",
+                                                                            "required":  false,
+                                                                            "defaultMatch":  false,
+                                                                            "display":  true,
+                                                                            "type":  "string",
+                                                                            "canBeUsedToMatch":  true,
+                                                                            "removed":  false
+                                                                        },
+                                                                        {
+                                                                            "id":  " FEVEREIRO",
+                                                                            "displayName":  " FEVEREIRO",
+                                                                            "required":  false,
+                                                                            "defaultMatch":  false,
+                                                                            "display":  true,
+                                                                            "type":  "string",
+                                                                            "canBeUsedToMatch":  true,
+                                                                            "removed":  false
+                                                                        },
+                                                                        {
+                                                                            "id":  " MARÇO",
+                                                                            "displayName":  " MARÇO",
+                                                                            "required":  false,
+                                                                            "defaultMatch":  false,
+                                                                            "display":  true,
+                                                                            "type":  "string",
+                                                                            "canBeUsedToMatch":  true,
+                                                                            "removed":  false
+                                                                        },
+                                                                        {
+                                                                            "id":  " ABRIL",
+                                                                            "displayName":  " ABRIL",
+                                                                            "required":  false,
+                                                                            "defaultMatch":  false,
+                                                                            "display":  true,
+                                                                            "type":  "string",
+                                                                            "canBeUsedToMatch":  true,
+                                                                            "removed":  false
+                                                                        },
+                                                                        {
+                                                                            "id":  " MAIO",
+                                                                            "displayName":  " MAIO",
+                                                                            "required":  false,
+                                                                            "defaultMatch":  false,
+                                                                            "display":  true,
+                                                                            "type":  "string",
+                                                                            "canBeUsedToMatch":  true,
+                                                                            "removed":  false
+                                                                        },
+                                                                        {
+                                                                            "id":  " JUNHO",
+                                                                            "displayName":  " JUNHO",
+                                                                            "required":  false,
+                                                                            "defaultMatch":  false,
+                                                                            "display":  true,
+                                                                            "type":  "string",
+                                                                            "canBeUsedToMatch":  true,
+                                                                            "removed":  false
+                                                                        },
+                                                                        {
+                                                                            "id":  " JULHO",
+                                                                            "displayName":  " JULHO",
+                                                                            "required":  false,
+                                                                            "defaultMatch":  false,
+                                                                            "display":  true,
+                                                                            "type":  "string",
+                                                                            "canBeUsedToMatch":  true,
+                                                                            "removed":  false
+                                                                        },
+                                                                        {
+                                                                            "id":  " AGOSTO",
+                                                                            "displayName":  " AGOSTO",
+                                                                            "required":  false,
+                                                                            "defaultMatch":  false,
+                                                                            "display":  true,
+                                                                            "type":  "string",
+                                                                            "canBeUsedToMatch":  true,
+                                                                            "removed":  false
+                                                                        },
+                                                                        {
+                                                                            "id":  " SETEMBRO",
+                                                                            "displayName":  " SETEMBRO",
+                                                                            "required":  false,
+                                                                            "defaultMatch":  false,
+                                                                            "display":  true,
+                                                                            "type":  "string",
+                                                                            "canBeUsedToMatch":  true,
+                                                                            "removed":  false
+                                                                        },
+                                                                        {
+                                                                            "id":  " OUTUBRO",
+                                                                            "displayName":  " OUTUBRO",
+                                                                            "required":  false,
+                                                                            "defaultMatch":  false,
+                                                                            "display":  true,
+                                                                            "type":  "string",
+                                                                            "canBeUsedToMatch":  true,
+                                                                            "removed":  false
+                                                                        },
+                                                                        {
+                                                                            "id":  " NOVEMBRO",
+                                                                            "displayName":  " NOVEMBRO",
+                                                                            "required":  false,
+                                                                            "defaultMatch":  false,
+                                                                            "display":  true,
+                                                                            "type":  "string",
+                                                                            "canBeUsedToMatch":  true,
+                                                                            "removed":  false
+                                                                        },
+                                                                        {
+                                                                            "id":  " DEZEMBRO",
+                                                                            "displayName":  " DEZEMBRO",
+                                                                            "required":  false,
+                                                                            "defaultMatch":  false,
+                                                                            "display":  true,
+                                                                            "type":  "string",
+                                                                            "canBeUsedToMatch":  true,
+                                                                            "removed":  false
+                                                                        },
+                                                                        {
+                                                                            "id":  "TOTAL",
+                                                                            "displayName":  "TOTAL",
+                                                                            "required":  false,
+                                                                            "defaultMatch":  false,
+                                                                            "display":  true,
+                                                                            "type":  "string",
+                                                                            "canBeUsedToMatch":  true,
+                                                                            "removed":  true
+                                                                        },
+                                                                        {
+                                                                            "id":  "DESCRIÇÃO",
+                                                                            "displayName":  "DESCRIÇÃO",
+                                                                            "required":  false,
+                                                                            "defaultMatch":  false,
+                                                                            "display":  true,
+                                                                            "type":  "string",
+                                                                            "canBeUsedToMatch":  true,
+                                                                            "removed":  true
+                                                                        },
+                                                                        {
+                                                                            "id":  "VALOR",
+                                                                            "displayName":  "VALOR",
+                                                                            "required":  false,
+                                                                            "defaultMatch":  false,
+                                                                            "display":  true,
+                                                                            "type":  "string",
+                                                                            "canBeUsedToMatch":  true,
+                                                                            "removed":  true
+                                                                        }
+                                                                    ],
+                                                         "attemptToConvertTypes":  false,
+                                                         "convertFieldsToString":  false,
+                                                         "valueMode":  "any",
+                                                         "columnToMatchOn":  "CFOP",
+                                                         "valuesToSend":  {
+                                                                              "values":  [
+                                                                                             {
+                                                                                                 "column":  "CFOP",
+                                                                                                 "value":  "={{ $json.CFOP }}"
+                                                                                             },
+                                                                                             {
+                                                                                                 "column":  "JANEIRO",
+                                                                                                 "value":  "={{ $json.JANEIRO }}"
+                                                                                             },
+                                                                                             {
+                                                                                                 "column":  "FEVEREIRO",
+                                                                                                 "value":  "={{ $json.FEVEREIRO }}"
+                                                                                             },
+                                                                                             {
+                                                                                                 "column":  "MARÇO",
+                                                                                                 "value":  "={{ $json[\"MARÇO\"] }}"
+                                                                                             },
+                                                                                             {
+                                                                                                 "column":  "ABRIL",
+                                                                                                 "value":  "={{ $json.ABRIL }}"
+                                                                                             },
+                                                                                             {
+                                                                                                 "column":  "MAIO",
+                                                                                                 "value":  "={{ $json.MAIO }}"
+                                                                                             },
+                                                                                             {
+                                                                                                 "column":  "JUNHO",
+                                                                                                 "value":  "={{ $json.JUNHO }}"
+                                                                                             },
+                                                                                             {
+                                                                                                 "column":  "JULHO",
+                                                                                                 "value":  "={{ $json.JULHO }}"
+                                                                                             },
+                                                                                             {
+                                                                                                 "column":  "AGOSTO",
+                                                                                                 "value":  "={{ $json.AGOSTO }}"
+                                                                                             },
+                                                                                             {
+                                                                                                 "column":  "SETEMBRO",
+                                                                                                 "value":  "={{ $json.SETEMBRO }}"
+                                                                                             },
+                                                                                             {
+                                                                                                 "column":  "OUTUBRO",
+                                                                                                 "value":  "={{ $json.OUTUBRO }}"
+                                                                                             },
+                                                                                             {
+                                                                                                 "column":  "NOVEMBRO",
+                                                                                                 "value":  "={{ $json.NOVEMBRO }}"
+                                                                                             },
+                                                                                             {
+                                                                                                 "column":  "DEZEMBRO",
+                                                                                                 "value":  "={{ $json.DEZEMBRO }}"
+                                                                                             }
+                                                                                         ]
+                                                                          }
+                                                     },
+                                         "options":  {
+
+                                                     }
+                                     },
+                      "id":  "1824eb41-a688-47b5-8ff5-ec81d1672dc2",
+                      "name":  "5. Preencher Aba RESUMO CFOP",
+                      "type":  "n8n-nodes-base.googleSheets",
+                      "typeVersion":  4,
+                      "position":  [
+                                       896,
+                                       -272
+                                   ]
+                  },
+                  {
+                      "parameters":  {
+                                         "respondWith":  "json",
+                                         "responseBody":  "={\n  \"success\": true,\n  \"url\": \"https://docs.google.com/spreadsheets/d/{{ $(\u00272. Copiar Planilha Modelo\u0027).first().json.id }}\"\n}",
+                                         "options":  {
+                                                         "responseHeaders":  {
+                                                                                 "entries":  [
+                                                                                                 {
+                                                                                                     "name":  "Access-Control-Allow-Origin",
+                                                                                                     "value":  "https://serdial21.com"
+                                                                                                 }
+                                                                                             ]
+                                                                             }
+                                                     }
+                                     },
+                      "id":  "b90118e9-006d-4948-8944-9e7635c81b9b",
+                      "name":  "8. Devolver pro Lovable",
+                      "type":  "n8n-nodes-base.respondToWebhook",
+                      "typeVersion":  1,
+                      "position":  [
+                                       1152,
+                                       -272
+                                   ],
+                      "executeOnce":  true
+                  },
+                  {
+                      "parameters":  {
+                                         "jsCode":  "const input = $(\u0027Webhook Lovable\u0027).first().json ?? {};\nconst headers = input.headers ?? {};\nconst auth = String(headers.authorization ?? headers.Authorization ?? \u0027\u0027);\nconst match = auth.match(/^Bearer\\s+([A-Za-z0-9]{20,128})$/i);\nreturn [{ json: { token: match ? match[1] : \u0027\u0027 } }];"
+                                     },
+                      "id":  "c6f11e80-a49d-4a38-bb4f-722c55ef0201",
+                      "name":  "Preparar Autorizacao",
+                      "type":  "n8n-nodes-base.code",
+                      "typeVersion":  2,
+                      "position":  [-1168, -272]
+                  },
+                  {
+                      "parameters":  {
+                                         "operation":  "executeQuery",
+                                         "query":  "CALL sp_admin_module_authorize($1, $2, $3);",
+                                         "options":  {"queryReplacement":  "={{ [$json.token, \u0027ferramentas_ia\u0027, \u0027criar\u0027] }}"}
+                                     },
+                      "id":  "c6f11e80-a49d-4a38-bb4f-722c55ef0202",
+                      "name":  "Autorizar Ferramenta IA",
+                      "type":  "n8n-nodes-base.mySql",
+                      "typeVersion":  2.4,
+                      "position":  [-928, -272],
+                      "alwaysOutputData":  true
+                  },
+                  {
+                      "parameters":  {"jsCode":  "const values = $input.all().flatMap((item) =\u003e Array.isArray(item.json) ? item.json : [item.json]);\nconst row = values.find((value) =\u003e value && typeof value === \u0027object\u0027 && Object.prototype.hasOwnProperty.call(value, \u0027result\u0027));\nreturn [{ json: row ?? { success: 0, result: \u0027unauthorized\u0027, funcionario_id: null, request_id: null } }];"},
+                      "id":  "c6f11e80-a49d-4a38-bb4f-722c55ef0203",
+                      "name":  "Normalizar Autorizacao",
+                      "type":  "n8n-nodes-base.code",
+                      "typeVersion":  2,
+                      "position":  [-688, -272]
+                  },
+                  {
+                      "parameters":  {"conditions":  {"boolean":  [{"value1":  "={{ $json.result === \u0027authorized\u0027 }}", "value2":  true}]}},
+                      "id":  "c6f11e80-a49d-4a38-bb4f-722c55ef0204",
+                      "name":  "Autorizado?",
+                      "type":  "n8n-nodes-base.if",
+                      "typeVersion":  1,
+                      "position":  [-448, -272]
+                  },
+                  {
+                      "parameters":  {"respondWith":  "json", "responseBody":  "={{ { success: false, message: $json.result === \u0027forbidden\u0027 ? \u0027Acesso negado.\u0027 : \u0027Sessao expirada ou invalida.\u0027 } }}", "options":  {"responseCode":  "={{ $json.result === \u0027forbidden\u0027 ? 403 : 401 }}", "responseHeaders":  {"entries":  [{"name":  "Access-Control-Allow-Origin", "value":  "https://serdial21.com"}]}}},
+                      "id":  "c6f11e80-a49d-4a38-bb4f-722c55ef0205",
+                      "name":  "Responder Autorizacao",
+                      "type":  "n8n-nodes-base.respondToWebhook",
+                      "typeVersion":  1.1,
+                      "position":  [-208, -80]
+                  },
+                  {
+                      "parameters":  {"jsCode":  "const original = $(\u0027Webhook Lovable\u0027).first();\nreturn [{ json: original.json ?? {}, binary: original.binary ?? {}, pairedItem: { item: 0 } }];"},
+                      "id":  "c6f11e80-a49d-4a38-bb4f-722c55ef0206",
+                      "name":  "Restaurar Upload Autorizado",
+                      "type":  "n8n-nodes-base.code",
+                      "typeVersion":  2,
+                      "position":  [-208, -368]
+                  }
+              ],
+    "connections":  {
+                        "Webhook Lovable":  {
+                                                "main":  [
+                                                             [
+                                                                 {
+                                                                     "node":  "Preparar Autorizacao",
+                                                                     "type":  "main",
+                                                                     "index":  0
+                                                                 }
+                                                             ]
+                                                         ]
+                                            },
+                        "Preparar Autorizacao":  {"main":  [[{"node":  "Autorizar Ferramenta IA", "type":  "main", "index":  0}]]},
+                        "Autorizar Ferramenta IA":  {"main":  [[{"node":  "Normalizar Autorizacao", "type":  "main", "index":  0}]]},
+                        "Normalizar Autorizacao":  {"main":  [[{"node":  "Autorizado?", "type":  "main", "index":  0}]]},
+                        "Autorizado?":  {"main":  [[{"node":  "Restaurar Upload Autorizado", "type":  "main", "index":  0}], [{"node":  "Responder Autorizacao", "type":  "main", "index":  0}]]},
+                        "Restaurar Upload Autorizado":  {"main":  [[{"node":  "1. Extrator e Consolidador", "type":  "main", "index":  0}]]},
+                        "1. Extrator e Consolidador":  {
+                                                           "main":  [
+                                                                        [
+                                                                            {
+                                                                                "node":  "2. Copiar Planilha Modelo",
+                                                                                "type":  "main",
+                                                                                "index":  0
+                                                                            }
+                                                                        ]
+                                                                    ]
+                                                       },
+                        "2. Copiar Planilha Modelo":  {
+                                                          "main":  [
+                                                                       [
+                                                                           {
+                                                                               "node":  "3. Aguardar Propagacao",
+                                                                               "type":  "main",
+                                                                               "index":  0
+                                                                           }
+                                                                       ]
+                                                                   ]
+                                                      },
+                        "3. Aguardar Propagacao":  {
+                                                       "main":  [
+                                                                    [
+                                                                        {
+                                                                            "node":  "4. Preparar Itens para Sheets",
+                                                                            "type":  "main",
+                                                                            "index":  0
+                                                                        }
+                                                                    ]
+                                                                ]
+                                                   },
+                        "4. Preparar Itens para Sheets":  {
+                                                              "main":  [
+                                                                           [
+                                                                               {
+                                                                                   "node":  "5. Preencher Aba RESUMO CFOP",
+                                                                                   "type":  "main",
+                                                                                   "index":  0
+                                                                               }
+                                                                           ]
+                                                                       ]
+                                                          },
+                        "5. Preencher Aba RESUMO CFOP":  {
+                                                             "main":  [
+                                                                          [
+                                                                              {
+                                                                                  "node":  "8. Devolver pro Lovable",
+                                                                                  "type":  "main",
+                                                                                  "index":  0
+                                                                              }
+                                                                          ]
+                                                                      ]
+                                                         }
+                    },
+    "settings":  {
+                     "executionOrder":  "v1",
+                     "binaryMode":  "separate",
+                     "availableInMCP":  false,
+                     "saveDataErrorExecution":  "none",
+                     "saveDataSuccessExecution":  "none",
+                     "saveManualExecutions":  false,
+                     "saveExecutionProgress":  false
+                 },
+    "staticData":  null,
+    "meta":  {
+                 "templateCredsSetupCompleted":  true
+             },
+    "pinData":  {
+
+                },
+    "tags":  [
+
+             ]
+}

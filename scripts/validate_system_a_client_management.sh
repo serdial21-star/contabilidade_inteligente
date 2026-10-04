@@ -4,6 +4,7 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 ASSET_DIR="${ROOT_DIR}/docs/integration/system_a_client_management"
 LOGOUT_DIR="${ROOT_DIR}/docs/integration/system_a_session_logout"
+HARDENING_DIR="${ROOT_DIR}/docs/integration/system_a_webhook_hardening"
 CONTAINER="serdial21-client-management-test-$$"
 DB_NAME="serdial21_client_management_test"
 DB_PASSWORD="$(openssl rand -hex 24)"
@@ -32,6 +33,13 @@ done
 for required_file in 004_up.sql 004_down.sql; do
   test -f "${LOGOUT_DIR}/${required_file}" || {
     echo "MISSING_FILE=${LOGOUT_DIR}/${required_file}"
+    exit 1
+  }
+done
+
+for required_file in 005_up.sql 005_down.sql verify_005.sql; do
+  test -f "${HARDENING_DIR}/${required_file}" || {
+    echo "MISSING_FILE=${HARDENING_DIR}/${required_file}"
     exit 1
   }
 done
@@ -77,6 +85,12 @@ apply_logout_sql() {
     "${DB_NAME}" < "${LOGOUT_DIR}/$1"
 }
 
+apply_hardening_sql() {
+  docker exec -i "${CONTAINER}" mariadb \
+    --user=root --password="${DB_PASSWORD}" \
+    "${DB_NAME}" < "${HARDENING_DIR}/$1"
+}
+
 assert_contains() {
   local output="$1"
   local expected="$2"
@@ -104,10 +118,52 @@ docker exec -i "${CONTAINER}" mariadb \
 apply_sql 001_up.sql
 apply_sql 002_up.sql
 apply_sql 003_up.sql
+apply_hardening_sql 005_up.sql
 
 administrator_id="$(db "SELECT id FROM funcionarios WHERE email='administrator@example.invalid';")"
 admin_id="$(db "SELECT id FROM funcionarios WHERE email='admin@example.invalid';")"
 operator_allowed_id="$(db "SELECT id FROM funcionarios WHERE email='operator-allowed@example.invalid';")"
+
+# T-0006: autorizacao generica de modulo/acao falha fechada e audita somente
+# funcionario autenticado sem permissao. Nenhum token ou hash entra no evento.
+db "INSERT INTO permissoes_funcionario_modulos (funcionario_id, modulo, acao, permitido) VALUES
+  (${operator_allowed_id}, 'ferramentas_ia', 'criar', 1),
+  ((SELECT id FROM funcionarios WHERE email='operator-denied@example.invalid'), 'ferramentas_ia', 'criar', 0);" >/dev/null
+db "INSERT INTO funcionarios (nome_funcionario,email,senha,cargo,status) VALUES
+  ('Inativo Ferramentas','inactive-tools@example.invalid',SHA2('SyntheticOnly9x!',256),'Operador','Inativo');" >/dev/null
+inactive_tools_id="$(db "SELECT id FROM funcionarios WHERE email='inactive-tools@example.invalid';")"
+db "INSERT INTO security_sessoes_funcionarios (funcionario_id,token_hash,expira_em) VALUES
+  (${inactive_tools_id},SHA2('SyntheticInactiveToolsToken01',256),UTC_TIMESTAMP()+INTERVAL 1 HOUR);" >/dev/null
+
+assert_contains "$(db "CALL sp_admin_module_authorize('SyntheticAdministratorToken1001','ferramentas_ia','criar');")" $'1\tauthorized\t' "Administrator bypasses matrix"
+assert_contains "$(db "CALL sp_admin_module_authorize('SyntheticAdminToken1000000002','ferramentas_ia','criar');")" $'1\tauthorized\t' "Admin bypasses matrix"
+assert_contains "$(db "CALL sp_admin_module_authorize('SyntheticTrimmedAdminToken12','ferramentas_ia','criar');")" $'1\tauthorized\t' "trimmed Admin bypasses matrix"
+assert_contains "$(db "CALL sp_admin_module_authorize('SyntheticOperatorAllowed1003','ferramentas_ia','criar');")" $'1\tauthorized\t' "explicit module permission authorizes"
+
+for token in \
+  SyntheticOperatorMissing1004 \
+  SyntheticOperatorDenied1005 \
+  SyntheticUnknownRoleToken1007 \
+  SyntheticNullRoleToken100008 \
+  SyntheticEmptyRoleToken10009 \
+  SyntheticSpacesRoleToken1010 \
+  SyntheticAccentedRoleToken11; do
+  assert_contains "$(db "CALL sp_admin_module_authorize('${token}','ferramentas_ia','criar');")" $'0\tforbidden\t' "module authorization fails closed"
+done
+
+assert_contains "$(db "CALL sp_admin_module_authorize('bad token!','ferramentas_ia','criar');")" $'0\tunauthorized' "malformed module token"
+assert_contains "$(db "CALL sp_admin_module_authorize('SyntheticUnknownModuleToken99','ferramentas_ia','criar');")" $'0\tunauthorized' "unknown module session"
+assert_contains "$(db "CALL sp_admin_module_authorize('SyntheticInactiveToolsToken01','ferramentas_ia','criar');")" $'0\tunauthorized' "inactive employee session"
+
+db "UPDATE security_sessoes_funcionarios SET expira_em=UTC_TIMESTAMP()-INTERVAL 1 MINUTE WHERE funcionario_id=${operator_allowed_id};" >/dev/null
+assert_contains "$(db "CALL sp_admin_module_authorize('SyntheticOperatorAllowed1003','ferramentas_ia','criar');")" $'0\tunauthorized' "expired module session"
+db "UPDATE security_sessoes_funcionarios SET expira_em=UTC_TIMESTAMP()+INTERVAL 1 HOUR,revogado_em=UTC_TIMESTAMP() WHERE funcionario_id=${operator_allowed_id};" >/dev/null
+assert_contains "$(db "CALL sp_admin_module_authorize('SyntheticOperatorAllowed1003','ferramentas_ia','criar');")" $'0\tunauthorized' "revoked module session"
+db "UPDATE security_sessoes_funcionarios SET revogado_em=NULL WHERE funcionario_id=${operator_allowed_id};" >/dev/null
+
+assert_scalar "SELECT COUNT(*) FROM logs_auditoria WHERE acao='employee_module_action_forbidden';" "7"
+assert_scalar "SELECT COUNT(*) FROM logs_auditoria WHERE acao='employee_module_action_forbidden' AND (detalhes LIKE '%Synthetic%' OR detalhes REGEXP '[0-9a-f]{64}');" "0"
+assert_scalar "SELECT COUNT(*) FROM logs_auditoria WHERE acao='employee_module_action_forbidden' AND JSON_LENGTH(detalhes)=3 AND JSON_UNQUOTE(JSON_EXTRACT(detalhes,'$.module'))='ferramentas_ia' AND JSON_UNQUOTE(JSON_EXTRACT(detalhes,'$.action'))='criar' AND JSON_UNQUOTE(JSON_EXTRACT(detalhes,'$.request_id')) IS NOT NULL;" "7"
 
 # Sessao invalida, expirada e revogada nunca produzem efeito.
 result="$(db "CALL sp_admin_cliente_create('InvalidSyntheticToken0000','Nao Criado','invalid-session@example.invalid','', 'Lead', NULL);")"
@@ -294,6 +350,10 @@ apply_logout_sql 004_down.sql
 assert_scalar "SELECT COUNT(*) FROM information_schema.ROUTINES WHERE ROUTINE_SCHEMA = DATABASE() AND ROUTINE_NAME IN ('sp_funcionario_logout', 'sp_cliente_logout');" "0"
 assert_scalar "SELECT COUNT(*) FROM logs_auditoria WHERE acao IN ('employee_logout', 'client_logout');" "2"
 
+apply_hardening_sql 005_down.sql
+assert_scalar "SELECT COUNT(*) FROM information_schema.ROUTINES WHERE ROUTINE_SCHEMA=DATABASE() AND ROUTINE_NAME='sp_admin_module_authorize';" "0"
+assert_scalar "SELECT COUNT(*) FROM logs_auditoria WHERE acao='employee_module_action_forbidden';" "7"
+
 # O downgrade remove a fronteira nova e restaura create/update de 002.
 apply_sql 003_down.sql
 assert_scalar "SELECT COUNT(*) FROM information_schema.ROUTINES WHERE ROUTINE_SCHEMA=DATABASE() AND ROUTINE_NAME IN ('sp_admin_client_authorize','sp_admin_cliente_list');" "0"
@@ -311,3 +371,5 @@ echo "CLIENT_MANAGEMENT_AUDIT_TESTS=PASS"
 echo "CLIENT_MANAGEMENT_ROLLBACK=PASS"
 echo "SESSION_LOGOUT_TESTS=PASS"
 echo "SESSION_LOGOUT_ROLLBACK=PASS"
+echo "WEBHOOK_HARDENING_AUTHORIZATION_TESTS=PASS"
+echo "WEBHOOK_HARDENING_ROLLBACK=PASS"

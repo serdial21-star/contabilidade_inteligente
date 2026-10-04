@@ -1,0 +1,150 @@
+{
+    "name":  "API - Receber Extração CND (Google Colab)",
+    "description":  null,
+    "active":  false,
+    "isArchived":  false,
+    "nodes":  [
+                  {
+                      "parameters":  {
+                                         "httpMethod":  "POST",
+                                         "path":  "admin/integracao-cnd-v1",
+                                         "authentication":  "headerAuth",
+                                         "responseMode":  "lastNode",
+                                         "options":  {
+
+                                                     }
+                                     },
+                      "id":  "17562506-e912-448a-b15b-b535e50ba8cc",
+                      "name":  "Webhook - Integracao Colab",
+                      "type":  "n8n-nodes-base.webhook",
+                      "typeVersion":  1,
+                      "position":  [
+                                       0,
+                                       -80
+                                   ],
+                      "webhookId":  "4120ba85-eb05-4954-a181-2ad2bf4b2721",
+                      "notesInFlow":  true,
+                      "notes":  "Associe uma credencial Header Auth com o cabeçalho X-Serdial21-Integration-Secret. O valor fica somente na credencial do n8n e no Secret do Colab."
+                  },
+                  {
+                      "parameters":  {
+                                         "operation":  "executeQuery",
+                                         "query":  "SELECT id FROM clientes WHERE cnpj_cpf = $1 LIMIT 1;",
+                                         "options":  {
+                                                         "queryReplacement":  "={{ [$json.cnpj] }}"
+                                                     }
+                                     },
+                      "id":  "c8f2d453-dd80-4a1a-8cfa-f836fccbb236",
+                      "name":  "MySQL - Buscar Cliente por CNPJ",
+                      "type":  "n8n-nodes-base.mySql",
+                      "typeVersion":  2.4,
+                      "position":  [
+                                       256,
+                                       -80
+                                   ]
+                  },
+                  {
+                      "parameters":  {
+                                         "jsCode":  "const input = $(\u0027Normalizar Entrada CND\u0027).first().json;\nconst clienteId = Number($json.id ?? 0);\nif (!Number.isSafeInteger(clienteId) || clienteId < 1) {\n  throw new Error(\u0027Cliente indisponivel para a integracao CND.\u0027);\n}\nreturn [{ json: { ...input, cliente_id: clienteId } }];"
+                                     },
+                      "id":  "807c9462-cb60-481f-840a-725d4ba9e235",
+                      "name":  "Code - Montar Upsert CND",
+                      "type":  "n8n-nodes-base.code",
+                      "typeVersion":  2,
+                      "position":  [
+                                       512,
+                                       -80
+                                   ]
+                  },
+                  {
+                      "parameters":  {
+                                         "operation":  "executeQuery",
+                                         "query":  "INSERT INTO certidoes_clientes (cliente_id, tipo_id, data_emissao, data_vencimento, status, observacoes) VALUES ($1, $2, $3, $4, $5, \u0027Extraído via IA Gemini\u0027) ON DUPLICATE KEY UPDATE data_vencimento = VALUES(data_vencimento), status = VALUES(status), updated_at = UTC_TIMESTAMP();",
+                                         "options":  {
+                                                         "queryReplacement":  "={{ [$json.cliente_id, $json.tipo_id, $json.data_emissao, $json.data_vencimento, $json.status] }}"
+                                                     }
+                                     },
+                      "id":  "ef2e15fd-2236-461f-9398-167c89153f4a",
+                      "name":  "MySQL - Salvar CND",
+                      "type":  "n8n-nodes-base.mySql",
+                      "typeVersion":  2.4,
+                      "position":  [
+                                       752,
+                                       -80
+                                   ]
+                  },
+                  {
+                      "parameters":  {
+                                         "jsCode":  "const body = $(\u0027Webhook - Integracao Colab\u0027).first().json.body ?? {};\nconst cnpj = String(body.cnpj ?? \u0027\u0027).trim().toUpperCase();\nconst tipoId = Number(body.tipo_id ?? 0);\nif (!cnpj || !Number.isSafeInteger(tipoId) || tipoId < 1) {\n  throw new Error(\u0027Entrada CND invalida.\u0027);\n}\nreturn [{ json: { cnpj, tipo_id: tipoId, data_emissao: body.data_emissao ?? null, data_vencimento: body.data_vencimento ?? null, status: String(body.status ?? \u0027\u0027) } }];"
+                                     },
+                      "id":  "d7012f90-b5ae-4b49-cc5f-833d66fa0301",
+                      "name":  "Normalizar Entrada CND",
+                      "type":  "n8n-nodes-base.code",
+                      "typeVersion":  2,
+                      "position":  [256, -80]
+                  }
+              ],
+    "connections":  {
+                        "Webhook - Integracao Colab":  {
+                                                           "main":  [
+                                                                        [
+                                                                            {
+                                                                         "node":  "Normalizar Entrada CND",
+                                                                                "type":  "main",
+                                                                                "index":  0
+                                                                            }
+                                                                        ]
+                                                     ]
+                                        },
+                        "Normalizar Entrada CND":  {
+                                                        "main":  [
+                                                                     [
+                                                                         {
+                                                                             "node":  "MySQL - Buscar Cliente por CNPJ",
+                                                                             "type":  "main",
+                                                                             "index":  0
+                                                                         }
+                                                                     ]
+                                                                 ]
+                                                    },
+                        "MySQL - Buscar Cliente por CNPJ":  {
+                                                                "main":  [
+                                                                             [
+                                                                                 {
+                                                                                     "node":  "Code - Montar Upsert CND",
+                                                                                     "type":  "main",
+                                                                                     "index":  0
+                                                                                 }
+                                                                             ]
+                                                                         ]
+                                                            },
+                        "Code - Montar Upsert CND":  {
+                                                         "main":  [
+                                                                      [
+                                                                          {
+                                                                              "node":  "MySQL - Salvar CND",
+                                                                              "type":  "main",
+                                                                              "index":  0
+                                                                          }
+                                                                      ]
+                                                                  ]
+                                                     }
+                    },
+    "settings":  {
+                     "executionOrder":  "v1",
+                     "binaryMode":  "separate",
+                     "availableInMCP":  false,
+                     "saveDataErrorExecution":  "none",
+                     "saveDataSuccessExecution":  "none",
+                     "saveManualExecutions":  false,
+                     "saveExecutionProgress":  false
+                 },
+    "staticData":  null,
+    "meta":  null,
+    "pinData":  {
+
+                },
+    "tags":  [
+
+             ]
+}

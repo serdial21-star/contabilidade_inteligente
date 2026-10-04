@@ -1,0 +1,514 @@
+{
+    "name":  "API - Fiscal - Upload XML MultiFile V7 Completo",
+    "description":  null,
+    "active":  false,
+    "isArchived":  false,
+    "nodes":  [
+                  {
+                      "parameters":  {
+                                         "httpMethod":  "POST",
+                                         "path":  "admin/upload-xml",
+                                         "responseMode":  "responseNode",
+                                         "options":  {
+
+                                                     }
+                                     },
+                      "id":  "e63a1b2b-20ef-4571-bdf4-b440594fec71",
+                      "name":  "Receber XML",
+                      "type":  "n8n-nodes-base.webhook",
+                      "typeVersion":  2,
+                      "position":  [
+                                       -160,
+                                       -160
+                                   ],
+                      "webhookId":  "b1de6a37-7815-48c0-8fe1-00b9db714d65"
+                  },
+                  {
+                      "parameters":  {
+                                         "jsCode":  "const inputItems = $input.all();\n\nif (!inputItems.length) {\n  throw new Error(\u0027Nenhum item recebido do Webhook.\u0027);\n}\n\nconst webhookItem = inputItems[0];\nconst inputJson = webhookItem.json ?? {};\nconst body =\n  inputJson.body \u0026\u0026 typeof inputJson.body === \u0027object\u0027\n    ? inputJson.body\n    : inputJson;\n\nconst binaries = webhookItem.binary ?? {};\nconst fileKeys = Object.keys(binaries)\n  .filter((key) =\u003e /^arquivos\\d+$/i.test(key))\n  .sort((a, b) =\u003e {\n    const na = Number((a.match(/\\d+/) || [\u00270\u0027])[0]);\n    const nb = Number((b.match(/\\d+/) || [\u00270\u0027])[0]);\n    return na - nb;\n  });\n\nif (fileKeys.length === 0) {\n  throw new Error(\u0027Nenhum arquivo XML encontrado. Esperado: arquivos0, arquivos1, arquivos2...\u0027);\n}\n\nconst output = [];\n\nfor (const key of fileKeys) {\n  const bin = binaries[key];\n  if (!bin) continue;\n\n  let buffer;\n  try {\n    buffer = await this.helpers.getBinaryDataBuffer(0, key);\n  } catch (error) {\n    throw new Error(`Falha ao ler o binário real do campo ${key}: ${error.message}`);\n  }\n\n  let xmlString = buffer.toString(\u0027utf8\u0027);\n\n  xmlString = xmlString\n    .replace(/^\\uFEFF/, \u0027\u0027)\n    .replace(/^\\s+/, \u0027\u0027)\n    .replace(/^[^\u003c]+(?=\u003c)/, \u0027\u0027)\n    .trim();\n\n  if (!xmlString) {\n    throw new Error(`O arquivo do campo ${key} foi lido, mas está vazio.`);\n  }\n\n  if (!xmlString.startsWith(\u0027\u003c\u0027)) {\n    throw new Error(`O conteúdo do campo ${key} não parece ser XML válido. Início encontrado: ${xmlString.substring(0, 80)}`);\n  }\n\n  output.push({\n    json: {\n      cliente_id: body.cliente_id ?? null,\n      tipo_operacao: body.tipo_operacao ?? \u0027Entrada\u0027,\n      upload_field: key,\n      nome_arquivo: bin.fileName ?? `${key}.xml`,\n      mime_type: bin.mimeType ?? \u0027application/xml\u0027,\n      file_extension: bin.fileExtension ?? \u0027xml\u0027,\n      xml_text: xmlString\n    },\n    binary: {\n      data: bin\n    },\n    pairedItem: {\n      item: 0\n    }\n  });\n}\n\nreturn output;\n"
+                                     },
+                      "id":  "79691182-fd4a-49d1-acf6-fed3a98dfe14",
+                      "name":  "Separar XMLs",
+                      "type":  "n8n-nodes-base.code",
+                      "typeVersion":  2,
+                      "position":  [
+                                       80,
+                                       -160
+                                   ]
+                  },
+                  {
+                      "parameters":  {
+                                         "dataPropertyName":  "xml_text",
+                                         "options":  {
+
+                                                     }
+                                     },
+                      "id":  "9ff0318e-1883-47b3-af9b-ac4c1661db2c",
+                      "name":  "Converter XML",
+                      "type":  "n8n-nodes-base.xml",
+                      "typeVersion":  1,
+                      "position":  [
+                                       288,
+                                       -160
+                                   ]
+                  },
+                  {
+                      "parameters":  {
+                                         "jsCode":  "const items = $input.all();\n\nfunction money(v) {\n  const n = parseFloat(v);\n  return Number.isFinite(n) ? n : 0;\n}\n\nconst origemItems = $(\u0027Separar XMLs\u0027).all();\n\nfor (let i = 0; i \u003c items.length; i++) {\n  const data = items[i].json ?? {};\n\n  let nfe = {};\n\n  if (data.nfeProc?.NFe?.infNFe) {\n    nfe = data.nfeProc.NFe.infNFe;\n  } else if (data.NFe?.infNFe) {\n    nfe = data.NFe.infNFe;\n  } else if (data.infNFe) {\n    nfe = data.infNFe;\n  } else {\n    throw new Error(`Estrutura NFe inválida no item ${i + 1}`);\n  }\n\n  const ide = nfe.ide ?? {};\n  const emit = nfe.emit ?? {};\n  const dest = nfe.dest ?? {};\n  const tot = nfe.total?.ICMSTot ?? {};\n\n  let chave = \u0027\u0027;\n  if (nfe.$?.Id) {\n    chave = String(nfe.$.Id).replace(/^NFe/, \u0027\u0027);\n  } else if (nfe.Id) {\n    chave = String(nfe.Id).replace(/^NFe/, \u0027\u0027);\n  }\n\n  const origem = origemItems[i]?.json ?? {};\n\n  items[i].json = {\n    cliente_id: origem.cliente_id ?? null,\n    tipo_operacao: origem.tipo_operacao ?? \u0027Entrada\u0027,\n    nome_arquivo: origem.nome_arquivo ?? \u0027\u0027,\n    upload_field: origem.upload_field ?? \u0027\u0027,\n\n    chave_acesso: chave,\n    numero_nota: ide.nNF ?? \u0027\u0027,\n    serie: ide.serie ?? \u0027\u0027,\n    data_emissao: ide.dhEmi\n      ? String(ide.dhEmi).substring(0, 19).replace(\u0027T\u0027, \u0027 \u0027)\n      : null,\n\n    emitente_nome: emit.xNome ?? \u0027\u0027,\n    emitente_cnpj: emit.CNPJ ?? emit.CPF ?? \u0027\u0027,\n\n    destinatario_nome: dest.xNome ?? \u0027\u0027,\n    destinatario_cnpj: dest.CNPJ ?? dest.CPF ?? \u0027\u0027,\n\n    valor_total_nota: money(tot.vNF),\n    base_icms: money(tot.vBC),\n    valor_icms: money(tot.vICMS),\n    valor_pis: money(tot.vPIS),\n    valor_cofins: money(tot.vCOFINS)\n  };\n}\n\nreturn items;\n"
+                                     },
+                      "id":  "9edb9ee2-9bbe-476b-84de-e87279db744d",
+                      "name":  "Extrair Dados NFe",
+                      "type":  "n8n-nodes-base.code",
+                      "typeVersion":  2,
+                      "position":  [
+                                       512,
+                                       -160
+                                   ]
+                  },
+                  {
+                      "parameters":  {
+                                         "operation":  "executeQuery",
+                                         "query":  "SELECT id_pasta_raiz FROM clientes WHERE id = $1 LIMIT 1;",
+                                         "options":  {
+                                                         "queryReplacement":  "={{ [$json.cliente_id] }}"
+                                                     }
+                                     },
+                      "id":  "eef67772-3371-4b54-86f0-668e27ba7894",
+                      "name":  "Buscar Pasta Cliente",
+                      "type":  "n8n-nodes-base.mySql",
+                      "typeVersion":  2,
+                      "position":  [
+                                       736,
+                                       -160
+                                   ]
+                  },
+                  {
+                      "parameters":  {
+                                         "jsCode":  "const pastaItems = $input.all();\nconst fiscais = $(\u0027Extrair Dados NFe\u0027).all();\nconst separados = $(\u0027Separar XMLs\u0027).all();\n\nconst out = [];\n\nfor (let i = 0; i \u003c pastaItems.length; i++) {\n  const pasta = pastaItems[i].json ?? {};\n  const fiscal = fiscais[i]?.json ?? {};\n  const binario = separados[i]?.binary ?? {};\n\n  if (!pasta.id_pasta_raiz) {\n    throw new Error(`id_pasta_raiz não encontrado no item ${i + 1}`);\n  }\n\n  if (!binario.data) {\n    throw new Error(`Binário \u0027data\u0027 não encontrado no item ${i + 1}`);\n  }\n\n  out.push({\n    json: {\n      ...fiscal,\n      id_pasta_raiz: pasta.id_pasta_raiz\n    },\n    binary: {\n      data: binario.data\n    }\n  });\n}\n\nreturn out;\n"
+                                     },
+                      "id":  "bebebbb2-f398-41bb-bbea-7cf31b3c0751",
+                      "name":  "Consolidar Dados + Binário",
+                      "type":  "n8n-nodes-base.code",
+                      "typeVersion":  2,
+                      "position":  [
+                                       960,
+                                       -160
+                                   ]
+                  },
+                  {
+                      "parameters":  {
+                                         "driveId":  {
+                                                         "__rl":  true,
+                                                         "value":  "My Drive",
+                                                         "mode":  "list",
+                                                         "cachedResultName":  "My Drive",
+                                                         "cachedResultUrl":  "https://drive.google.com/drive/my-drive"
+                                                     },
+                                         "folderId":  {
+                                                          "__rl":  true,
+                                                          "value":  "={{$json.id_pasta_raiz}}",
+                                                          "mode":  "id"
+                                                      },
+                                         "options":  {
+
+                                                     }
+                                     },
+                      "id":  "9f8517f9-5b91-4774-95d8-6f0ff019fece",
+                      "name":  "Arquivar XML Drive",
+                      "type":  "n8n-nodes-base.googleDrive",
+                      "typeVersion":  3,
+                      "position":  [
+                                       1168,
+                                       -160
+                                   ]
+                  },
+                  {
+                      "parameters":  {
+                                         "jsCode":  "const driveItems = $input.all();\nconst fiscais = $(\u0027Consolidar Dados + Binário\u0027).all();\n\nconst out = [];\n\nfor (let i = 0; i \u003c driveItems.length; i++) {\n  const drive = driveItems[i].json ?? {};\n  const fiscal = fiscais[i]?.json ?? {};\n\n  if (!fiscal.cliente_id) {\n    throw new Error(`cliente_id não encontrado no item ${i + 1}`);\n  }\n\n  out.push({\n    json: {\n      cliente_id: fiscal.cliente_id ?? null,\n      tipo_operacao: fiscal.tipo_operacao ?? \u0027Entrada\u0027,\n      nome_arquivo: fiscal.nome_arquivo ?? \u0027\u0027,\n\n      chave_acesso: fiscal.chave_acesso ?? \u0027\u0027,\n      numero_nota: fiscal.numero_nota ?? \u0027\u0027,\n      serie: fiscal.serie ?? \u0027\u0027,\n      data_emissao: fiscal.data_emissao ?? null,\n\n      emitente_nome: fiscal.emitente_nome ?? \u0027\u0027,\n      emitente_cnpj: fiscal.emitente_cnpj ?? \u0027\u0027,\n      destinatario_nome: fiscal.destinatario_nome ?? \u0027\u0027,\n      destinatario_cnpj: fiscal.destinatario_cnpj ?? \u0027\u0027,\n\n      valor_total_nota: Number(fiscal.valor_total_nota ?? 0),\n      base_icms: Number(fiscal.base_icms ?? 0),\n      valor_icms: Number(fiscal.valor_icms ?? 0),\n      valor_pis: Number(fiscal.valor_pis ?? 0),\n      valor_cofins: Number(fiscal.valor_cofins ?? 0),\n\n      arquivo_drive_id: drive.id ?? \u0027\u0027,\n      arquivo_url_drive: drive.webViewLink ?? drive.webContentLink ?? drive.id ?? \u0027\u0027\n    }\n  });\n}\n\nreturn out;\n"
+                                     },
+                      "id":  "0a2608c7-91dc-47be-881a-6a6c33c158c1",
+                      "name":  "Consolidar Dados Banco",
+                      "type":  "n8n-nodes-base.code",
+                      "typeVersion":  2,
+                      "position":  [
+                                       1392,
+                                       -160
+                                   ]
+                  },
+                  {
+                      "parameters":  {
+                                         "jsCode":  "const items = $input.all();\nconst text = (value) => String(value ?? \u0027\u0027);\n\nreturn items.map((item) =\u003e {\n  const j = item.json ?? {};\n  return {\n    json: {\n      cliente_id: Number(j.cliente_id ?? 0),\n      tipo_operacao: text(j.tipo_operacao),\n      nome_arquivo: text(j.nome_arquivo),\n      chave_acesso: text(j.chave_acesso),\n      numero_nota: text(j.numero_nota),\n      serie: text(j.serie),\n      data_emissao: j.data_emissao ? text(j.data_emissao) : null,\n      emitente_nome: text(j.emitente_nome),\n      emitente_cnpj: text(j.emitente_cnpj),\n      destinatario_nome: text(j.destinatario_nome),\n      destinatario_cnpj: text(j.destinatario_cnpj),\n      valor_total_nota: Number(j.valor_total_nota ?? 0),\n      base_icms: Number(j.base_icms ?? 0),\n      valor_icms: Number(j.valor_icms ?? 0),\n      valor_pis: Number(j.valor_pis ?? 0),\n      valor_cofins: Number(j.valor_cofins ?? 0),\n      arquivo_drive_id: text(j.arquivo_drive_id),\n      arquivo_url_drive: text(j.arquivo_url_drive)\n    }\n  };\n});\n"
+                                     },
+                      "id":  "a24188ce-48bc-4a87-8e23-383aa8ecc744",
+                      "name":  "Sanitizar Registro Banco",
+                      "type":  "n8n-nodes-base.code",
+                      "typeVersion":  2,
+                      "position":  [
+                                       1616,
+                                       -160
+                                   ]
+                  },
+                  {
+                      "parameters":  {
+                                         "operation":  "executeQuery",
+                                         "query":  "INSERT INTO processamento_xml_nfe (cliente_id, chave_acesso, numero_nota, serie, data_emissao, tipo_operacao, emitente_nome, emitente_cnpj_cpf, destinatario_nome, destinatario_cnpj_cpf, valor_total_nota, base_icms, valor_icms, valor_pis, valor_cofins, arquivo_url_drive, status_conferencia) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, \u0027Pendente\u0027) ON DUPLICATE KEY UPDATE status_conferencia = \u0027Pendente\u0027, arquivo_url_drive = VALUES(arquivo_url_drive), valor_total_nota = VALUES(valor_total_nota), base_icms = VALUES(base_icms), valor_icms = VALUES(valor_icms), valor_pis = VALUES(valor_pis), valor_cofins = VALUES(valor_cofins);",
+                                         "options":  {
+                                                         "queryReplacement":  "={{ [$json.cliente_id, $json.chave_acesso, $json.numero_nota, $json.serie, $json.data_emissao, $json.tipo_operacao, $json.emitente_nome, $json.emitente_cnpj, $json.destinatario_nome, $json.destinatario_cnpj, $json.valor_total_nota, $json.base_icms, $json.valor_icms, $json.valor_pis, $json.valor_cofins, $json.arquivo_url_drive] }}"
+                                                     }
+                                     },
+                      "id":  "4d4173ac-f0a2-4c0e-8152-09dbff842d4f",
+                      "name":  "Salvar Banco",
+                      "type":  "n8n-nodes-base.mySql",
+                      "typeVersion":  2,
+                      "position":  [
+                                       1840,
+                                       -160
+                                   ]
+                  },
+                  {
+                      "parameters":  {
+                                         "jsCode":  "const total = $input.all().length;\nreturn [{\n  json: {\n    success: true,\n    message: \u0027XML(s) processado(s), arquivado(s) e salvo(s) com sucesso.\u0027,\n    arquivos_processados: total\n  }\n}];\n"
+                                     },
+                      "id":  "a7e9981e-a2ac-447f-abcd-9917bab0eb28",
+                      "name":  "Montar Resposta Final",
+                      "type":  "n8n-nodes-base.code",
+                      "typeVersion":  2,
+                      "position":  [
+                                       2048,
+                                       -160
+                                   ]
+                  },
+                  {
+                      "parameters":  {
+                                         "respondWith":  "json",
+                                         "responseBody":  "={{$json}}",
+                                         "options":  {
+                                                         "responseHeaders":  {
+                                                                                 "entries":  [
+                                                                                                 {
+                                                                                                     "name":  "Access-Control-Allow-Origin",
+                                                                                                     "value":  "https://serdial21.com"
+                                                                                                 }
+                                                                                             ]
+                                                                             }
+                                                     }
+                                     },
+                      "id":  "edf1df81-46ee-4ac0-9a6f-92c28bbefa07",
+                      "name":  "Responder",
+                      "type":  "n8n-nodes-base.respondToWebhook",
+                      "typeVersion":  1,
+                      "position":  [
+                                       2272,
+                                       -160
+                                   ]
+                  },
+                  {
+                      "parameters":  {
+                                         "httpMethod":  "OPTIONS",
+                                         "path":  "admin/upload-xml",
+                                         "responseMode":  "responseNode",
+                                         "options":  {
+
+                                                     }
+                                     },
+                      "id":  "60eecd03-41db-4cca-a5e1-907edf1655fb",
+                      "name":  "OPTIONS Upload XML",
+                      "type":  "n8n-nodes-base.webhook",
+                      "typeVersion":  2,
+                      "position":  [
+                                       -160,
+                                       64
+                                   ],
+                      "webhookId":  "6c2eef0a-8be5-40cf-962b-8d0672403428"
+                  },
+                  {
+                      "parameters":  {
+                                         "respondWith":  "text",
+                                         "responseBody":  "OK",
+                                         "options":  {
+                                                         "responseHeaders":  {
+                                                                                 "entries":  [
+                                                                                                 {
+                                                                                                     "name":  "Access-Control-Allow-Origin",
+                                                                                                     "value":  "https://serdial21.com"
+                                                                                                 },
+                                                                                                 {
+                                                                                                     "name":  "Access-Control-Allow-Methods",
+                                                                                                     "value":  "POST, OPTIONS"
+                                                                                                 },
+                                                                                                 {
+                                                                                                     "name":  "Access-Control-Allow-Headers",
+                                                                                                     "value":  "Content-Type, Authorization"
+                                                                                                 }
+                                                                                             ]
+                                                                             }
+                                                     }
+                                     },
+                      "id":  "05a363b9-ffd0-499a-af4d-1c3042a651dd",
+                      "name":  "Responder OPTIONS",
+                      "type":  "n8n-nodes-base.respondToWebhook",
+                      "typeVersion":  1,
+                      "position":  [
+                                       80,
+                                       64
+                                   ]
+                  },
+                  {
+                      "parameters":  {
+                                         "jsCode":  "const input = $(\u0027Receber XML\u0027).first().json ?? {};\nconst headers = input.headers ?? {};\nconst auth = String(headers.authorization ?? headers.Authorization ?? \u0027\u0027);\nconst match = auth.match(/^Bearer\\s+([A-Za-z0-9]{20,128})$/i);\nconst body = input.body && typeof input.body === \u0027object\u0027 ? input.body : input;\nconst rawClientId = String(body.cliente_id ?? \u0027\u0027);\nconst clienteId = /^[1-9][0-9]*$/.test(rawClientId) ? Number(rawClientId) : 0;\nreturn [{ json: { token: match ? match[1] : \u0027\u0027, cliente_id: Number.isSafeInteger(clienteId) ? clienteId : 0, invalid_client: !Number.isSafeInteger(clienteId) || clienteId < 1 } }];"
+                                     },
+                      "id":  "b5e00d70-938c-4f27-aa3f-611b44df0101",
+                      "name":  "Preparar Autorizacao",
+                      "type":  "n8n-nodes-base.code",
+                      "typeVersion":  2,
+                      "position":  [-1360, -160]
+                  },
+                  {
+                      "parameters":  {
+                                         "operation":  "executeQuery",
+                                         "query":  "CALL sp_admin_module_authorize($1, $2, $3);",
+                                         "options":  {"queryReplacement":  "={{ [$json.token, \u0027ferramentas_ia\u0027, \u0027criar\u0027] }}"}
+                                     },
+                      "id":  "b5e00d70-938c-4f27-aa3f-611b44df0102",
+                      "name":  "Autorizar Ferramenta IA",
+                      "type":  "n8n-nodes-base.mySql",
+                      "typeVersion":  2.4,
+                      "position":  [-1120, -160],
+                      "alwaysOutputData":  true
+                  },
+                  {
+                      "parameters":  {"jsCode":  "const values = $input.all().flatMap((item) =\u003e Array.isArray(item.json) ? item.json : [item.json]);\nconst row = values.find((value) =\u003e value && typeof value === \u0027object\u0027 && Object.prototype.hasOwnProperty.call(value, \u0027result\u0027));\nreturn [{ json: row ?? { success: 0, result: \u0027unauthorized\u0027, funcionario_id: null, request_id: null } }];"},
+                      "id":  "b5e00d70-938c-4f27-aa3f-611b44df0103",
+                      "name":  "Normalizar Autorizacao",
+                      "type":  "n8n-nodes-base.code",
+                      "typeVersion":  2,
+                      "position":  [-880, -160]
+                  },
+                  {
+                      "parameters":  {"conditions":  {"boolean":  [{"value1":  "={{ $json.result === \u0027authorized\u0027 }}", "value2":  true}]}},
+                      "id":  "b5e00d70-938c-4f27-aa3f-611b44df0104",
+                      "name":  "Autorizado?",
+                      "type":  "n8n-nodes-base.if",
+                      "typeVersion":  1,
+                      "position":  [-640, -160]
+                  },
+                  {
+                      "parameters":  {"respondWith":  "json", "responseBody":  "={{ { success: false, message: $json.result === \u0027forbidden\u0027 ? \u0027Acesso negado.\u0027 : \u0027Sessao expirada ou invalida.\u0027 } }}", "options":  {"responseCode":  "={{ $json.result === \u0027forbidden\u0027 ? 403 : 401 }}", "responseHeaders":  {"entries":  [{"name":  "Access-Control-Allow-Origin", "value":  "https://serdial21.com"}]}}},
+                      "id":  "b5e00d70-938c-4f27-aa3f-611b44df0105",
+                      "name":  "Responder Autorizacao",
+                      "type":  "n8n-nodes-base.respondToWebhook",
+                      "typeVersion":  1.1,
+                      "position":  [-400, -16]
+                  },
+                  {
+                      "parameters":  {"conditions":  {"boolean":  [{"value1":  "={{ $(\u0027Preparar Autorizacao\u0027).first().json.invalid_client }}", "value2":  false}]}},
+                      "id":  "b5e00d70-938c-4f27-aa3f-611b44df0106",
+                      "name":  "Cliente ID valido?",
+                      "type":  "n8n-nodes-base.if",
+                      "typeVersion":  1,
+                      "position":  [-400, -240]
+                  },
+                  {
+                      "parameters":  {"respondWith":  "json", "responseBody":  "={{ { success: false, message: \u0027cliente_id invalido.\u0027 } }}", "options":  {"responseCode":  400, "responseHeaders":  {"entries":  [{"name":  "Access-Control-Allow-Origin", "value":  "https://serdial21.com"}]}}},
+                      "id":  "b5e00d70-938c-4f27-aa3f-611b44df0107",
+                      "name":  "Responder Cliente Invalido",
+                      "type":  "n8n-nodes-base.respondToWebhook",
+                      "typeVersion":  1.1,
+                      "position":  [-160, -16]
+                  },
+                  {
+                      "parameters":  {"operation":  "executeQuery", "query":  "SELECT id FROM clientes WHERE id = $1 LIMIT 1;", "options":  {"queryReplacement":  "={{ [$(\u0027Preparar Autorizacao\u0027).first().json.cliente_id] }}"}},
+                      "id":  "b5e00d70-938c-4f27-aa3f-611b44df0108",
+                      "name":  "Confirmar Cliente Existente",
+                      "type":  "n8n-nodes-base.mySql",
+                      "typeVersion":  2.4,
+                      "position":  [-160, -320],
+                      "alwaysOutputData":  true
+                  },
+                  {
+                      "parameters":  {"conditions":  {"number":  [{"value1":  "={{ $json.id }}", "operation":  "isNotEmpty"}]}},
+                      "id":  "b5e00d70-938c-4f27-aa3f-611b44df0109",
+                      "name":  "Cliente existe?",
+                      "type":  "n8n-nodes-base.if",
+                      "typeVersion":  1,
+                      "position":  [80, -320]
+                  },
+                  {
+                      "parameters":  {"respondWith":  "json", "responseBody":  "={{ { success: false, message: \u0027Cliente indisponivel.\u0027 } }}", "options":  {"responseCode":  404, "responseHeaders":  {"entries":  [{"name":  "Access-Control-Allow-Origin", "value":  "https://serdial21.com"}]}}},
+                      "id":  "b5e00d70-938c-4f27-aa3f-611b44df0110",
+                      "name":  "Responder Cliente Ausente",
+                      "type":  "n8n-nodes-base.respondToWebhook",
+                      "typeVersion":  1.1,
+                      "position":  [320, -224]
+                  },
+                  {
+                      "parameters":  {"jsCode":  "const original = $(\u0027Receber XML\u0027).first();\nconst prepared = $(\u0027Preparar Autorizacao\u0027).first().json;\nconst input = original.json ?? {};\nconst body = input.body && typeof input.body === \u0027object\u0027 ? input.body : {};\nreturn [{ json: { ...input, body: { ...body, cliente_id: prepared.cliente_id } }, binary: original.binary ?? {}, pairedItem: { item: 0 } }];"},
+                      "id":  "b5e00d70-938c-4f27-aa3f-611b44df0111",
+                      "name":  "Restaurar Upload Autorizado",
+                      "type":  "n8n-nodes-base.code",
+                      "typeVersion":  2,
+                      "position":  [320, -416]
+                  }
+              ],
+    "connections":  {
+                        "Receber XML":  {
+                                            "main":  [
+                                                         [
+                                                             {
+                                                                 "node":  "Preparar Autorizacao",
+                                                                 "type":  "main",
+                                                                 "index":  0
+                                                             }
+                                                         ]
+                                                     ]
+                                        },
+                        "Preparar Autorizacao":  {"main":  [[{"node":  "Autorizar Ferramenta IA", "type":  "main", "index":  0}]]},
+                        "Autorizar Ferramenta IA":  {"main":  [[{"node":  "Normalizar Autorizacao", "type":  "main", "index":  0}]]},
+                        "Normalizar Autorizacao":  {"main":  [[{"node":  "Autorizado?", "type":  "main", "index":  0}]]},
+                        "Autorizado?":  {"main":  [[{"node":  "Cliente ID valido?", "type":  "main", "index":  0}], [{"node":  "Responder Autorizacao", "type":  "main", "index":  0}]]},
+                        "Cliente ID valido?":  {"main":  [[{"node":  "Confirmar Cliente Existente", "type":  "main", "index":  0}], [{"node":  "Responder Cliente Invalido", "type":  "main", "index":  0}]]},
+                        "Confirmar Cliente Existente":  {"main":  [[{"node":  "Cliente existe?", "type":  "main", "index":  0}]]},
+                        "Cliente existe?":  {"main":  [[{"node":  "Restaurar Upload Autorizado", "type":  "main", "index":  0}], [{"node":  "Responder Cliente Ausente", "type":  "main", "index":  0}]]},
+                        "Restaurar Upload Autorizado":  {"main":  [[{"node":  "Separar XMLs", "type":  "main", "index":  0}]]},
+                        "Separar XMLs":  {
+                                             "main":  [
+                                                          [
+                                                              {
+                                                                  "node":  "Converter XML",
+                                                                  "type":  "main",
+                                                                  "index":  0
+                                                              }
+                                                          ]
+                                                      ]
+                                         },
+                        "Converter XML":  {
+                                              "main":  [
+                                                           [
+                                                               {
+                                                                   "node":  "Extrair Dados NFe",
+                                                                   "type":  "main",
+                                                                   "index":  0
+                                                               }
+                                                           ]
+                                                       ]
+                                          },
+                        "Extrair Dados NFe":  {
+                                                  "main":  [
+                                                               [
+                                                                   {
+                                                                       "node":  "Buscar Pasta Cliente",
+                                                                       "type":  "main",
+                                                                       "index":  0
+                                                                   }
+                                                               ]
+                                                           ]
+                                              },
+                        "Buscar Pasta Cliente":  {
+                                                     "main":  [
+                                                                  [
+                                                                      {
+                                                                          "node":  "Consolidar Dados + Binário",
+                                                                          "type":  "main",
+                                                                          "index":  0
+                                                                      }
+                                                                  ]
+                                                              ]
+                                                 },
+                        "Consolidar Dados + Binário":  {
+                                                           "main":  [
+                                                                        [
+                                                                            {
+                                                                                "node":  "Arquivar XML Drive",
+                                                                                "type":  "main",
+                                                                                "index":  0
+                                                                            }
+                                                                        ]
+                                                                    ]
+                                                       },
+                        "Arquivar XML Drive":  {
+                                                   "main":  [
+                                                                [
+                                                                    {
+                                                                        "node":  "Consolidar Dados Banco",
+                                                                        "type":  "main",
+                                                                        "index":  0
+                                                                    }
+                                                                ]
+                                                            ]
+                                               },
+                        "Consolidar Dados Banco":  {
+                                                       "main":  [
+                                                                    [
+                                                                        {
+                                                                            "node":  "Sanitizar Registro Banco",
+                                                                            "type":  "main",
+                                                                            "index":  0
+                                                                        }
+                                                                    ]
+                                                                ]
+                                                   },
+                        "Sanitizar Registro Banco":  {
+                                                         "main":  [
+                                                                      [
+                                                                          {
+                                                                              "node":  "Salvar Banco",
+                                                                              "type":  "main",
+                                                                              "index":  0
+                                                                          }
+                                                                      ]
+                                                                  ]
+                                                     },
+                        "Salvar Banco":  {
+                                             "main":  [
+                                                          [
+                                                              {
+                                                                  "node":  "Montar Resposta Final",
+                                                                  "type":  "main",
+                                                                  "index":  0
+                                                              }
+                                                          ]
+                                                      ]
+                                         },
+                        "Montar Resposta Final":  {
+                                                      "main":  [
+                                                                   [
+                                                                       {
+                                                                           "node":  "Responder",
+                                                                           "type":  "main",
+                                                                           "index":  0
+                                                                       }
+                                                                   ]
+                                                               ]
+                                                  },
+                        "OPTIONS Upload XML":  {
+                                                   "main":  [
+                                                                [
+                                                                    {
+                                                                        "node":  "Responder OPTIONS",
+                                                                        "type":  "main",
+                                                                        "index":  0
+                                                                    }
+                                                                ]
+                                                            ]
+                                               }
+                    },
+    "settings":  {
+                     "executionOrder":  "v1",
+                     "binaryMode":  "separate",
+                     "availableInMCP":  false,
+                     "saveDataErrorExecution":  "none",
+                     "saveDataSuccessExecution":  "none",
+                     "saveManualExecutions":  false,
+                     "saveExecutionProgress":  false
+                 },
+    "staticData":  null,
+    "meta":  {
+                 "templateCredsSetupCompleted":  true
+             },
+    "pinData":  {
+
+                },
+    "tags":  [
+
+             ]
+}

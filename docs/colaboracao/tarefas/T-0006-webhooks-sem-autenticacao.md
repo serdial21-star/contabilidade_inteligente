@@ -2,7 +2,7 @@
 
 | Campo | Valor |
 |---|---|
-| Estado | APROVADA — aguardando implementação pelo Codex |
+| Estado | ACEITA — aguardando push e CI; depois publicação guiada |
 | Origem | QUADRO, fila item 19 (SG-10); inventário de 03/10/2026 |
 | Sistema | Sistema A (n8n) |
 | Exige ADR | não, para a contenção; a decisão de manter ou proteger cada endpoint é do usuário |
@@ -171,3 +171,107 @@ Aprova a direção, inclusive desativar `admin/tasks` e remover só o webhook do
 ### [2026-10-03] Usuário (registrado pelo Claude)
 - Workflow "Serdial21 - Admin Tasks Kanban v1.0" (`admin/tasks`) desativado.
 - Fuso do n8n: `GENERIC_TIMEZONE`/`TZ` informado como America/Sao_Paulo. O cron do motor de obrigações (`5 6 * * *`) roda às 06:05 no horário de Brasília; nenhuma mudança de fuso é necessária no item 6 do briefing.
+
+### [2026-10-03] Codex — Implementação
+
+**Resultado.** Implementei os artefatos aprovados sem executar contra serviços reais. A migration 005 centraliza a autorização genérica de funcionário por módulo/ação, com sessão viva e não revogada, funcionário ativo, bypass restrito a `Administrador`/`Admin`, matriz fail-closed e auditoria mínima de `forbidden`. `upload-xml` e `apuracao-icms` chamam essa fronteira antes de qualquer efeito e mapeiam `unauthorized`/`forbidden` para 401/403. Honorários recusa sessão revogada. CND usa Header Auth e consultas parametrizadas. O motor preserva o cron e remove somente o webhook.
+
+**Arquivos criados.**
+
+- `docs/integration/system_a_webhook_hardening/005_up.sql`;
+- `docs/integration/system_a_webhook_hardening/005_down.sql`;
+- `docs/integration/system_a_webhook_hardening/verify_005.sql`;
+- `docs/integration/system_a_webhook_hardening/n8n_admin_upload_xml_v7_hardened.json`;
+- `docs/integration/system_a_webhook_hardening/n8n_ferramentas_ia_apuracao_icms_v9_hardened.json`;
+- `docs/integration/system_a_webhook_hardening/n8n_portal_honorarios_v2_hardened.json`;
+- `docs/integration/system_a_webhook_hardening/n8n_admin_integracao_cnd_v1_hardened.json`;
+- `docs/integration/system_a_webhook_hardening/n8n_gerador_obrigacoes_auto_v1_cron_only.json`;
+- `docs/integration/system_a_webhook_hardening/LOVABLE_PROMPT.md`;
+- `docs/integration/system_a_webhook_hardening/COLAB_SNIPPET.md`;
+- `docs/integration/SYSTEM_A_WEBHOOK_HARDENING_RUNBOOK.md`;
+- `tests/unit/test_system_a_webhook_hardening_assets.py`.
+
+**Arquivos alterados.**
+
+- `scripts/validate_system_a_client_management.sh`: aplica/testa/reverte a 005 no MariaDB descartável do CI;
+- `docs/colaboracao/QUADRO.md`: tarefa encaminhada para revisão;
+- este arquivo, somente por acréscimo deste relatório.
+
+**Detalhes técnicos.**
+
+- Os cinco JSONs são importáveis, inativos, sem credenciais e com retenção de execução desabilitada. O runbook exige reassociar credenciais antes da ativação.
+- `upload-xml`: token Bearer estrito; `CALL sp_admin_module_authorize` com `ferramentas_ia/criar`; validação de `cliente_id` inteiro positivo e cliente existente; binário restaurado somente no ramo autorizado; consultas MySQL com `queryReplacement`; CORS restrito.
+- `apuracao-icms`: mesma autorização e restauração do binário antes do extrator; 401/403 encerram o fluxo antes de Drive/Sheets.
+- `honorarios-v2`: token estrito, `revogado_em IS NULL`, `UTC_TIMESTAMP()`, cliente somente da sessão e três consultas parametrizadas.
+- CND: Webhook em `headerAuth`, com nota que fixa `X-Serdial21-Integration-Secret`; valor ausente do artefato; CNPJ permanece string; busca e upsert parametrizados.
+- Motor: teste compara estruturalmente com o baseline e permite apenas a remoção do nó `Webhook - Executar Manual`, da conexão correspondente, das credenciais/metadados de exportação e os ajustes obrigatórios de retenção/inatividade.
+- Prompt Lovable exige autenticação/autorização antes da IA, allowlist exata `path + método`, destino montado no servidor, verificação dos proxies especializados, remoção de `listar-arquivos` e bloqueio do chamado sem sessão.
+- `GENERIC_TIMEZONE`/`TZ` foi confirmado como `America/Sao_Paulo`; o cron `5 6 * * *` foi preservado sem alteração.
+- Nenhuma migration Alembic foi criada. A única migration é a `005` externa do Sistema A.
+
+**Testes executados.**
+
+- `tests/unit/test_system_a_webhook_hardening_assets.py`: **12 passed**.
+- T-0003 + T-0005 + T-0006: **46 passed**.
+- suíte local sem os seis módulos API que não coletam por falta do pacote `redis`: **536 passed, 20 skipped**.
+- suíte completa sem exclusões: interrompida na coleta dos mesmos seis módulos por `ModuleNotFoundError: redis`; limitação local preexistente, sem relação com o diff.
+- `scripts/verify_release_secrets.py`: `RELEASE_SECRET_SCAN: PASS` e canário detectado.
+- `bash -n scripts/validate_system_a_client_management.sh`: aprovado com Git Bash.
+- `git diff --check`: aprovado; somente aviso de futura conversão LF/CRLF no script.
+
+**Não executado.** O validador MariaDB descartável não rodou porque o Docker Desktop local não está iniciado. A execução real de `005_up.sql`, cenários de autorização e `005_down.sql` fica pendente no CI. Nenhum banco, API, n8n, Supabase, Lovable, Colab ou VPS real foi acessado.
+
+**Pendências para revisão/publicação.**
+
+1. Claude revisar o diff real e os artefatos; CI deve emitir `WEBHOOK_HARDENING_AUTHORIZATION_TESTS=PASS` e `WEBHOOK_HARDENING_ROLLBACK=PASS`.
+2. Após aceite, seguir `SYSTEM_A_WEBHOOK_HARDENING_RUNBOOK.md`, reassociar credenciais, aplicar o prompt no Lovable e revisar o diff produzido pelo Lovable antes de publicar.
+
+---
+
+## 4. Revisão (Claude)
+
+### [2026-10-03] Claude — Revisão da implementação
+
+Diff lido por inteiro (artefatos novos, `scripts/validate_system_a_client_management.sh`, testes). Testes relacionados rodados pelo Claude: `49 passed` (T-0003, T-0004, T-0005, T-0006); varredura de segredos `PASS`. Validador MariaDB não executado localmente (sem Docker), pendente no CI.
+
+**Verificado e correto.**
+- `005_up.sql`: sessão viva, não revogada, em UTC; funcionário `Ativo`; bypass só para `administrador`/`admin` com `BINARY` após `LOWER(TRIM(...))` (não aceita variações acentuadas pela colação `_ci`); sem linha ou `permitido <> 1` → `forbidden`; auditoria só em `forbidden`, com `request_id`, módulo e ação, sem token nem hash; hash em variável com a colação da coluna; `005_down.sql` remove só a procedure.
+- `upload-xml`: autorização é o primeiro passo depois do webhook; 401/403/400/404 encerram antes de Drive e banco; o `cliente_id` usado adiante é o validado (sobrescrito em "Restaurar Upload Autorizado"; "Separar XMLs" idêntico ao baseline); consultas com `queryReplacement`; leitura da autorização ignora o pacote de status do `CALL` (lição da T-0003).
+- `apuracao-icms`: autorização antes do extrator, Drive e Sheets.
+- `honorarios-v2`: `revogado_em IS NULL`, `UTC_TIMESTAMP()`, cliente só da sessão, consultas parametrizadas; com `alwaysOutputData` a sessão inexistente agora responde 401 (antes o fluxo parava sem resposta).
+- CND: `headerAuth` no próprio Webhook (rejeição antes de qualquer nó); busca e upsert parametrizados, CNPJ como string. Mudanças de comportamento aceitas: CNPJ com `trim`/maiúsculas antes da busca; `updated_at` com `UTC_TIMESTAMP()` em vez de `NOW()` (equivalente em produção, que roda em UTC — T-0005).
+- Motor: diferença estrutural com o baseline = só o nó "Webhook - Executar Manual" e sua conexão.
+- Todos os JSONs inativos, sem credenciais, sem retenção, CORS restrito.
+- Validador: bloco da 005 roda antes dos testes da 003 e da 004 e restaura o estado das sessões que altera; não interfere nas contagens de auditoria existentes (`client_action_forbidden`).
+
+**Ajustes exigidos antes do aceite.**
+
+1. **(ALTA) `LOVABLE_PROMPT.md`, seção 1, item 5 — autorização do `ai-analyst` com dado que o servidor não devolve.** O prompt manda autorizar "cargo `Administrador`/`Admin` ... ou `permitido = 1` para `ferramentas_ia`/`criar`" a partir da resposta de `admin/permissoes/funcionario`. Essa resposta (nó "Montar Permissões", `docs/integration/system_a_permissions/n8n_admin_permissoes_funcionario_v2_2.json`) devolve só `success`, `modulos` (booleanos) e `clientesAcesso` — **não devolve cargo**. Para cumprir a instrução, o Lovable tende a ler o cargo de `admin_user` no `localStorage`, que o próprio usuário controla: qualquer funcionário poderia se declarar Administrador e usar a IA. Corrigir para: autorizar **somente** se a resposta do servidor tiver `success === true` e `modulos.ferramentas_ia.criar === true`; proibir explicitamente usar `admin_user`, cargo ou qualquer dado do navegador na decisão. Registrar no prompt que os Administradores atuais passam por terem a linha `ferramentas_ia/criar` (o fallback por cargo daquele workflow não inclui `ferramentas_ia`; um Administrador sem linhas receberia 403 — comportamento fail-closed aceitável, a registrar no runbook).
+2. **(MÉDIA) `LOVABLE_PROMPT.md`, seção 2 — método efetivo.** O `proxy-webhook` escolhe o método encaminhado pelo campo `_method` (inventário, seções 2 e 4; `useListas`). A allowlist precisa comparar o **método efetivamente encaminhado** (depois de aplicar `_method`), e só aceitar `_method` com valores da própria lista para aquele path; caso contrário um `POST` permitido poderia sair como `DELETE`. Explicitar.
+3. **(BAIXA) Validador:** incluir `SyntheticAccentedRoleToken11` no laço de `forbidden` da 005, cobrindo o `BINARY` (o caso existe para a 003 e não para a 005).
+4. **(BAIXA) Runbook, pré-publicação item 5:** dizer como gerar o segredo fora do repositório (por exemplo, `python -c "import secrets; print(secrets.token_urlsafe(32))"` na máquina do usuário, sem colar em chat ou arquivo) e acrescentar ao teste do Lovable a verificação de que um Administrador sem a linha `ferramentas_ia/criar` recebe 403 (efeito do item 1).
+
+**Veredito: AJUSTES PEDIDOS.** Itens 1 e 2 bloqueiam o aceite; 3 e 4 entram no mesmo ciclo. Nenhuma mudança nos workflows nem na 005. Depois do ajuste: nova revisão, commit pelo Claude, push pelo usuário e CI com `WEBHOOK_HARDENING_AUTHORIZATION_TESTS=PASS` e `WEBHOOK_HARDENING_ROLLBACK=PASS`.
+
+### [2026-10-03] Codex — Resposta à revisão
+
+Os quatro ajustes foram atendidos sem alterar os workflows nem a migration 005.
+
+1. **Autorização do `ai-analyst`:** o prompt agora autoriza somente quando a resposta do servidor contém `success === true` e `modulos.ferramentas_ia.criar === true`. Proíbe expressamente usar `admin_user`, `localStorage`, cargo ou qualquer dado do navegador. Registra o comportamento fail-closed: Administrador sem linha explícita recebe 403 sem chamar o gateway.
+2. **Método efetivo do `proxy-webhook`:** o prompt agora exige resolver `_method` antes da allowlist, normalizar o método efetivamente encaminhado e validar a combinação exata com o path. `_method` inválido ou não permitido retorna 404 sem `fetch`; o método validado é o mesmo usado na chamada ao n8n.
+3. **Cargo acentuado:** `SyntheticAccentedRoleToken11` entrou no laço `forbidden` da 005. As três contagens de `employee_module_action_forbidden` foram atualizadas de 6 para 7.
+4. **Runbook:** inclui comando local para gerar segredo com `secrets.token_urlsafe(32)`, instrução para não copiar o valor em chat/arquivo/tarefa/log e teste explícito de 403 para Administrador sem `ferramentas_ia/criar` no `ai-analyst`.
+
+**Testes atualizados.** Os testes estáticos agora exigem a autorização exclusivamente server-side, a validação do método efetivo, o caso do cargo acentuado, a geração segura do segredo e o teste fail-closed do Administrador.
+
+**Validação.** T-0006: `12 passed`; conjunto T-0003–T-0006: `49 passed`; suíte local disponível: `536 passed, 20 skipped`; sintaxe do shell e `git diff --check`: aprovados; varredura de segredos: `PASS`. O validador MariaDB continua pendente no CI porque o Docker Desktop local não está iniciado.
+
+### [2026-10-03] Claude — Nova revisão e aceite
+
+- Ajuste 1: seção 1, item 5 do `LOVABLE_PROMPT.md` autoriza só por `success === true` e `modulos.ferramentas_ia.criar === true` vindos do servidor; proíbe `admin_user`, `localStorage` e cargo; registra o 403 para Administrador sem a linha. Atendido.
+- Ajuste 2: seção 2 exige resolver `_method`, normalizar e validar o método efetivamente encaminhado contra a combinação exata; o `fetch` usa o método validado. Atendido.
+- Ajuste 3: `SyntheticAccentedRoleToken11` no laço `forbidden` da 005; contagens 6 → 7 nos três pontos. Atendido.
+- Ajuste 4: runbook com geração local do segredo (`secrets.token_urlsafe(32)`), proibição de copiar o valor e teste de 403 do Administrador no `ai-analyst`. Atendido.
+- Testes relacionados rodados pelo Claude: `49 passed`; sintaxe do validador aprovada. Workflows e 005 sem alteração desde a primeira revisão (o Codex declarou; os testes estáticos que os cobrem continuam passando).
+
+**Veredito: ACEITA.** Condição para publicar: CI verde com `WEBHOOK_HARDENING_AUTHORIZATION_TESTS=PASS` e `WEBHOOK_HARDENING_ROLLBACK=PASS` (primeira execução real da 005).
