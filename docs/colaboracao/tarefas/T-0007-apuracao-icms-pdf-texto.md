@@ -2,7 +2,7 @@
 
 | Campo | Valor |
 |---|---|
-| Estado | ACEITA NA REVISÃO — aguardando push, reimportação e novo teste real |
+| Estado | AJUSTE PEDIDO — linhas em negrito duplicadas pelo Extract From File |
 | Origem | QUADRO, fila item 23 (primeira etapa); pedido do usuário em 04/10/2026 |
 | Sistema | Sistema A (workflow n8n `ferramentas-ia/apuracao-icms`, artefato versionado) |
 | Exige ADR | não — decisões registradas aqui |
@@ -241,3 +241,12 @@ O caso integralmente sem CFOP agora mantém a conferência determinística váli
 - `node --test` 20/20; `tests/unit/test_system_a_icms_apuracao_assets.py` 6/6; `tests/unit` 323; varredura `PASS`; nó Code idêntico ao módulo; "sem movimentação" e divergência → `422` com `success: false` e `message`; sem retenção; nenhum valor da amostra real nas fixtures.
 - Simulação local (fora do repositório) com a estrutura dos arquivos reais, agora incluindo o formato literal observado no Extract From File: **seis cenários válidos** — mês CSV; mês PDF; anual CSV; anual PDF; anual PDF no formato do n8n (valores antes, rótulos grudados, duas linhas "Total" em ordens diferentes); mês PDF com CFOP e resumo invertidos e grudados (`…21.249,241102`, `6,29001 Por saídas…`), que produz o mesmo modelo do CSV.
 - **Veredito: ACEITO o código.** Aceite final da tarefa: reimportar o workflow e repetir os quatro arquivos pela tela (mês CSV e PDF → planilha; anual CSV e PDF → mensagem de sem movimentação) e um CSV com valor alterado (→ divergências).
+
+### [2026-10-04] Claude — Novo teste real: linhas em negrito duplicadas
+
+Workflow com a versão `634d952` reimportado. Teste do usuário pela tela com dois relatórios anuais em PDF (2025, sem movimentação; e um segundo de 2026, sem CFOP e com resumos de ST com valores): ambos `422`. As páginas de movimento **passaram** (nenhuma divergência de subtotal/total de CFOP). Divergências restantes, em todos os períodos e tipos de resumo, apenas nas linhas 008 e 010, que no PDF estão em **negrito**. Texto literal entregue pelo Extract From File:
+- `008 Subtotal 0,00008 Subtotal 0,00`
+- `010 Total 0,00010 Total 0,00`
+O gerador do relatório simula negrito desenhando o texto duas vezes; a extração devolve as duas cópias grudadas. A versão anterior do parser aceitava por acaso (usava o último valor); a tokenização nova exige um valor por código e recusa. O PDF mensal tem as mesmas linhas em negrito e provavelmente passa a falhar.
+
+**Ajuste exigido ao Codex (ALTA).** Antes de tokenizar, se a linha (com espaços normalizados) for exatamente a concatenação de duas cópias idênticas de um mesmo texto — com ou sem espaço entre elas — usar uma única cópia. Só aplicar quando as duas metades forem idênticas caractere a caractere; qualquer outra repetição continua sendo tratada normalmente. Fixtures sintéticas com linhas de resumo duplicadas nas duas formas (com e sem espaço) e em blocos `proprio`, `st_dentro` e `st_fora`.
