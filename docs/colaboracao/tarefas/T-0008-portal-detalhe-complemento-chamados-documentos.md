@@ -24,3 +24,16 @@
 3. **Workflows existentes que já leem/gravam esses dados**, para reaproveitar regras e manter um único modelo: "API - Portal - Consultas V2 (Robusto)" (`portal/meus-chamados-v2`, `portal/meus-documentos-v2`), "[CRUD] Receber Ticket do Portal V2 (Completo) (Corrigido)" (`portal/abrir-ticket-v2`), "[CRUD] Receber Arquivo do Portal V2 (Seguro) (Token Seguro)" (`portal/receber-arquivo-v2`), "API - Admin - Responder Ticket (Com Sessão, com mensagens)" (`admin/responder-ticket-v2`) e "API - Admin - Listagens Gerais V2 (Corrigido)" (`admin/tickets-v2`, `admin/documentos-v2`).
 
 **Requisitos já conhecidos (de `AGENTS.md` e das tarefas anteriores)**, que o briefing vai exigir: sessão de cliente viva e não revogada; o cliente consultado é **sempre** o da sessão — `id` de chamado/documento vindo da tela não autoriza nada e outro cliente recebe a mesma resposta de "não encontrado"; SQL parametrizado; CORS restrito; sem retenção de execuções; complemento com arquivo grava no Drive do próprio cliente; trilha de auditoria do complemento.
+
+### [2026-10-04] Claude — Leitura dos cinco workflows existentes (enviados pelo usuário; não versionados)
+
+Sem segredos (apenas nomes/ids de credenciais). Achados:
+
+- **Modelo de dados de chamados já existe e o painel já o usa:**
+  - `tickets_master` (id, cliente_id, numero_ticket, assunto, descricao, status, area, prioridade, criado_em, atualizado_em);
+  - `tickets_mensagens` (ticket_id, remetente_tipo `'Equipe'`/cliente, remetente_id, mensagem, anexo_url, criado_em) — "API - Admin - Listagens Gerais V2" devolve cada ticket com `historico: [{data, autor, mensagem, tipo}]`; "API - Admin - Responder Ticket" grava em `tickets_mensagens` com `remetente_tipo = 'Equipe'` e atualiza `tickets_master.status`/`atualizado_em`, com auditoria `EDITAR`;
+  - anexos de chamado: "[CRUD] Receber Ticket do Portal V2" envia ao Drive na subpasta da área (roteador `01_FISCAL`/`02_PESSOAL`/`03_CONTABIL`/`04_SOCIETARIO`/`99_DIVERSOS`) e registra em `evidencias_protocolos` (cliente_id, nome_evidencia, tipo, link_arquivo, ticket_id).
+  - Consequência: detalhe e complemento de chamado no portal podem reaproveitar `tickets_mensagens` (lado cliente) — conferir o valor de `remetente_tipo` usado para o cliente e se `remetente_id` guarda `cliente_id`.
+- **Documentos:** `inbox_documentos` (id, cliente_id, titulo, area_responsavel, competencia, status, nome_arquivo, tipo_documento, link_externo_url, criado_em). Nenhum workflow lido grava conversa/complemento de documento; aguardando a consulta ao banco para saber se existe tabela própria.
+- **Observações de segurança nos workflows existentes (fora do escopo; registrar na fila):** CORS `*` e SQL por interpolação nos cinco; `NOW()` na validação de sessão; "Listagens Gerais V2" e "Responder Ticket" validam só a sessão de funcionário, sem permissão de módulo (`tickets`/`documentos`); "Listagens Gerais V2" devolve todos os chamados e documentos de todos os clientes sem filtro; número de ticket gerado com `Math.random`.
+- Pendentes para o briefing: relatório do Lovable (contrato das quatro chamadas) e estrutura das tabelas (consulta ao `information_schema`).
