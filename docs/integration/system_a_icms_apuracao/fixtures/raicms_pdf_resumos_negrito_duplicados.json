@@ -1,0 +1,7 @@
+[
+  "1102 100,00 100,00 18,00 0,00 0,00\n1.00 do Estado 100,00 100,00 18,00 0,00 0,00\n2.00 de O. Estados 0,00 0,00 0,00 0,00 0,00\n3.00 do Exterior 0,00 0,00 0,00 0,00 0,00\nTotal 100,00 100,00 18,00 0,00 0,00\nENTRADAS 01/2026",
+  "5102 200,00 200,00 36,00 0,00 0,00\n5.00 do Estado 200,00 200,00 36,00 0,00 0,00\n6.00 de O. Estados 0,00 0,00 0,00 0,00 0,00\n7.00 do Exterior 0,00 0,00 0,00 0,00 0,00\nTotal 200,00 200,00 36,00 0,00 0,00\nSAÍDAS 01/2026",
+  "001 Débitos 36,00\n002 Outros 0,00\n003 Estornos 0,00\n004 Total 36,00\n005 Créditos 18,00\n006 Outros 0,00\n007 Estornos 0,00\n008 Subtotal 18,00008 Subtotal 18,00\n009 Anterior 0,00\n010 Total 18,00 010 Total 18,00\n011 Devedor 18,00\n012 Deduções 0,00\n013 Recolher 18,00\n014 Credor 0,00\nResumo Apuração - ICMS 01/2026",
+  "001 Débitos 0,00\n002 Outros 0,00\n003 Estornos 0,00\n004 Total 0,00\n005 Créditos 0,00\n006 Outros 0,00\n007 Estornos 0,00\n008 Subtotal 0,00 008 Subtotal 0,00\n009 Anterior 0,00\n010 Total 0,00010 Total 0,00\n011 Devedor 0,00\n012 Deduções 0,00\n013 Recolher 0,00\n014 Credor 0,00\nResumo Apuração do ICMS - Substituição Tributária - Dentro do Estado 01/2026",
+  "001 Débitos 0,00\n002 Outros 0,00\n003 Estornos 0,00\n004 Total 0,00\n005 Créditos 0,00\n006 Outros 0,00\n007 Estornos 0,00\n008 Subtotal 0,00008 Subtotal 0,00\n009 Anterior 0,00\n010 Total 0,00 010 Total 0,00\n011 Devedor 0,00\n012 Deduções 0,00\n013 Recolher 0,00\n014 Credor 0,00\nResumo Apuração do ICMS - Substituição Tributária - Fora do Estado 01/2026"
+]

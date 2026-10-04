@@ -2,7 +2,7 @@
 
 | Campo | Valor |
 |---|---|
-| Estado | AJUSTE PEDIDO — linhas em negrito duplicadas pelo Extract From File |
+| Estado | ACEITA NA REVISÃO — aguardando push, reimportação e novo teste real |
 | Origem | QUADRO, fila item 23 (primeira etapa); pedido do usuário em 04/10/2026 |
 | Sistema | Sistema A (workflow n8n `ferramentas-ia/apuracao-icms`, artefato versionado) |
 | Exige ADR | não — decisões registradas aqui |
@@ -250,3 +250,21 @@ Workflow com a versão `634d952` reimportado. Teste do usuário pela tela com do
 O gerador do relatório simula negrito desenhando o texto duas vezes; a extração devolve as duas cópias grudadas. A versão anterior do parser aceitava por acaso (usava o último valor); a tokenização nova exige um valor por código e recusa. O PDF mensal tem as mesmas linhas em negrito e provavelmente passa a falhar.
 
 **Ajuste exigido ao Codex (ALTA).** Antes de tokenizar, se a linha (com espaços normalizados) for exatamente a concatenação de duas cópias idênticas de um mesmo texto — com ou sem espaço entre elas — usar uma única cópia. Só aplicar quando as duas metades forem idênticas caractere a caractere; qualquer outra repetição continua sendo tratada normalmente. Fixtures sintéticas com linhas de resumo duplicadas nas duas formas (com e sem espaço) e em blocos `proprio`, `st_dentro` e `st_fora`.
+
+### [2026-10-04] Codex — Resposta ao ajuste das linhas em negrito duplicadas
+
+**Resultado.** Acrescentei uma normalização anterior à tokenização que reduz a linha a uma cópia somente quando, depois de normalizar espaços, ela é formada por duas metades exatamente iguais. São aceitas as formas com as cópias grudadas ou separadas por um único espaço normalizado. Se qualquer caractere ou valor diferir, a linha permanece intacta e segue para a classificação normal, continuando bloqueante quando não puder ser interpretada.
+
+**Arquivo criado nesta rodada.** `fixtures/raicms_pdf_resumos_negrito_duplicados.json`, integralmente sintético, com linhas 008 e 010 duplicadas nas duas formas nos resumos `proprio`, `st_dentro` e `st_fora`.
+
+**Arquivos alterados nesta rodada.** `raicms_parser.js`, `raicms_parser.test.js`, `README.md`, o código idêntico do nó “1. Extrator e Consolidador” no workflow v10, `docs/colaboracao/QUADRO.md` e este registro. Nenhuma migration foi criada.
+
+**Testes.** `node --test`: 22 aprovados; teste estático específico: 6 aprovados; suíte Python de `tests/unit`, `tests/integration` e `tests/api`: 546 aprovados, com dois avisos preexistentes de depreciação FastAPI/Starlette. O teste negativo confirma que duas cópias com valores diferentes não são reduzidas.
+
+**Limitações e pendências.** Não executei n8n, Drive, Sheets, banco, Lovable nem arquivos fiscais reais. O workflow precisa ser reimportado/substituído e os PDFs anual e mensal devem ser repetidos pela tela para confirmar o comportamento do `Extract From File` no ambiente real.
+
+### [2026-10-04] Claude — Quinta revisão (negrito duplicado)
+
+- `collapseExactDuplicateLine`: usa uma cópia só quando a linha normalizada é exatamente `x + x` ou `x + ' ' + x`; nenhum outro caso é alterado. `node --test` 22/22; `tests/unit` 323; varredura `PASS`; nó Code idêntico ao módulo; nenhum valor das amostras reais nas fixtures.
+- Simulação local (fora do repositório): nove cenários válidos, incluindo anual no formato do n8n com 008/010 duplicadas, mensal com 008/010 duplicadas (mesmo modelo do CSV) e mensal invertido com duplicação separada por espaço.
+- **Veredito: ACEITO o código.** Aceite final: reimportar e repetir pela tela os cinco arquivos (mês CSV e PDF → planilha; anual 2025 PDF e anual 2026 PDF → "Sem movimentação de CFOP no período informado"; CSV com valor alterado → divergências).

@@ -13,6 +13,13 @@ const DETAILS = ['ADICIONAL RELATIVO AO FUNDO DE COMBATE A POBREZA', 'DEDUCAO RE
 
 function fold(value) { return String(value ?? '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toUpperCase(); }
 function cleanLine(value) { return String(value ?? '').replace(/\u00a0/g, ' ').replace(/^[;|\s]+/, '').trim(); }
+function collapseExactDuplicateLine(value) {
+  const normalized = cleanLine(value).replace(/\s+/g, ' ');
+  const half = Math.floor(normalized.length / 2);
+  if (normalized.length % 2 === 0 && normalized.slice(0, half) === normalized.slice(half)) return normalized.slice(0, half);
+  if (normalized.length % 2 === 1 && normalized[half] === ' ' && normalized.slice(0, half) === normalized.slice(half + 1)) return normalized.slice(0, half);
+  return normalized;
+}
 function parseMoneyToCents(value) {
   const raw = String(value ?? '').trim().replace(/\s/g, '');
   if (!/^-?(?:\d{1,3}(?:\.\d{3})+|\d+),\d{2}$/.test(raw)) throw new Error(`Valor monetário inválido: ${value}`);
@@ -128,7 +135,7 @@ function parseText(source, origin) {
   const globalUnrecognized = [];
   let currentPeriod = null; let currentSection = null; let currentType = null;
   for (const record of records) {
-    const line = cleanLine(record.line); const title = titleInfo(line);
+    const line = collapseExactDuplicateLine(record.line); const title = titleInfo(line);
     if (title) {
       if (origin === 'csv') { currentPeriod = periods.get(title.competencia); currentSection = title.secao; currentType = title.resumoTipo; }
       continue;

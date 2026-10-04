@@ -6,7 +6,7 @@ Protocolo: [README.md](README.md). Atualizado por quem mudar o estado de uma tar
 
 | ID | Título | Estado | Com quem | Arquivo |
 |---|---|---|---|---|
-| T-0007 | Apuração ICMS a partir de PDF com texto, com conferência obrigatória (etapa 1 do item 23) | AJUSTE PEDIDO — linhas em negrito duplicadas no PDF | Codex | [T-0007](tarefas/T-0007-apuracao-icms-pdf-texto.md) |
+| T-0007 | Apuração ICMS a partir de PDF com texto, com conferência obrigatória (etapa 1 do item 23) | ACEITA NA REVISÃO — aguardando reimportação e teste real | Usuário | [T-0007](tarefas/T-0007-apuracao-icms-pdf-texto.md) |
 
 ## Fila (ainda sem briefing; ordem sugerida, sujeita à decisão do usuário)
 

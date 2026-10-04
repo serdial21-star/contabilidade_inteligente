@@ -152,6 +152,30 @@ test('texto realista do n8n aceita valores antes ou depois de rótulos grudados'
   assert.equal(validate(model).valido, true);
 });
 
+test('linhas em negrito duplicadas exatamente são reduzidas nos três resumos', () => {
+  const model = parsePdfText(JSON.parse(fixture('raicms_pdf_resumos_negrito_duplicados.json')));
+  const summaries = model.periodos[0].resumos;
+  assert.equal(summaries.proprio.valores['008'], 1800);
+  assert.equal(summaries.proprio.valores['010'], 1800);
+  assert.equal(summaries.st_dentro.valores['008'], 0);
+  assert.equal(summaries.st_dentro.valores['010'], 0);
+  assert.equal(summaries.st_fora.valores['008'], 0);
+  assert.equal(summaries.st_fora.valores['010'], 0);
+  assert.equal(validate(model).valido, true);
+});
+
+test('linha repetida com valor diferente não é reduzida', () => {
+  const pages = JSON.parse(fixture('raicms_pdf_resumos_negrito_duplicados.json'));
+  pages[2] = pages[2].replace(
+    '008 Subtotal 18,00008 Subtotal 18,00',
+    '008 Subtotal 18,00008 Subtotal 18,01',
+  );
+  const model = parsePdfText(pages);
+  assert.equal(validate(model).valido, false);
+  assert.ok(model.periodos[0].nao_interpretadas.some((item) =>
+    item.conteudo === '008 Subtotal 18,00008 Subtotal 18,01'));
+});
+
 test('rótulo ambíguo e quantidade monetária inesperada continuam bloqueando', () => {
   const pages = JSON.parse(fixture('raicms_pdf_n8n_rotulos_grudados.json'));
   pages[0] = pages[0].replace(
