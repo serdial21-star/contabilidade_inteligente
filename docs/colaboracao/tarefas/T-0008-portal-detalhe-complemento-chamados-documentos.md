@@ -2,7 +2,7 @@
 
 | Campo | Valor |
 |---|---|
-| Estado | BRIEFING — aguardando decisões e aprovação do usuário |
+| Estado | APROVADA — aguardando implementação pelo Codex |
 | Origem | QUADRO, fila item 20 (primeira parte); escolhida pelo usuário em 04/10/2026 para destravar os testes práticos com clientes |
 | Sistema | Sistema A (n8n, MySQL, frontend Lovable) |
 | Exige ADR | não — decisões D1–D5 registradas aqui; migration 006 não destrutiva |
@@ -67,3 +67,17 @@ Sem segredos (apenas nomes/ids de credenciais). Achados:
 **Escopo — fora.** Item 25 (endurecer os workflows existentes de chamados/documentos); abas Certidões/Livros/Obrigações e Inteligência Fiscal (item 20); notificação por e-mail de complementos.
 
 **Riscos.** Upload grande em base64 via proxy pode estourar limite da Edge Function — por isso D3 depende da verificação técnica. Falha entre o upload no Drive e a gravação no banco deixa arquivo órfão no Drive (sem registro): aceitável, registrado; o inverso (registro sem arquivo) não pode acontecer.
+
+---
+
+## 2. Decisões do usuário
+
+### [2026-10-04] Usuário
+- "aprovo D1–D5". D3 sem tamanho informado: vale a proposta de 10 MB, limitada ao menor limite técnico do caminho (Edge Function e n8n), que o Codex verifica e registra.
+- Observação do usuário para o desenho: o Sistema B vai consumir as informações do Sistema A para a contabilização, com a organização: (1) caixa de entrada; (2) documentos para contabilizar (despesas, contratos, outros); (3) fiscal (NF-e, NFS-e, cupom fiscal, CT-e); (4) financeiro (OFX, PDF, CSV de extratos); (5) contábil (validação e aprovação, com correção de contas e históricos); (6) relatórios contábeis. Tratado em pesquisa de arquitetura separada (ver QUADRO); a T-0008 não define categorias de documento e não deve fixar nada que impeça essa organização — os complementos ficam ligados ao documento/chamado por id, sem classificação nova.
+
+---
+
+## 3. Implementação (Codex)
+
+(aguardando "execute a tarefa T-0008")
