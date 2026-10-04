@@ -2,7 +2,7 @@
 
 | Campo | Valor |
 |---|---|
-| Estado | ACEITA NA REVISÃO — aguardando push, CI e teste real no n8n |
+| Estado | AJUSTE PEDIDO — texto real do Extract From File (ordem invertida e rótulos grudados) e resposta sem movimentação |
 | Origem | QUADRO, fila item 23 (primeira etapa); pedido do usuário em 04/10/2026 |
 | Sistema | Sistema A (workflow n8n `ferramentas-ia/apuracao-icms`, artefato versionado) |
 | Exige ADR | não — decisões registradas aqui |
@@ -199,3 +199,25 @@ Na entrada "Complemento da revisão: amostra anual", o Claude havia citado três
 - Execução real (Node 22.23.3): `node --test` 18/18; `tests/unit/test_system_a_icms_apuracao_assets.py` 6/6; `tests/unit` 323 aprovados; varredura de segredos `PASS`. Script local sobre a estrutura dos arquivos reais: **mês CSV, mês PDF, anual CSV e anual PDF válidos**, sem divergências; CSV e PDF do mês produzem o mesmo modelo.
 - Correção feita pelo Claude como revisor: valores da amostra real retirados da fixture `raicms_anual_misto.csv` e da asserção correspondente em `raicms_parser.test.js` (2393 → 2000), por valores inventados coerentes (ver entrada anterior).
 - **Veredito: ACEITO o código.** Aceite final da tarefa depende de: CI verde (inclui `node --test`) e teste real do usuário no n8n com os três arquivos (mês CSV, mês PDF, anual) e um arquivo com soma alterada; observar a reação da tela à resposta "sem movimentação" (200 sem `url`).
+
+### [2026-10-04] Claude — Teste real no n8n e ajuste pedido
+
+Workflow v10 importado e ativo; testes do usuário pela tela (Administrador):
+
+| Arquivo | Resultado |
+|---|---|
+| mês, CSV | planilha gerada |
+| mês, PDF | primeira tentativa recusada; segunda gerou planilha (200 com `url`) — causa da primeira recusa não identificada; repetir após o ajuste |
+| anual, CSV | parser correto (sem movimentação), mas a tela exibiu "Resposta inesperada da API": recebeu `200`, `success: true`, sem `url` |
+| anual, PDF | `422`; divergências por período (resposta copiada do navegador pelo usuário) |
+
+**Texto real produzido pelo nó Extract From File (n8n 2.6.4, `joinPages: false`) nas páginas sem movimentação** — formas observadas, literalmente:
+- `0,00 0,00 0,00 0,00 0,001.00 do Estado` (e `2.00 de O. Estados`, `3.00 do Exterior`, `5.00 do Estado`, `6.00 de O. Estados`, `7.00 do Exterior`): **valores antes do rótulo e o rótulo grudado no último valor, sem espaço**;
+- `0,00 0,00 0,00 0,00 0,00Total`: idem para o total;
+- `Total 0,00 0,00 0,00 0,00 0,00`: na mesma página, outra linha em ordem normal.
+O parser só reconhece rótulos no início da linha (`^([123567])\.00`, `TOTAL`), então subtotais e totais ficam ausentes. Na página com movimento do relatório mensal a ordem veio normal, mas nada garante isso em outros sistemas.
+
+**Ajustes exigidos ao Codex.**
+1. **(ALTA) Tokenização independente de ordem e de espaço.** Separar cada linha em valores monetários (padrão já existente) e rótulo (o texto restante, com espaços normalizados), aceitando o rótulo antes **ou** depois dos valores e **grudado** no primeiro/último valor. Classificar o rótulo: CFOP (exatamente 4 dígitos, primeiro em {1,2,3,5,6,7}); grupo `N.00` com "do Estado"/"de O. Estados"/"do Exterior"; "Total"; código de resumo 001–014 seguido de texto; detalhamentos da 012. Garantir que um valor grudado num rótulo numérico não seja mal lido (ex.: `21.249,241102` → valor `21.249,24` e CFOP `1102`; `6,29001 Por saídas…` → valor `6,29` e código `001`). Rótulo ambíguo ou linha com quantidade inesperada de valores → `nao_interpretadas` (continua bloqueando).
+2. **Fixtures sintéticas com as formas reais acima**, para entradas, saídas, subtotais, total, CFOP com valores antes e grudado, e resumo com valor antes do código; nos testes, a página sem movimentação no formato do n8n (duas linhas "Total" em ordens diferentes).
+3. **(MÉDIA) Resposta "sem movimentação".** A tela só exibe `message` quando a resposta é de falha; com `200`/`success: true` sem `url` mostra "Resposta inesperada da API". Responder `422` com `success: false` e `message: "Sem movimentação de CFOP no período informado."` (sem divergências), documentando que 422 aqui significa "nada a gerar", não erro de conferência.
