@@ -2,7 +2,7 @@
 
 | Campo | Valor |
 |---|---|
-| Estado | ACEITA NA REVISÃO — aguardando push, reimportação e novo teste real |
+| Estado | CONCLUÍDA — publicada em 04/10/2026 |
 | Origem | QUADRO, fila item 23 (primeira etapa); pedido do usuário em 04/10/2026 |
 | Sistema | Sistema A (workflow n8n `ferramentas-ia/apuracao-icms`, artefato versionado) |
 | Exige ADR | não — decisões registradas aqui |
@@ -268,3 +268,17 @@ O gerador do relatório simula negrito desenhando o texto duas vezes; a extraç�
 - `collapseExactDuplicateLine`: usa uma cópia só quando a linha normalizada é exatamente `x + x` ou `x + ' ' + x`; nenhum outro caso é alterado. `node --test` 22/22; `tests/unit` 323; varredura `PASS`; nó Code idêntico ao módulo; nenhum valor das amostras reais nas fixtures.
 - Simulação local (fora do repositório): nove cenários válidos, incluindo anual no formato do n8n com 008/010 duplicadas, mensal com 008/010 duplicadas (mesmo modelo do CSV) e mensal invertido com duplicação separada por espaço.
 - **Veredito: ACEITO o código.** Aceite final: reimportar e repetir pela tela os cinco arquivos (mês CSV e PDF → planilha; anual 2025 PDF e anual 2026 PDF → "Sem movimentação de CFOP no período informado"; CSV com valor alterado → divergências).
+
+### [2026-10-04] Claude — Teste real final e encerramento
+
+Workflow `c5eba50` reimportado e ativo; anterior renomeado. Testes do usuário pela tela (Network conferido):
+- três envios → `200`, "Planilha Gerada com Sucesso!" (mês CSV, mês PDF e anual 2026 com movimento, conforme o usuário: "deu certo todos");
+- `icms anual.pdf` (2025, sem CFOP) → `422`, tela exibe "Sem movimentação de CFOP no período informado.";
+- CSV com valor alterado → `422`, "O arquivo não pôde ser conferido.".
+Critérios de aceite 1–5 atendidos (1 também pela simulação local: CSV e PDF do mês produzem o mesmo modelo).
+
+A simulação local com a estrutura dos arquivos reais foi apagada da pasta temporária do Claude.
+
+**Pendências que não reabrem a tarefa:** PDF escaneado / IA (T-0008, item 23); planilhas em pasta compartilhada (item 24); a tela não lista as divergências (só a mensagem) — eventual prompt do Lovable; conferir visualmente, quando conveniente, que a planilha do PDF mensal tem os mesmos valores da do CSV.
+
+**Estado: CONCLUÍDA.**

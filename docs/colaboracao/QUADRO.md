@@ -6,7 +6,6 @@ Protocolo: [README.md](README.md). Atualizado por quem mudar o estado de uma tar
 
 | ID | Título | Estado | Com quem | Arquivo |
 |---|---|---|---|---|
-| T-0007 | Apuração ICMS a partir de PDF com texto, com conferência obrigatória (etapa 1 do item 23) | ACEITA NA REVISÃO — aguardando reimportação e teste real | Usuário | [T-0007](tarefas/T-0007-apuracao-icms-pdf-texto.md) |
 
 ## Fila (ainda sem briefing; ordem sugerida, sujeita à decisão do usuário)
 
@@ -28,7 +27,7 @@ Protocolo: [README.md](README.md). Atualizado por quem mudar o estado de uma tar
 | 20 | Endpoints chamados pelo site que não existem no n8n: detalhe/complemento de chamados e documentos, abas Certidões/Livros/Obrigações da Biblioteca e `admin/fiscal/*` (Inteligência Fiscal) | Inventário do Lovable, T-0006, 03/10/2026 | Sistema A | Funcionalidades quebradas; não é falha de segurança |
 | 21 | Obtenção automática de certidões (CND federal, FGTS, trabalhista) por API oficial, substituindo o Colab; extração e gravação dentro do sistema | Decisão do usuário, T-0006, 03/10/2026 | A ou B | Adiado: não atrasar os testes práticos. Pesquisar serviço oficial (candidato: SERPRO Integra Contador) e citar documentação/versão antes de implementar. Sugestão do usuário (03/10): campo para o certificado digital do cliente. Exige ADR antes de qualquer código: guardar certificado A1 de cliente (chave privada) é o dado mais sensível do sistema; avaliar como alternativa o certificado do próprio escritório com procuração eletrônica dos clientes, se o serviço oficial aceitar |
 | 22 | Extrator Fiscal XML: arquivar o XML em `01_FISCAL` (hoje vai para a raiz da pasta do cliente), evitar cópia nova no Drive a cada envio e corrigir a tela que mostra "0 nota(s) processada(s)" (contrato da resposta) | Teste da T-0006, 03/10/2026 | Sistema A | Defeitos anteriores à T-0006; o processamento e a gravação no banco funcionam |
-| 23 | Apuração ICMS a partir de PDF interpretado por IA (hoje o workflow só lê CSV): saída estruturada e validada, marcada como extraída por IA, conferida por pessoa; CSV continua como caminho determinístico | Pedido do usuário, 04/10/2026 | Sistema A | Etapa 1 (PDF com texto, sem IA) = T-0007. Etapa 2 (IA) = T-0008 futura, após resolver uso de dados do provedor: Lovable Free/Pro pode treinar com conteúdo desde 09/09/2026 salvo opt-out (Account settings → Preferences → AI model training) |
+| 23 | Apuração ICMS a partir de PDF interpretado por IA (hoje o workflow só lê CSV): saída estruturada e validada, marcada como extraída por IA, conferida por pessoa; CSV continua como caminho determinístico | Pedido do usuário, 04/10/2026 | Sistema A | Etapa 1 (PDF com texto, sem IA) = T-0007, concluída. Etapa 2 (IA) = T-0008 futura, após resolver uso de dados do provedor: Lovable Free/Pro pode treinar com conteúdo desde 09/09/2026 salvo opt-out (Account settings → Preferences → AI model training) |
 | 24 | Planilhas da Apuração ICMS geradas numa pasta compartilhada com a equipe (opção C): cópia editável por geração, modelo inalterado; acaba o pedido de acesso ao administrador | Decisão do usuário, 04/10/2026 | Sistema A | Pequena; depois da publicação da apuração |
 
 ## Concluídas
@@ -41,3 +40,4 @@ Protocolo: [README.md](README.md). Atualizado por quem mudar o estado de uma tar
 | T-0004 | Menu do Operador vazio: leitura de permissões do funcionário no n8n (aplicada em 03/10/2026) | `080322b`, `1672aae` | 03/10/2026 |
 | T-0005 | "Sair" revoga a sessão no servidor, funcionários e clientes (publicada em 03/10/2026) | `3ba048d`, `afb257b` | 03/10/2026 |
 | T-0006 | Webhooks sem autenticação, proxy aberto, IA sem sessão e CORS do Supabase (publicada em 03–04/10/2026) | `db66ac4`, `7322960`, `458d999` | 04/10/2026 |
+| T-0007 | Apuração ICMS a partir de CSV ou PDF com texto, com conferência obrigatória (publicada em 04/10/2026) | `b52f92d`, `634d952`, `c5eba50` | 04/10/2026 |
