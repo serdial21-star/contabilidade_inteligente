@@ -32,6 +32,8 @@ Importe todos inicialmente **inativos**. Como os JSONs não carregam credenciais
 
 Para cada endpoint: confira path, método, conexões, credenciais e retenção; desative o workflow anterior; só então ative o novo. Não deixe dois workflows ativos com o mesmo path.
 
+Nos workflows `admin/upload-xml` e `ferramentas-ia/apuracao-icms`, confirme depois da importação que o nó **Liberar Upload Autorizado** é um Merge em modo **Choose Branch**, configurado para devolver **Input 1 Data**. A entrada 1 deve vir diretamente do Webhook e preservar o item com os binários; a entrada 2 deve vir somente da saída autorizada da última validação. Não substitua esse caminho por um Code que leia `$(...).binary` ou `.first().binary`.
+
 Ordem recomendada:
 
 1. `portal/honorarios-v2`;
@@ -45,7 +47,8 @@ No CND, atualize o Secret do Colab e ative o workflow protegido na mesma janela.
 ## 4. Testes de publicação
 
 - Upload XML e Apuração: sem token, token malformado, expirado e revogado retornam `401`; funcionário sem `ferramentas_ia/criar` retorna `403`; nenhum nó de Drive/Sheets ou gravação deve aparecer nessas execuções.
-- Upload XML: `cliente_id` inválido retorna `400`; inexistente retorna `404`; um cliente de teste autorizado percorre o fluxo normal.
+- Upload XML: `cliente_id` inválido retorna `400`; inexistente retorna `404`; um cliente de teste autorizado percorre o fluxo normal. O teste autorizado com pelo menos um XML real é obrigatório depois da importação: o nó "Separar XMLs" deve receber o binário e a chamada deve devolver JSON válido. Sem essa execução real, o ajuste de binários não está aceito.
+- Apuração: em uma janela coordenada, desative a versão anterior, ative a endurecida e repita um envio autorizado com um arquivo de teste. Confirme que "1. Extrator e Consolidador" recebe o binário; se falhar, aplique o rollback por peça. Não mantenha as duas versões ativas no mesmo path.
 - Honorários: token de cliente vivo retorna somente dados do próprio cliente; token revogado retorna `401`.
 - CND: chamada sem cabeçalho e com valor incorreto é rejeitada pelo próprio Webhook antes do primeiro nó; chamada com o Secret correto mantém zeros iniciais do CNPJ e grava uma vez.
 - Motor: confirme que só há o gatilho cron `5 6 * * *`; não execute manualmente contra produção apenas para testar.
@@ -54,7 +57,18 @@ No CND, atualize o Secret do Colab e ative o workflow protegido na mesma janela.
 
 Não copie tokens, dados fiscais, XMLs ou respostas pessoais para a T-0006.
 
-## 5. Rollback por peça
+## 5. Retenção das execuções com arquivos
+
+A importação pode não preservar as opções de retenção do JSON. Em **Settings** de cada workflow que recebe arquivo, confira e salve explicitamente:
+
+- **Save Failed Production Executions**: `Do not save`;
+- **Save Successful Production Executions**: `Do not save`;
+- **Save Manual Executions**: desativado;
+- **Save Execution Progress**: desativado.
+
+Depois de confirmar que não são mais necessárias para diagnóstico, apague no n8n a execução `36819` e qualquer outra execução salva dos testes de upload ou apuração que contenha XML, CSV ou outro arquivo fiscal. A exclusão no n8n é permanente; confirme os identificadores e preserve apenas evidência sem dado fiscal antes de excluir.
+
+## 6. Rollback por peça
 
 1. Desative somente o workflow novo com problema e reative sua exportação anterior renomeada.
 2. No motor, reativar o anterior também restaura o webhook público; faça isso apenas se indispensável e registre o risco.

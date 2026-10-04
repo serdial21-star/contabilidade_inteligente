@@ -1,5 +1,6 @@
 import copy
 import json
+import re
 from pathlib import Path
 
 
@@ -28,11 +29,17 @@ def _node(workflow: dict[str, object], name: str) -> dict[str, object]:
     return next(node for node in workflow['nodes'] if node['name'] == name)
 
 
-def _targets(workflow: dict[str, object], source: str, output: int = 0) -> list[str]:
+def _connections(
+    workflow: dict[str, object], source: str, output: int = 0,
+) -> list[dict[str, object]]:
     outputs = workflow['connections'][source]['main']
     if len(outputs) <= output or outputs[output] is None:
         return []
-    return [connection['node'] for connection in outputs[output]]
+    return outputs[output]
+
+
+def _targets(workflow: dict[str, object], source: str, output: int = 0) -> list[str]:
+    return [connection['node'] for connection in _connections(workflow, source, output)]
 
 
 def test_generic_authorization_is_fail_closed_and_audited() -> None:
@@ -81,7 +88,11 @@ def test_all_workflows_are_inactive_sanitized_and_do_not_retain_data() -> None:
 
 def test_upload_authorizes_before_client_lookup_drive_or_write() -> None:
     workflow = _workflow(UPLOAD)
-    assert _targets(workflow, 'Receber XML') == ['Preparar Autorizacao']
+    assert _targets(workflow, 'Receber XML') == [
+        'Preparar Autorizacao',
+        'Liberar Upload Autorizado',
+    ]
+    assert _connections(workflow, 'Receber XML')[1]['index'] == 0
     assert _targets(workflow, 'Preparar Autorizacao') == ['Autorizar Ferramenta IA']
     assert _targets(workflow, 'Autorizar Ferramenta IA') == ['Normalizar Autorizacao']
     assert _targets(workflow, 'Normalizar Autorizacao') == ['Autorizado?']
@@ -89,9 +100,22 @@ def test_upload_authorizes_before_client_lookup_drive_or_write() -> None:
     assert _targets(workflow, 'Autorizado?', 1) == ['Responder Autorizacao']
     assert _targets(workflow, 'Cliente ID valido?', 0) == ['Confirmar Cliente Existente']
     assert _targets(workflow, 'Cliente ID valido?', 1) == ['Responder Cliente Invalido']
-    assert _targets(workflow, 'Cliente existe?', 0) == ['Restaurar Upload Autorizado']
+    assert _targets(workflow, 'Cliente existe?', 0) == ['Liberar Upload Autorizado']
+    assert _connections(workflow, 'Cliente existe?', 0)[0]['index'] == 1
     assert _targets(workflow, 'Cliente existe?', 1) == ['Responder Cliente Ausente']
-    assert _targets(workflow, 'Restaurar Upload Autorizado') == ['Separar XMLs']
+    assert _targets(workflow, 'Liberar Upload Autorizado') == ['Separar XMLs']
+
+    merge = _node(workflow, 'Liberar Upload Autorizado')
+    assert merge['type'] == 'n8n-nodes-base.merge'
+    assert merge['parameters'] == {
+        'mode': 'chooseBranch',
+        'numberInputs': 2,
+        'chooseBranchMode': 'waitForAll',
+        'output': 'specifiedInput',
+        'useDataOfInput': 1,
+    }
+    assert 'cliente_id bruto' in merge['notes']
+    assert '^[1-9][0-9]*$' in merge['notes']
 
     serialized = json.dumps(workflow, ensure_ascii=False)
     assert 'ferramentas_ia' in serialized
@@ -103,17 +127,45 @@ def test_upload_authorizes_before_client_lookup_drive_or_write() -> None:
 
 def test_apuracao_authorizes_before_file_drive_and_sheets() -> None:
     workflow = _workflow(APURACAO)
-    assert _targets(workflow, 'Webhook Lovable') == ['Preparar Autorizacao']
+    assert _targets(workflow, 'Webhook Lovable') == [
+        'Preparar Autorizacao',
+        'Liberar Upload Autorizado',
+    ]
+    assert _connections(workflow, 'Webhook Lovable')[1]['index'] == 0
     assert _targets(workflow, 'Preparar Autorizacao') == ['Autorizar Ferramenta IA']
     assert _targets(workflow, 'Autorizar Ferramenta IA') == ['Normalizar Autorizacao']
     assert _targets(workflow, 'Normalizar Autorizacao') == ['Autorizado?']
-    assert _targets(workflow, 'Autorizado?', 0) == ['Restaurar Upload Autorizado']
+    assert _targets(workflow, 'Autorizado?', 0) == ['Liberar Upload Autorizado']
+    assert _connections(workflow, 'Autorizado?', 0)[0]['index'] == 1
     assert _targets(workflow, 'Autorizado?', 1) == ['Responder Autorizacao']
-    assert _targets(workflow, 'Restaurar Upload Autorizado') == [
+    assert _targets(workflow, 'Liberar Upload Autorizado') == [
         '1. Extrator e Consolidador',
     ]
+    merge = _node(workflow, 'Liberar Upload Autorizado')
+    assert merge['type'] == 'n8n-nodes-base.merge'
+    assert merge['parameters'] == {
+        'mode': 'chooseBranch',
+        'numberInputs': 2,
+        'chooseBranchMode': 'waitForAll',
+        'output': 'specifiedInput',
+        'useDataOfInput': 1,
+    }
     auth_response = json.dumps(_node(workflow, 'Responder Autorizacao'))
     assert "forbidden' ? 403 : 401" in auth_response
+
+
+def test_upload_code_nodes_do_not_restore_cross_node_binary_data() -> None:
+    cross_node_binary = re.compile(r'\$\([^)]*\)(?:\.first\(\))?\.binary\b')
+
+    for path in (UPLOAD, APURACAO):
+        workflow = _workflow(path)
+        assert all(node['name'] != 'Restaurar Upload Autorizado' for node in workflow['nodes'])
+        for node in workflow['nodes']:
+            if node['type'] != 'n8n-nodes-base.code':
+                continue
+            code = node['parameters']['jsCode']
+            assert cross_node_binary.search(code) is None
+            assert '.first().binary' not in code
 
 
 def test_all_changed_mysql_queries_bind_request_values() -> None:
@@ -219,6 +271,11 @@ def test_lovable_prompt_and_colab_snippet_cover_security_contract() -> None:
     assert 'não carregam credenciais' in runbook
     assert 'secrets.token_urlsafe(32)' in runbook
     assert 'Administrador sem linha explícita `ferramentas_ia/criar` recebe `403`' in runbook
+    assert 'Liberar Upload Autorizado' in runbook
+    assert 'Input 1 Data' in runbook
+    assert 'Save Failed Production Executions' in runbook
+    assert 'execução `36819`' in runbook
+    assert 'Sem essa execução real, o ajuste de binários não está aceito.' in runbook
 
 
 def test_ci_validation_includes_migration_005() -> None:

@@ -6,7 +6,7 @@ Protocolo: [README.md](README.md). Atualizado por quem mudar o estado de uma tar
 
 | ID | Título | Estado | Com quem | Arquivo |
 |---|---|---|---|---|
-| T-0006 | Webhooks ativos sem autenticação e sessão revogada aceita (inventário do n8n) | PUBLICAÇÃO PARCIAL — ajuste pedido (binário no upload-xml/apuração) | Codex | [T-0006](tarefas/T-0006-webhooks-sem-autenticacao.md) |
+| T-0006 | Webhooks ativos sem autenticação e sessão revogada aceita (inventário do n8n) | PUBLICAÇÃO PARCIAL — retomar pelo checkpoint de 03/10 | Usuário + Claude | [T-0006](tarefas/T-0006-webhooks-sem-autenticacao.md) |
 
 ## Fila (ainda sem briefing; ordem sugerida, sujeita à decisão do usuário)
 

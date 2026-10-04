@@ -2,7 +2,7 @@
 
 | Campo | Valor |
 |---|---|
-| Estado | PUBLICAÇÃO PARCIAL — ajuste pedido ao Codex (binário no upload-xml/apuração) |
+| Estado | PUBLICAÇÃO PARCIAL — retomar pelo checkpoint de 03/10/2026 |
 | Origem | QUADRO, fila item 19 (SG-10); inventário de 03/10/2026 |
 | Sistema | Sistema A (n8n) |
 | Exige ADR | não, para a contenção; a decisão de manter ou proteger cada endpoint é do usuário |
@@ -318,3 +318,32 @@ Conferida pelo usuário no depurador oficial da Meta (valor não transcrito): to
 - A integração CND pelo Colab "não estava implementada 100%"; a obtenção automática das certidões nos sites dos órgãos ainda teria de ser construída. O usuário prefere eliminar o Colab e, se não houver solução oficial pronta, adiar o tema para não atrasar a disponibilização do sistema para testes práticos.
 - Decisão: **desativar o workflow "API - Receber Extração CND (Google Colab)"** (`admin/integracao-cnd-v1`) em vez de publicar a versão com Header Auth. O artefato endurecido permanece versionado para uso futuro. Itens 5 e 8 do briefing (CND e trecho do Colab) ficam fora desta publicação.
 - Novo item na fila: obtenção automática de certidões por API oficial. Lacuna registrada: não foi verificado nesta data qual serviço oficial atende (candidato a pesquisar: SERPRO Integra Contador, oferecido a escritórios contábeis); nenhuma regra ou integração será criada sem a documentação oficial e sua versão.
+
+### [2026-10-03] Codex — Ajuste binário implementado; devolvido para revisão
+
+**Implementação.** Nos artefatos endurecidos de `admin/upload-xml` e `ferramentas-ia/apuracao-icms`, o Code "Restaurar Upload Autorizado" foi substituído pelo Merge "Liberar Upload Autorizado". O item original segue diretamente do Webhook para a entrada 1; somente a saída verdadeira da última validação alcança a entrada 2. O Merge v3.2 usa `chooseBranch` + `waitForAll` e devolve a entrada 1 (`specifiedInput`/`useDataOfInput: 1`), preservando os binários sem referência cruzada por `$()`.
+
+No upload, a nota do próprio Merge registra a equivalência do `cliente_id`: o corpo original só é liberado depois da validação por `^[1-9][0-9]*$`, conversão segura e confirmação de existência do mesmo identificador. Ramos 401/403/400/404 permanecem fora do Merge. A configuração foi conferida em 03/10/2026 contra a documentação oficial do Merge do n8n e a definição oficial do nó v3.
+
+**Testes.** Os testes estáticos agora exigem as duas entradas com índices corretos, o schema do Merge v3.2, a saída do item original, a sequência de autorização antes do primeiro consumidor e a ausência de `$(...).binary`/`.first().binary` em Code. Resultado: T-0006 `13 passed`; conjunto relacionado do Sistema A `62 passed`; suíte completa `639 passed, 20 skipped`; `git diff --check` aprovado; varredura de segredos `PASS`. O lint isolado não foi executado porque `ruff` não está instalado no ambiente virtual; a suíte Python completa passou.
+
+**Runbook.** Acrescentadas a conferência do Merge após importação, a execução autorizada obrigatória com arquivo, as quatro opções de retenção e a exclusão consciente da execução `36819` e de outros testes que contenham arquivos fiscais.
+
+**Arquivos alterados.** `n8n_admin_upload_xml_v7_hardened.json`, `n8n_ferramentas_ia_apuracao_icms_v9_hardened.json`, `SYSTEM_A_WEBHOOK_HARDENING_RUNBOOK.md`, `test_system_a_webhook_hardening_assets.py`, este registro e `QUADRO.md`. Nenhum arquivo ou migration foi criado.
+
+**Pendente para aceite.** Revisão do Claude; depois, importação pelo usuário e teste real autorizado com um XML. O ajuste não deve ser aceito apenas pelos testes estáticos. Também permanecem pendentes a conferência/salvamento das opções de retenção e a remoção das execuções salvas com dados fiscais.
+
+### [2026-10-03] Claude — Teste real do ajuste do Codex; correção do diagnóstico anterior
+
+- Versão com Merge importada e ativa (execução 36823). Erro continua em "Separar XMLs".
+- Inspeção da execução (abas Binary): "Receber XML" entrega o arquivo na propriedade **`arquivos`** (sem índice, envio de um único XML); "Liberar Upload Autorizado" (Merge) devolve o mesmo binário intacto.
+- **Causa real:** "Separar XMLs" aceita só `/^arquivos\d+$/i` (`arquivos0`, `arquivos1`...). Com um arquivo o n8n usa o nome do campo sem índice. O código é idêntico ao baseline — defeito **anterior** à T-0006: o Extrator já falhava assim com um arquivo. O diagnóstico anterior do Claude (perda do binário por `$()` no task runner) não foi confirmado; a troca por Merge permanece por ser mais robusta.
+- **Correção:** aceitar `/^arquivos\d*$/i` (com ou sem índice); a ordenação já trata ausência de número como 0.
+- **Encaminhamento:** o usuário testa a troca direto no nó ativo (um e dois arquivos). O Codex aplica a mesma alteração em `n8n_admin_upload_xml_v7_hardened.json` e acrescenta teste estático que exija aceitar `arquivos` e `arquivosN`. O aceite segue dependendo do teste real bem-sucedido.
+
+### [2026-10-03] Claude — Encerramento do dia
+
+- Teste real com a troca `\d*` aplicada à mão no nó ativo "Separar XMLs": o fluxo autorizado chegou ao fim e os XMLs foram arquivados no Drive do cliente de teste. Observados três defeitos funcionais anteriores à T-0006 (arquivamento na raiz em vez de `01_FISCAL`; cópia nova a cada envio; tela mostra "0 nota(s)"), a registrar como item próprio da fila.
+- Pendentes: consulta de `processamento_xml_nfe`; espelhar `\d*` no repositório (Codex); motor de obrigações respondeu 500 ao GET de teste — verificar se o antigo segue ativo e se executou; apuração ICMS; prompt do Lovable.
+- O ajuste do Codex (Merge no upload-xml e na apuração, runbook, testes) foi commitado sem aceite, como trabalho em andamento, para não se perder.
+- Retomada: `docs/CHECKPOINT_SESSAO_2026-10-03.md`, seção 4.

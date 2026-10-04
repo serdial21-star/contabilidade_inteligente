@@ -437,12 +437,14 @@
                       "position":  [-208, -80]
                   },
                   {
-                      "parameters":  {"jsCode":  "const original = $(\u0027Webhook Lovable\u0027).first();\nreturn [{ json: original.json ?? {}, binary: original.binary ?? {}, pairedItem: { item: 0 } }];"},
+                      "parameters":  {"mode":  "chooseBranch", "numberInputs":  2, "chooseBranchMode":  "waitForAll", "output":  "specifiedInput", "useDataOfInput":  1},
                       "id":  "c6f11e80-a49d-4a38-bb4f-722c55ef0206",
-                      "name":  "Restaurar Upload Autorizado",
-                      "type":  "n8n-nodes-base.code",
-                      "typeVersion":  2,
-                      "position":  [-208, -368]
+                      "name":  "Liberar Upload Autorizado",
+                      "type":  "n8n-nodes-base.merge",
+                      "typeVersion":  3.2,
+                      "position":  [-208, -368],
+                      "notesInFlow":  true,
+                      "notes":  "A entrada 1 preserva o item original do Webhook e seus binarios. A entrada 2 apenas libera o fluxo depois que a sessao e a permissao ferramentas_ia/criar forem validadas."
                   }
               ],
     "connections":  {
@@ -453,6 +455,11 @@
                                                                      "node":  "Preparar Autorizacao",
                                                                      "type":  "main",
                                                                      "index":  0
+                                                                 },
+                                                                 {
+                                                                     "node":  "Liberar Upload Autorizado",
+                                                                     "type":  "main",
+                                                                     "index":  0
                                                                  }
                                                              ]
                                                          ]
@@ -460,8 +467,8 @@
                         "Preparar Autorizacao":  {"main":  [[{"node":  "Autorizar Ferramenta IA", "type":  "main", "index":  0}]]},
                         "Autorizar Ferramenta IA":  {"main":  [[{"node":  "Normalizar Autorizacao", "type":  "main", "index":  0}]]},
                         "Normalizar Autorizacao":  {"main":  [[{"node":  "Autorizado?", "type":  "main", "index":  0}]]},
-                        "Autorizado?":  {"main":  [[{"node":  "Restaurar Upload Autorizado", "type":  "main", "index":  0}], [{"node":  "Responder Autorizacao", "type":  "main", "index":  0}]]},
-                        "Restaurar Upload Autorizado":  {"main":  [[{"node":  "1. Extrator e Consolidador", "type":  "main", "index":  0}]]},
+                        "Autorizado?":  {"main":  [[{"node":  "Liberar Upload Autorizado", "type":  "main", "index":  1}], [{"node":  "Responder Autorizacao", "type":  "main", "index":  0}]]},
+                        "Liberar Upload Autorizado":  {"main":  [[{"node":  "1. Extrator e Consolidador", "type":  "main", "index":  0}]]},
                         "1. Extrator e Consolidador":  {
                                                            "main":  [
                                                                         [

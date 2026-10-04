@@ -342,12 +342,14 @@
                       "position":  [320, -224]
                   },
                   {
-                      "parameters":  {"jsCode":  "const original = $(\u0027Receber XML\u0027).first();\nconst prepared = $(\u0027Preparar Autorizacao\u0027).first().json;\nconst input = original.json ?? {};\nconst body = input.body && typeof input.body === \u0027object\u0027 ? input.body : {};\nreturn [{ json: { ...input, body: { ...body, cliente_id: prepared.cliente_id } }, binary: original.binary ?? {}, pairedItem: { item: 0 } }];"},
+                      "parameters":  {"mode":  "chooseBranch", "numberInputs":  2, "chooseBranchMode":  "waitForAll", "output":  "specifiedInput", "useDataOfInput":  1},
                       "id":  "b5e00d70-938c-4f27-aa3f-611b44df0111",
-                      "name":  "Restaurar Upload Autorizado",
-                      "type":  "n8n-nodes-base.code",
-                      "typeVersion":  2,
-                      "position":  [320, -416]
+                      "name":  "Liberar Upload Autorizado",
+                      "type":  "n8n-nodes-base.merge",
+                      "typeVersion":  3.2,
+                      "position":  [320, -416],
+                      "notesInFlow":  true,
+                      "notes":  "A entrada 1 preserva o item original do Webhook e seus binarios. A entrada 2 apenas libera o fluxo depois da autorizacao e da confirmacao de existencia do cliente. O cliente_id bruto da entrada 1 e equivalente ao valor autorizado porque Preparar Autorizacao exige ^[1-9][0-9]*$, converte-o de forma segura e Confirmar Cliente Existente valida esse mesmo identificador antes de alcancar esta entrada."
                   }
               ],
     "connections":  {
@@ -356,6 +358,11 @@
                                                          [
                                                              {
                                                                  "node":  "Preparar Autorizacao",
+                                                                 "type":  "main",
+                                                                 "index":  0
+                                                             },
+                                                             {
+                                                                 "node":  "Liberar Upload Autorizado",
                                                                  "type":  "main",
                                                                  "index":  0
                                                              }
@@ -368,8 +375,8 @@
                         "Autorizado?":  {"main":  [[{"node":  "Cliente ID valido?", "type":  "main", "index":  0}], [{"node":  "Responder Autorizacao", "type":  "main", "index":  0}]]},
                         "Cliente ID valido?":  {"main":  [[{"node":  "Confirmar Cliente Existente", "type":  "main", "index":  0}], [{"node":  "Responder Cliente Invalido", "type":  "main", "index":  0}]]},
                         "Confirmar Cliente Existente":  {"main":  [[{"node":  "Cliente existe?", "type":  "main", "index":  0}]]},
-                        "Cliente existe?":  {"main":  [[{"node":  "Restaurar Upload Autorizado", "type":  "main", "index":  0}], [{"node":  "Responder Cliente Ausente", "type":  "main", "index":  0}]]},
-                        "Restaurar Upload Autorizado":  {"main":  [[{"node":  "Separar XMLs", "type":  "main", "index":  0}]]},
+                        "Cliente existe?":  {"main":  [[{"node":  "Liberar Upload Autorizado", "type":  "main", "index":  1}], [{"node":  "Responder Cliente Ausente", "type":  "main", "index":  0}]]},
+                        "Liberar Upload Autorizado":  {"main":  [[{"node":  "Separar XMLs", "type":  "main", "index":  0}]]},
                         "Separar XMLs":  {
                                              "main":  [
                                                           [
