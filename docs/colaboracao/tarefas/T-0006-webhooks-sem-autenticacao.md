@@ -312,3 +312,9 @@ Conferida pelo usuário no depurador oficial da Meta (valor não transcrito): to
 5. Validação real obrigatória antes do aceite: o usuário importa a versão corrigida e repete o teste autorizado com um XML; sem essa execução real, não há aceite.
 
 **Retenção.** As execuções aparecem com dados (a configuração "não salvar" dos JSONs não se manteve na importação, ou foi alterada). Pendente: o usuário informar o estado das quatro opções "Save..." do workflow, voltar "failed" para *Do not save* e apagar as execuções salvas (contêm o XML enviado).
+
+### [2026-10-03] Usuário — CND adiado (registrado pelo Claude)
+
+- A integração CND pelo Colab "não estava implementada 100%"; a obtenção automática das certidões nos sites dos órgãos ainda teria de ser construída. O usuário prefere eliminar o Colab e, se não houver solução oficial pronta, adiar o tema para não atrasar a disponibilização do sistema para testes práticos.
+- Decisão: **desativar o workflow "API - Receber Extração CND (Google Colab)"** (`admin/integracao-cnd-v1`) em vez de publicar a versão com Header Auth. O artefato endurecido permanece versionado para uso futuro. Itens 5 e 8 do briefing (CND e trecho do Colab) ficam fora desta publicação.
+- Novo item na fila: obtenção automática de certidões por API oficial. Lacuna registrada: não foi verificado nesta data qual serviço oficial atende (candidato a pesquisar: SERPRO Integra Contador, oferecido a escritórios contábeis); nenhuma regra ou integração será criada sem a documentação oficial e sua versão.

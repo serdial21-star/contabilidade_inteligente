@@ -26,6 +26,7 @@ Protocolo: [README.md](README.md). Atualizado por quem mudar o estado de uma tar
 | 16 | Índice em `security_sessoes_funcionarios.token_hash` (a autorização da T-0003 varre e trava a tabela) | Pré-publicação da T-0003 | Sistema A | Migration própria; impacto atual desprezível |
 | 18 | Endurecer o workflow de permissões de funcionário: CORS `*`, `NOW()` em vez de UTC, SQL interpolado, gravação sem transação nem auditoria, leitura que ignora `funcionario_id`, fallback por cargo (SG-19) | T-0004, 03/10/2026 | Sistema A | Artefato já versionado em `docs/integration/system_a_permissions/` |
 | 20 | Endpoints chamados pelo site que não existem no n8n: detalhe/complemento de chamados e documentos, abas Certidões/Livros/Obrigações da Biblioteca e `admin/fiscal/*` (Inteligência Fiscal) | Inventário do Lovable, T-0006, 03/10/2026 | Sistema A | Funcionalidades quebradas; não é falha de segurança |
+| 21 | Obtenção automática de certidões (CND federal, FGTS, trabalhista) por API oficial, substituindo o Colab; extração e gravação dentro do sistema | Decisão do usuário, T-0006, 03/10/2026 | A ou B | Adiado: não atrasar os testes práticos. Pesquisar serviço oficial (candidato: SERPRO Integra Contador) e citar documentação/versão antes de implementar |
 
 ## Concluídas
 
