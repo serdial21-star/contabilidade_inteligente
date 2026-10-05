@@ -245,3 +245,11 @@ publicação e UAT real continuam fora desta execução.
 **Correção feita pelo Claude:** `test_embedded_n8n_code_nodes_compile_in_node` falhava de forma intermitente no Windows (`OSError: [WinError 6]` ao duplicar o stdin herdado pelo `subprocess`). A causa é o ambiente, não o código entregue. Uma linha (`stdin=subprocess.DEVNULL`) estabilizou o teste: 6 de 6 execuções aprovadas, contra 3 falhas em 5 antes.
 
 **Próximo passo:** publicação guiada, conforme `docs/integration/SYSTEM_A_PORTAL_DETAILS_RUNBOOK.md`.
+
+### [2026-10-05] Publicação — inventário de status (preflight)
+
+Produção, consulta somente leitura:
+- `tickets_master`: Aberto (6), Em Andamento (1);
+- `inbox_documentos`: Novo (14), Recebido (11).
+
+Nenhum rótulo terminal está em uso hoje. Ainda falta confirmar quais rótulos terminais as telas do painel gravam, porque a lista implementada só funciona se eles coincidirem.

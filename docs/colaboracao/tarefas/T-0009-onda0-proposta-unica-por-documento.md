@@ -127,3 +127,7 @@ Nenhuma nesta tarefa. A publicação no VPS (migration e Caddy) vira runbook sep
 - Responsável pelas condições de dados reais: o proprietário.
 - **Exportação ao Domínio** pelo manual público (solução 672). O golden file será produzido pelo proprietário, importando no Domínio um arquivo de teste. Tarefa futura.
 - **Data contábil da NF-e de entrada = data de entrada.** O B sugere a data de recebimento no escritório, e a pessoa confirma ou corrige antes de aprovar. Entra com o livro em tabelas (onda 1).
+
+### [2026-10-05] Aprovação
+
+O proprietário aprovou o briefing ("t-0009 aprovado"). Estado: APROVADA. Implementação pelo Codex depois da publicação da T-0008, porque o protocolo admite uma tarefa em implementação por vez.
