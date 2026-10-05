@@ -14,6 +14,12 @@ Base: [pesquisa de 04–05/10/2026](../PESQUISA_ARQUITETURA_A_B_CONTABILIZACAO_2
 5. Leiaute de importação do Domínio: o proprietário não consegue obter o leiaute nem o golden file pelo suporte. Ele pediu para construir a exportação "de acordo com os manuais". O alcance está em aberto: exportação pelo manual público do Domínio, validada por importação real no Domínio, ou escrituração própria (R2).
 6. Data contábil da NF-e de entrada: **data de entrada**. Como o XML não traz a data de entrada no estabelecimento, a forma de informá-la ainda precisa ser definida.
 
+### Pontos em aberto resolvidos (05/10/2026, "aceito as recomendações")
+
+- Piloto sintético: as empresas de teste recebem documentos fictícios. Uma empresa real entra só depois da onda 1, com as seis condições cumpridas.
+- Exportação ao Domínio construída pelo manual público (solução 672). O golden file será produzido pelo proprietário, importando no Domínio um arquivo de teste.
+- Data de entrada: o B sugere a data de recebimento no escritório, e a pessoa confirma ou corrige antes de aprovar.
+
 ## Contexto
 
 Em 04/10/2026 o proprietário definiu que o Sistema B vai consumir as informações do Sistema A para contabilizar. A contabilização se organiza em seis áreas: caixa de entrada, documentos, fiscal, financeiro, contábil e relatórios. Ele perguntou se o B deve continuar separado ou ser agrupado ao A, e pediu um protótipo funcional o mais breve possível.
