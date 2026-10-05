@@ -288,3 +288,21 @@ Estado devolvido: **EM_REVISÃO**.
 - consulta `T-0009-reservas-duplicadas.sql`;
 - atualização da imagem web/API e do Caddy no VPS;
 - conferência dos cabeçalhos.
+
+## 5. Encerramento
+
+- **Commit:** `229271b`.
+- **Data:** 05/10/2026.
+- **Publicado no VPS pelo proprietário:**
+  - backup do `u621451815_s21_pilot`;
+  - `git pull` em `229271b`;
+  - imagens `serdial21-b-api` e `serdial21-b-web` com a tag `229271b`;
+  - migration `20260923_0016 -> 20261005_0017`;
+  - `up -d --no-deps api web`.
+- **Conferência:**
+  - api, web e redis `healthy`;
+  - `/api/v1/health/ready` = 200;
+  - `/app/` com `Content-Security-Policy` (`frame-ancestors 'none'`) e `X-Frame-Options: DENY`;
+  - consulta de duplicatas sem registros.
+- **Observação:** os cabeçalhos aparecem duplicados e idênticos na resposta pública, provavelmente porque o proxy público também os adiciona. É inofensivo; a limpeza fica para o item 6 da fila.
+- **Pendência:** estorno de lançamento aprovado, que entra com o livro em tabelas (onda 1).
