@@ -315,3 +315,33 @@ Os erros 401, 404, 409, 422 e o item fechado ainda não foram testados na tela; 
 - **Anexos repetidos no painel:** a gaveta do ticket mostrou o mesmo anexo 11 vezes. Causa provável: o nó MySQL "Buscar Anexos Abertura" executava uma vez por item recebido de "Buscar Mensagens". Correção: `executeOnce` nesse nó e em "Buscar Mensagens", com teste.
 - **Auditoria vazia** para `client_*_complement`: nenhum complemento foi enviado pela caixa "Adicionar Complemento". Os testes até aqui usaram a abertura de chamado e o envio de documento, que são fluxos antigos.
 - **Painel → Documentos:** a consulta passa a trazer `observacao_cliente` e `observacao_escritorio`. Antes não trazia, e por isso a observação digitada pelo cliente não aparecia. A exibição depende de prompt do Lovable.
+
+### [2026-10-05] UAT final — aprovado
+
+- **Portal, chamado:**
+  - o detalhe chama o servidor e mostra descrição e anexo da abertura;
+  - o complemento com PDF foi enviado.
+- **Portal, documento:**
+  - mostra arquivo enviado, informações e histórico;
+  - o complemento "complemento teste 5 t-0008" com `comprovante.pdf` foi enviado.
+- **Painel:**
+  - Tickets mostra o anexo da abertura uma vez e o complemento com link;
+  - Documentos mostra a coluna Complementos (1) e o modal com o anexo.
+- **Auditoria:**
+  - `1616 client_ticket_complement` (tickets_master 11);
+  - `1617 client_document_complement` (inbox_documentos 27);
+  - `detalhes` só com `request_id`, `complement_id` e `has_attachment`.
+
+## 5. Encerramento
+
+- **Commits:** `a5008ac`, `2733512` e os seguintes (patch admin, anexos, `executeOnce`, observações), mais os registros de publicação.
+- **Data:** 05/10/2026.
+- **Publicado:**
+  - migration 006;
+  - quatro workflows do portal;
+  - "API - Admin - Listagens Gerais V2 (T-0008)", com o anterior desativado;
+  - Lovable: portal e painel.
+- **Pendências que seguem na fila:**
+  - item 25: anexo acima de 10 MB na abertura de chamado e no envio de documento; endurecimento das listagens; verificação de segurança do Lovable;
+  - limpeza dos rótulos repetidos e de teste em `listas_opcoes`;
+  - pedido do proprietário: mostrar a observação do envio na linha do tempo do painel e avisar campo obrigatório em "Enviar Documentos".

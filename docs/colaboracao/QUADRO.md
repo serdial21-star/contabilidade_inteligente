@@ -6,7 +6,6 @@ Protocolo: [README.md](README.md). Atualizado por quem mudar o estado de uma tar
 
 | ID | Título | Estado | Com quem | Arquivo |
 |---|---|---|---|---|
-| T-0008 | Portal do cliente: detalhe e complemento de chamados e documentos (parte do item 20) | ACEITA — aguardando CI e publicação guiada | Proprietário | [T-0008](tarefas/T-0008-portal-detalhe-complemento-chamados-documentos.md) |
 | T-0009 | Onda 0: uma proposta por documento, reprocessamento explícito, correção só por estorno e anti-iframe (itens 26, 27 e parte do 6) | APROVADA — aguardando implementação | Codex | [T-0009](tarefas/T-0009-onda0-proposta-unica-por-documento.md) |
 | ADR 0019 | Separar ou unir A e B; organização da contabilização em seis áreas; caminho do protótipo (pesquisa com especialistas, 04–05/10/2026) | ACEITA em 05/10/2026 — três pontos em aberto (piloto, exportação, data de entrada) | Proprietário | [Pesquisa](../PESQUISA_ARQUITETURA_A_B_CONTABILIZACAO_2026-10-05.md), [ADR 0019](../adr/0019-dois-runtimes-e-organizacao-da-contabilizacao.md) |
 
@@ -47,3 +46,4 @@ Protocolo: [README.md](README.md). Atualizado por quem mudar o estado de uma tar
 | T-0005 | "Sair" revoga a sessão no servidor, funcionários e clientes (publicada em 03/10/2026) | `3ba048d`, `afb257b` | 03/10/2026 |
 | T-0006 | Webhooks sem autenticação, proxy aberto, IA sem sessão e CORS do Supabase (publicada em 03–04/10/2026) | `db66ac4`, `7322960`, `458d999` | 04/10/2026 |
 | T-0007 | Apuração ICMS a partir de CSV ou PDF com texto, com conferência obrigatória (publicada em 04/10/2026) | `b52f92d`, `634d952`, `c5eba50` | 04/10/2026 |
+| T-0008 | Portal do cliente: detalhe e complemento de chamados e documentos; painel com anexos e complementos (publicada em 05/10/2026) | `a5008ac`, `2733512` e seguintes | 05/10/2026 |
