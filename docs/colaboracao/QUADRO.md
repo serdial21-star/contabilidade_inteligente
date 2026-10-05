@@ -7,7 +7,7 @@ Protocolo: [README.md](README.md). Atualizado por quem mudar o estado de uma tar
 | ID | Título | Estado | Com quem | Arquivo |
 |---|---|---|---|---|
 | T-0008 | Portal do cliente: detalhe e complemento de chamados e documentos (parte do item 20) | APROVADA — aguardando implementação | Codex | [T-0008](tarefas/T-0008-portal-detalhe-complemento-chamados-documentos.md) |
-| ADR 0019 | Separar ou unir A e B; organização da contabilização em seis áreas; caminho do protótipo (pesquisa com especialistas, 04–05/10/2026) | PROPOSTA — aguardando decisão do proprietário | Proprietário | [Pesquisa](../PESQUISA_ARQUITETURA_A_B_CONTABILIZACAO_2026-10-05.md), [ADR 0019](../adr/0019-dois-runtimes-e-organizacao-da-contabilizacao.md) |
+| ADR 0019 | Separar ou unir A e B; organização da contabilização em seis áreas; caminho do protótipo (pesquisa com especialistas, 04–05/10/2026) | ACEITA em 05/10/2026 — três pontos em aberto (piloto, exportação, data de entrada) | Proprietário | [Pesquisa](../PESQUISA_ARQUITETURA_A_B_CONTABILIZACAO_2026-10-05.md), [ADR 0019](../adr/0019-dois-runtimes-e-organizacao-da-contabilizacao.md) |
 
 ## Fila (ainda sem briefing; ordem sugerida, sujeita à decisão do usuário)
 

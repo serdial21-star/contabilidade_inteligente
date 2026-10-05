@@ -2,9 +2,17 @@
 
 ## Status
 
-**Proposta, aguardando aprovação do proprietário.** Enquanto não for aprovada, esta decisão não autoriza código, migration, integração nem uso de dados reais.
+**Aceita pelo proprietário em 05/10/2026** (item 1 da resposta à pesquisa), com o registro abaixo.
+Base: [pesquisa de 04–05/10/2026](../PESQUISA_ARQUITETURA_A_B_CONTABILIZACAO_2026-10-05.md).
 
-Base: [pesquisa de 04–05/10/2026](../PESQUISA_ARQUITETURA_A_B_CONTABILIZACAO_2026-10-05.md), feita em duas rodadas de especialistas com revisão adversarial.
+### Registro das respostas do proprietário (05/10/2026)
+
+1. ADR 0019: **aprovado**.
+2. Empresas piloto: os clientes de teste do Sistema A "Fenix teste" e "Teste T-0003". Ponto em aberto: se os documentos usados serão fictícios (piloto sintético) ou reais de outra empresa.
+3. Duas pessoas indicadas para o piloto (segregação). A identificação fica fora do repositório (minimização, AGENTS.md §6.9). Elas precisam ser funcionários do Sistema A, porque a ponte só aceita sessões de funcionário.
+4. Responsável pelas seis condições de dados reais: o proprietário.
+5. Leiaute de importação do Domínio: o proprietário não consegue obter o leiaute nem o golden file pelo suporte. Ele pediu para construir a exportação "de acordo com os manuais". O alcance está em aberto: exportação pelo manual público do Domínio, validada por importação real no Domínio, ou escrituração própria (R2).
+6. Data contábil da NF-e de entrada: **data de entrada**. Como o XML não traz a data de entrada no estabelecimento, a forma de informá-la ainda precisa ser definida.
 
 ## Contexto
 
