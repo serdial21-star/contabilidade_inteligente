@@ -7,6 +7,7 @@ Protocolo: [README.md](README.md). Atualizado por quem mudar o estado de uma tar
 | ID | Título | Estado | Com quem | Arquivo |
 |---|---|---|---|---|
 | T-0008 | Portal do cliente: detalhe e complemento de chamados e documentos (parte do item 20) | APROVADA — aguardando implementação | Codex | [T-0008](tarefas/T-0008-portal-detalhe-complemento-chamados-documentos.md) |
+| ADR 0019 | Separar ou unir A e B; organização da contabilização em seis áreas; caminho do protótipo (pesquisa com especialistas, 04–05/10/2026) | PROPOSTA — aguardando decisão do proprietário | Proprietário | [Pesquisa](../PESQUISA_ARQUITETURA_A_B_CONTABILIZACAO_2026-10-05.md), [ADR 0019](../adr/0019-dois-runtimes-e-organizacao-da-contabilizacao.md) |
 
 ## Fila (ainda sem briefing; ordem sugerida, sujeita à decisão do usuário)
 
@@ -31,6 +32,8 @@ Protocolo: [README.md](README.md). Atualizado por quem mudar o estado de uma tar
 | 23 | Apuração ICMS a partir de PDF interpretado por IA (hoje o workflow só lê CSV): saída estruturada e validada, marcada como extraída por IA, conferida por pessoa; CSV continua como caminho determinístico | Pedido do usuário, 04/10/2026 | Sistema A | Etapa 1 (PDF com texto, sem IA) = T-0007, concluída. Etapa 2 (IA) = tarefa futura, após resolver uso de dados do provedor: Lovable Free/Pro pode treinar com conteúdo desde 09/09/2026 salvo opt-out (Account settings → Preferences → AI model training) |
 | 24 | Planilhas da Apuração ICMS geradas numa pasta compartilhada com a equipe (opção C): cópia editável por geração, modelo inalterado; acaba o pedido de acesso ao administrador | Decisão do usuário, 04/10/2026 | Sistema A | Pequena; depois da publicação da apuração |
 | 25 | Endurecer workflows de chamados e documentos (portal e painel): CORS `*`, SQL interpolado, `NOW()`, permissão de módulo ausente em "Listagens Gerais V2" e "Responder Ticket", número de ticket com `Math.random` | Diagnóstico da T-0008, 04/10/2026 | Sistema A | Padrão da T-0006 |
+| 26 | A mesma NF-e gera duas propostas: chave aleatória por envio (`app/api-client.js:61`) e preparação sem unicidade por documento (`nfe_to_dominio.py:115-160`). A correção precisa de reserva única por documento, rota de reprocessamento para `PENDING_RULE`/`ACCOUNT_MAPPING_REQUIRED`, rota de `supersede` e hash de repetição sem campos que mudam por dia | Pesquisa A/B, 05/10/2026 (seção 3.1) | Sistema B | Sem efeito hoje (exportação bloqueada, sem livro); obrigatório antes de dados reais ou prévia |
+| 27 | `JournalEntryRevision.correct()` cria revisão a partir de lançamento já aprovado; num livro numerado, isso contraria o DL 486/1969, art. 2º, §2º, e a ITG 2000, itens 31–36 (correção por estorno) | Pesquisa A/B, 05/10/2026 (seção 3.2) | Sistema B | Resolver junto com o livro em tabelas (ADR 0019) |
 
 ## Concluídas
 
