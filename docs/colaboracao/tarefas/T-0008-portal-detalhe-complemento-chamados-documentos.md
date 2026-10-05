@@ -81,3 +81,167 @@ Sem segredos (apenas nomes/ids de credenciais). Achados:
 ## 3. Implementação (Codex)
 
 (aguardando "execute a tarefa T-0008")
+
+### [2026-10-05] Codex — Implementação
+
+**Resultado.** Implementei os artefatos aprovados sem executar nada contra banco,
+n8n, Drive, Supabase ou Lovable reais. A migration externa 006 cria o histórico
+append-only de complementos de documento, acrescenta o nome do anexo às
+mensagens de chamado e expõe quatro procedures `SQL SECURITY INVOKER`. Sessão,
+ownership, estado fechado e entrada são revalidados; inserção, `atualizado_em` e
+auditoria mínima ficam na mesma transação. Recurso ausente e cross-client têm o
+mesmo resultado `not_found`.
+
+Os quatro workflows importáveis estão inativos, sem credenciais e sem retenção.
+O token vem somente de `Authorization`; as chamadas SQL usam parâmetros; o
+arquivo é validado por tamanho, MIME, extensão e assinatura antes de Drive/banco;
+o upload usa uma das cinco subpastas aprovadas dentro da raiz retornada para o
+cliente da sessão. A procedure de gravação só é chamada depois do upload. O
+detalhe devolve complementos cronológicos e o chamado inclui anexos de abertura.
+
+**Arquivos criados.** Em
+`docs/integration/system_a_portal_detalhes/`:
+
+- `006_up.sql`, `006_down.sql`, `verify_006.sql` e
+  `test_base_schema.sql`;
+- `n8n_portal_detalhe_chamado.json`;
+- `n8n_portal_complementar_chamado.json`;
+- `n8n_portal_detalhe_documento.json`;
+- `n8n_portal_complementar_documento.json`;
+- `ADMIN_DOCUMENTOS_V2_PATCH.md`;
+- `LOVABLE_PROMPT.md`.
+
+Também foram criados:
+
+- `docs/integration/SYSTEM_A_PORTAL_DETAILS_RUNBOOK.md`;
+- `scripts/validate_system_a_portal_details.sh`;
+- `tests/unit/test_system_a_portal_details_assets.py`.
+
+**Arquivos alterados.** `.github/workflows/ci.yml` chama o novo validador
+MariaDB; `docs/colaboracao/QUADRO.md` encaminha a tarefa para revisão; este
+arquivo recebeu somente esta entrada append-only. `.claude/settings.local.json`
+já estava não rastreado e foi preservado sem leitura ou alteração.
+
+**Decisões técnicas.** O vínculo `(documento_id, cliente_id)` possui FK composta,
+impedindo referência cross-client também no banco. O downgrade falha fechado se
+removeria complementos ou nomes novos de anexo; auditoria permanece histórica.
+O export original do workflow multi-endpoint `admin/documentos-v2` não está no
+Git. Em vez de inventar um workflow completo e possivelmente remover rotas, foi
+entregue um patch SQL mínimo e revisável para o `SELECT` existente; o runbook
+exige comparar o export antes/depois.
+
+**D3 — limite verificado.** A documentação oficial do n8n vigente em 05/10/2026
+informa 16 MiB como limite padrão de webhook. Um arquivo de 10 MiB ocupa cerca
+de 13,34 MiB em base64, antes do pequeno envelope JSON, portanto permanece sob
+esse teto. A documentação oficial atual das Supabase Edge Functions não publica
+limite de corpo e informa 256 MB de memória. Mantive os 10 MiB aprovados e
+registrei teste obrigatório pelo proxy real; se a configuração do projeto for
+menor, frontend e workflow devem ser reduzidos juntos.
+
+**Testes executados.** Teste específico da T-0008: **11 passed**, incluindo
+compilação de todos os nós Code com Node.js. Suíte completa: **657 passed, 20
+skipped**, com dois avisos preexistentes de depreciação FastAPI/Starlette. Sintaxe
+do shell pelo Git Bash: aprovada. `git diff --check`: aprovado. Varredura de
+segredos: `SECRET_SCANNER_CANARY_DETECTION: PASS` e
+`RELEASE_SECRET_SCAN: PASS`.
+
+**Não executado.** O validador MariaDB descartável não rodou localmente porque o
+Docker Desktop está parado; o CI deve emitir
+`PORTAL_DETAILS_MIGRATION_006=VALID`,
+`PORTAL_DETAILS_ISOLATION_TESTS=PASS`,
+`PORTAL_DETAILS_AUDIT_ATOMICITY=PASS` e
+`PORTAL_DETAILS_ROLLBACK=PASS`. A UAT real com dois clientes sintéticos também é
+ação do usuário depois da revisão, seguindo o runbook.
+
+**Pendências para revisão/publicação.** Claude deve revisar o diff real e o
+resultado do CI. Depois do aceite: backup e preflight; aplicação da 006;
+importação/reassociação de credenciais dos quatro workflows; patch mínimo do
+workflow administrativo a partir do export real; prompt do Lovable; conferência
+das quatro opções de retenção; e UAT com dois clientes. Nenhuma migration
+Alembic foi criada — a única migration é a 006 do Sistema A.
+
+## 4. Revisões (Claude) e respostas (Codex)
+
+### [2026-10-05] Claude — Revisão 1
+
+**Veredito: AJUSTES.** São dois ajustes pequenos. O restante está aceito tecnicamente; o aceite final também depende do validador MariaDB no CI.
+
+**O que conferi no diff real:**
+- `006_up.sql`:
+  - a sessão é revalidada, viva e não revogada, com a collation da coluna;
+  - o cliente vem sempre da sessão, e o cliente cruzado recebe `not_found`;
+  - a FK composta `(documento_id, cliente_id)` impede referência cruzada;
+  - inserção, `atualizado_em` e auditoria (sem token) ficam na mesma transação, com rollback no erro;
+  - os complementos são append-only.
+- Os quatro workflows:
+  - token só do `Authorization`;
+  - SQL por `queryReplacement`;
+  - arquivo validado por tamanho, MIME, extensão e assinatura antes do Drive;
+  - **o estado fechado é conferido antes do upload**, o que evita arquivo órfão nesse caso;
+  - a pasta de destino é a do cliente da sessão;
+  - `drive_folder_id` é removido da resposta ao portal;
+  - retenção `none`, inativos, sem credenciais.
+- Testes: `tests/unit/test_system_a_portal_details_assets.py` com 11 testes aprovados (reexecutado).
+
+**Ajustes:**
+
+1. **Cabeçalhos repetidos nas respostas.** Os nós `respondToWebhook` dos quatro workflows repetem `Access-Control-Allow-Methods`, `Access-Control-Allow-Headers` e `Vary` (de 4 a 28 ocorrências por arquivo).
+   - Correção: cada cabeçalho uma única vez por nó.
+   - Acrescentar um teste que falhe com nome de cabeçalho duplicado num mesmo nó.
+2. **Rótulos de status "fechado" sem conferência com a produção.**
+   - Os valores usados nas procedures e no nó "Recurso aberto?" foram presumidos:
+     - `concluido`/`concluído` para chamados;
+     - `processado`/`concluido`/`concluído`/`rejeitado` para documentos.
+   - Se a produção usar outro rótulo (ex.: "Resolvido", "Finalizado", "Cancelado"), o cliente complementará item encerrado.
+   - Correção: incluir no runbook, antes da aplicação da 006, a consulta somente leitura `SELECT status, COUNT(*) FROM tickets_master GROUP BY status;` e a equivalente em `inbox_documentos`.
+   - Incluir também a instrução de parar e reportar se aparecer rótulo fora da lista. O ajuste da lista vira decisão registrada, nunca suposição.
+
+**Observação, sem bloquear:** o patch de `admin/documentos-v2` expõe os complementos a qualquer sessão de funcionário, porque o workflow não exige a permissão do módulo e lista todos os clientes. Isso já está coberto pelo item 25 da fila, que passa a ter prioridade maior depois da publicação desta tarefa.
+
+### [2026-10-05] Codex — Resposta à Revisão 1
+
+Os dois ajustes foram atendidos sem mudar a migration 006, as procedures, o
+contrato HTTP ou a ordem de efeitos dos workflows.
+
+1. **Cabeçalhos repetidos:** os cabeçalhos de cada nó `respondToWebhook` foram
+   deduplicados preservando a primeira ocorrência. Todos os nós dos quatro
+   workflows agora possuem exatamente uma ocorrência de cada nome:
+   `Access-Control-Allow-Origin`, `Access-Control-Allow-Methods`,
+   `Access-Control-Allow-Headers` e `Vary`. Foi acrescentado um teste que percorre
+   todos os nós de resposta e falha com nomes repetidos sem distinguir caixa.
+2. **Inventário dos status:** o preflight do runbook agora exige, antes da 006,
+   as consultas somente leitura `SELECT status, COUNT(*) ... GROUP BY status`
+   para `tickets_master` e `inbox_documentos`. O documento registra as listas
+   terminais implementadas e manda parar e reportar rótulo terminal fora delas
+   ou qualquer rótulo cuja natureza ativa/terminal não possa ser confirmada. A
+   lista só pode mudar por decisão registrada, sincronizada em procedures,
+   workflows e testes.
+
+**Arquivos alterados nesta rodada.** Os quatro
+`docs/integration/system_a_portal_detalhes/n8n_*.json`,
+`docs/integration/SYSTEM_A_PORTAL_DETAILS_RUNBOOK.md`,
+`tests/unit/test_system_a_portal_details_assets.py`,
+`docs/colaboracao/QUADRO.md` e este registro append-only. Nenhum arquivo ou
+migration foi criado; `.claude/settings.local.json` permaneceu intocado.
+
+**Validação.** Testes específicos da T-0008: **12 passed**. Suíte completa:
+**658 passed, 20 skipped**, com os mesmos dois avisos preexistentes de
+depreciação FastAPI/Starlette. Varredura de segredos:
+`SECRET_SCANNER_CANARY_DETECTION: PASS` e `RELEASE_SECRET_SCAN: PASS`.
+`git diff --check`: aprovado.
+
+**Pendente.** O validador MariaDB descartável continua dependente do CI porque
+o Docker Desktop local está parado. A tarefa retorna ao Claude para nova revisão;
+publicação e UAT real continuam fora desta execução.
+
+### [2026-10-05] Claude — Revisão 2
+
+**Veredito: ACEITA tecnicamente.** Resta uma condição: o validador MariaDB do CI (`PORTAL_DETAILS_*=PASS`) precisa passar depois do push.
+
+**Ajustes da revisão 1, conferidos no diff:**
+- Nenhum cabeçalho repetido nos quatro workflows (contagem por nó = 1).
+- O runbook inclui o inventário `GROUP BY status` antes da 006, com instrução de parar diante de rótulo não previsto.
+
+**Correção feita pelo Claude:** `test_embedded_n8n_code_nodes_compile_in_node` falhava de forma intermitente no Windows (`OSError: [WinError 6]` ao duplicar o stdin herdado pelo `subprocess`). A causa é o ambiente, não o código entregue. Uma linha (`stdin=subprocess.DEVNULL`) estabilizou o teste: 6 de 6 execuções aprovadas, contra 3 falhas em 5 antes.
+
+**Próximo passo:** publicação guiada, conforme `docs/integration/SYSTEM_A_PORTAL_DETAILS_RUNBOOK.md`.

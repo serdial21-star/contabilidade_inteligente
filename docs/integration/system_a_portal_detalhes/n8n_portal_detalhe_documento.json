@@ -1,0 +1,376 @@
+{
+  "name": "API - Portal - Detalhe de Documento",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "portal/detalhe-documento",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "a8e61569-6544-5aa6-bacd-68bd08a2e49c",
+      "name": "POST Detalhe",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        -720,
+        0
+      ],
+      "webhookId": "375721ec-e53d-53fa-9c0f-d8d8b0d37a39"
+    },
+    {
+      "parameters": {
+        "jsCode": "const raw = $input.first().json ?? {};\nconst headers = raw.headers ?? {};\nconst auth = String(headers.authorization ?? headers.Authorization ?? '');\nconst match = auth.match(/^Bearer\\s+([A-Za-z0-9]{20,128})$/i);\nconst body = raw.body && typeof raw.body === 'object' ? raw.body : raw;\nconst rawId = String(body.documento_id ?? '');\nconst parsedId = /^[1-9][0-9]*$/.test(rawId) ? Number(rawId) : 0;\nreturn [{ json: {\n  token: match ? match[1] : '',\n  resource_id: Number.isSafeInteger(parsedId) ? parsedId : 0,\n  invalid_input: !match || !Number.isSafeInteger(parsedId) || parsedId < 1\n} }];"
+      },
+      "id": "cc6a5519-b193-5ec7-8df3-5821c1569dd3",
+      "name": "Preparar Entrada",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -480,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{ $json.invalid_input }}",
+              "value2": false
+            }
+          ]
+        }
+      },
+      "id": "dc7819b9-7927-50fb-97b1-baf0217b5725",
+      "name": "Entrada valida?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        -240,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { success: false, message: 'Entrada invalida.' } }}",
+        "options": {
+          "responseCode": 422,
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Access-Control-Allow-Origin",
+                "value": "https://serdial21.com"
+              },
+              {
+                "name": "Access-Control-Allow-Methods",
+                "value": "POST, OPTIONS"
+              },
+              {
+                "name": "Access-Control-Allow-Headers",
+                "value": "Content-Type, Authorization"
+              },
+              {
+                "name": "Vary",
+                "value": "Origin"
+              }
+            ]
+          }
+        }
+      },
+      "id": "5910ad60-385b-5072-a97e-246d332980d6",
+      "name": "Responder 422",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        0,
+        144
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "CALL sp_portal_detalhe_documento($1, $2);",
+        "options": {
+          "queryReplacement": "={{ [$json.token, $json.resource_id] }}"
+        }
+      },
+      "id": "df49aea9-65d7-5388-a559-50c93b2aa661",
+      "name": "Buscar Detalhe",
+      "type": "n8n-nodes-base.mySql",
+      "typeVersion": 2.4,
+      "position": [
+        0,
+        -48
+      ],
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "jsCode": "const values = $input.all().flatMap((item) => Array.isArray(item.json) ? item.json : [item.json]);\nconst row = values.find((value) => value && typeof value === 'object' && Object.prototype.hasOwnProperty.call(value, 'result'));\nif (!row) return [{ json: { success: false, result: 'error' } }];\nif (row.result !== 'found') return [{ json: { success: false, result: row.result } }];\nconst parseList = (value) => {\n  if (Array.isArray(value)) return value;\n  if (typeof value !== 'string' || value === '') return [];\n  try { const parsed = JSON.parse(value); return Array.isArray(parsed) ? parsed : []; } catch { return []; }\n};\nreturn [{ json: { success: true, result: 'found', drive_folder_id: row.drive_folder_id, data: {\n  ...row,\n  success: undefined,\n  result: undefined,\n  drive_folder_id: undefined,\n  complementos: parseList(row.complementos),\n  anexos_abertura: parseList(row.anexos_abertura)\n} } }];"
+      },
+      "id": "857a0713-d3d7-555a-a902-044a5b889fe4",
+      "name": "Normalizar Detalhe",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        240,
+        -48
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{ $json.result === 'found' }}",
+              "value2": true
+            }
+          ]
+        }
+      },
+      "id": "6934ce3b-9347-53ac-8c84-c534d9a1ff9f",
+      "name": "Encontrado?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        480,
+        -48
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { success: true, data: $json.data } }}",
+        "options": {
+          "responseCode": 200,
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Access-Control-Allow-Origin",
+                "value": "https://serdial21.com"
+              },
+              {
+                "name": "Access-Control-Allow-Methods",
+                "value": "POST, OPTIONS"
+              },
+              {
+                "name": "Access-Control-Allow-Headers",
+                "value": "Content-Type, Authorization"
+              },
+              {
+                "name": "Vary",
+                "value": "Origin"
+              }
+            ]
+          }
+        }
+      },
+      "id": "69497ec2-a469-50c7-b9fd-e8e421c0f0b5",
+      "name": "Responder Detalhe",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        720,
+        -144
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { success: false, message: $json.result === 'unauthorized' ? 'Sessao expirada ou invalida.' : 'Recurso nao encontrado.' } }}",
+        "options": {
+          "responseCode": "={{ $json.result === 'unauthorized' ? 401 : 404 }}",
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Access-Control-Allow-Origin",
+                "value": "https://serdial21.com"
+              },
+              {
+                "name": "Access-Control-Allow-Methods",
+                "value": "POST, OPTIONS"
+              },
+              {
+                "name": "Access-Control-Allow-Headers",
+                "value": "Content-Type, Authorization"
+              },
+              {
+                "name": "Vary",
+                "value": "Origin"
+              }
+            ]
+          }
+        }
+      },
+      "id": "890dcd1d-eec2-5170-94e3-a10c13201805",
+      "name": "Responder Erro",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        720,
+        48
+      ]
+    },
+    {
+      "parameters": {
+        "httpMethod": "OPTIONS",
+        "path": "portal/detalhe-documento",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "5c307daf-34f3-5227-8ff3-c280b43ec781",
+      "name": "OPTIONS",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        -720,
+        360
+      ],
+      "webhookId": "b6d872d8-2e4d-5158-a47b-a86897011cca"
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "{}",
+        "options": {
+          "responseCode": 200,
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Access-Control-Allow-Origin",
+                "value": "https://serdial21.com"
+              },
+              {
+                "name": "Access-Control-Allow-Methods",
+                "value": "POST, OPTIONS"
+              },
+              {
+                "name": "Access-Control-Allow-Headers",
+                "value": "Content-Type, Authorization"
+              },
+              {
+                "name": "Vary",
+                "value": "Origin"
+              }
+            ]
+          }
+        }
+      },
+      "id": "09a5c313-2bb1-5a50-a9e6-d5574701c0e7",
+      "name": "Responder CORS",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        -480,
+        360
+      ]
+    }
+  ],
+  "connections": {
+    "POST Detalhe": {
+      "main": [
+        [
+          {
+            "node": "Preparar Entrada",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Preparar Entrada": {
+      "main": [
+        [
+          {
+            "node": "Entrada valida?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Entrada valida?": {
+      "main": [
+        [
+          {
+            "node": "Buscar Detalhe",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Responder 422",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Buscar Detalhe": {
+      "main": [
+        [
+          {
+            "node": "Normalizar Detalhe",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalizar Detalhe": {
+      "main": [
+        [
+          {
+            "node": "Encontrado?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Encontrado?": {
+      "main": [
+        [
+          {
+            "node": "Responder Detalhe",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Responder Erro",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OPTIONS": {
+      "main": [
+        [
+          {
+            "node": "Responder CORS",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": false,
+    "saveDataErrorExecution": "none",
+    "saveDataSuccessExecution": "none",
+    "saveManualExecutions": false,
+    "saveExecutionProgress": false
+  },
+  "versionId": "d4a05eee-edcc-50e4-9031-14d5ea17c732"
+}

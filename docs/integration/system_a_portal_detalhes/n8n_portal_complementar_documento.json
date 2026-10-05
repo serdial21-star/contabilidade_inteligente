@@ -1,0 +1,912 @@
+{
+  "name": "API - Portal - Complementar Documento",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "portal/complementar-documento",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "9f56a49e-ec15-53eb-adb6-027c03971e63",
+      "name": "POST Complementar",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        -1200,
+        0
+      ],
+      "webhookId": "6b870fde-8127-5980-8c08-fd420e21b1b9"
+    },
+    {
+      "parameters": {
+        "jsCode": "const raw = $input.first().json ?? {};\nconst headers = raw.headers ?? {};\nconst auth = String(headers.authorization ?? headers.Authorization ?? '');\nconst match = auth.match(/^Bearer\\s+([A-Za-z0-9]{20,128})$/i);\nconst body = raw.body && typeof raw.body === 'object' ? raw.body : raw;\nconst rawId = String(body.documento_id ?? '');\nconst parsedId = /^[1-9][0-9]*$/.test(rawId) ? Number(rawId) : 0;\nconst message = String(body.mensagem ?? '').trim();\nconst dataUri = String(body.arquivo_base64 ?? '');\nconst originalName = String(body.arquivo_nome ?? '').trim();\nconst hasFile = dataUri !== '' || originalName !== '';\nconst allowed = ['application/pdf', 'image/jpeg', 'image/png', 'application/xml', 'text/xml'];\nconst matchFile = dataUri.match(/^data:([^;,]+);base64,([A-Za-z0-9+/]+={0,2})$/);\nlet error = '';\nlet binary;\nlet mime = '';\nlet safeName = '';\nif (!match) error = 'unauthorized';\nelse if (!Number.isSafeInteger(parsedId) || parsedId < 1 || message.length > 5000 || (message === '' && !hasFile)) error = 'invalid_input';\nelse if (hasFile) {\n  if (!matchFile || originalName === '' || originalName.length > 255) error = 'invalid_file';\n  else {\n    mime = matchFile[1].toLowerCase();\n    if (!allowed.includes(mime)) error = 'invalid_file';\n    else {\n      const bytes = Buffer.from(matchFile[2], 'base64');\n      const magic = bytes.subarray(0, 8).toString('hex').toLowerCase();\n      const textStart = bytes.subarray(0, Math.min(bytes.length, 512)).toString('utf8').replace(/^\\uFEFF/, '').trimStart();\n      const signatureOk =\n        (mime === 'application/pdf' && bytes.subarray(0, 5).toString('ascii') === '%PDF-') ||\n        (mime === 'image/jpeg' && magic.startsWith('ffd8ff')) ||\n        (mime === 'image/png' && magic === '89504e470d0a1a0a') ||\n        (true && (mime === 'application/xml' || mime === 'text/xml') && textStart.startsWith('<') && !/<!DOCTYPE/i.test(textStart));\n      const expectedExt = mime === 'application/pdf' ? ['pdf'] : mime === 'image/jpeg' ? ['jpg', 'jpeg'] : mime === 'image/png' ? ['png'] : ['xml'];\n      const ext = originalName.includes('.') ? originalName.split('.').pop().toLowerCase() : '';\n      if (bytes.length === 0 || bytes.length > 10 * 1024 * 1024 || !signatureOk || !expectedExt.includes(ext)) error = 'invalid_file';\n      else {\n        safeName = originalName.replace(/[\\\\/:*?\"<>|\\x00-\\x1F]/g, '_').slice(0, 255);\n        binary = { data: { data: matchFile[2], mimeType: mime, fileName: safeName, fileSize: bytes.length } };\n      }\n    }\n  }\n}\nreturn [{ json: {\n  token: match ? match[1] : '', resource_id: parsedId, mensagem: message,\n  has_file: hasFile && !error, arquivo_nome: safeName, invalid_reason: error\n}, ...(binary ? { binary } : {}) }];"
+      },
+      "id": "b6ebcdfa-7c67-5f26-8a09-22bee37a3788",
+      "name": "Validar Entrada",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -960,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{ $json.invalid_reason }}",
+              "operation": "isEmpty"
+            }
+          ]
+        }
+      },
+      "id": "36119251-7692-5f67-9451-a29a7907ce67",
+      "name": "Entrada valida?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        -720,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { success: false, message: $json.invalid_reason === 'unauthorized' ? 'Sessao expirada ou invalida.' : 'Entrada ou arquivo invalido.' } }}",
+        "options": {
+          "responseCode": "={{ $json.invalid_reason === 'unauthorized' ? 401 : 422 }}",
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Access-Control-Allow-Origin",
+                "value": "https://serdial21.com"
+              },
+              {
+                "name": "Access-Control-Allow-Methods",
+                "value": "POST, OPTIONS"
+              },
+              {
+                "name": "Access-Control-Allow-Headers",
+                "value": "Content-Type, Authorization"
+              },
+              {
+                "name": "Vary",
+                "value": "Origin"
+              }
+            ]
+          }
+        }
+      },
+      "id": "86417313-1fb0-52fd-85f7-a482b5b38455",
+      "name": "Responder Entrada Invalida",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        -480,
+        192
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "CALL sp_portal_detalhe_documento($1, $2);",
+        "options": {
+          "queryReplacement": "={{ [$('Validar Entrada').first().json.token, $('Validar Entrada').first().json.resource_id] }}"
+        }
+      },
+      "id": "7375c45d-b2a7-50ad-bd3f-3cfcfc819081",
+      "name": "Autorizar Recurso",
+      "type": "n8n-nodes-base.mySql",
+      "typeVersion": 2.4,
+      "position": [
+        -480,
+        -64
+      ],
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "jsCode": "const values = $input.all().flatMap((item) => Array.isArray(item.json) ? item.json : [item.json]);\nconst row = values.find((value) => value && typeof value === 'object' && Object.prototype.hasOwnProperty.call(value, 'result'));\nif (!row) return [{ json: { success: false, result: 'error' } }];\nif (row.result !== 'found') return [{ json: { success: false, result: row.result } }];\nconst parseList = (value) => {\n  if (Array.isArray(value)) return value;\n  if (typeof value !== 'string' || value === '') return [];\n  try { const parsed = JSON.parse(value); return Array.isArray(parsed) ? parsed : []; } catch { return []; }\n};\nreturn [{ json: { success: true, result: 'found', drive_folder_id: row.drive_folder_id, data: {\n  ...row,\n  success: undefined,\n  result: undefined,\n  drive_folder_id: undefined,\n  complementos: parseList(row.complementos),\n  anexos_abertura: parseList(row.anexos_abertura)\n} } }];"
+      },
+      "id": "a6a17119-b04d-5c04-aac6-decd6381b0ae",
+      "name": "Normalizar Recurso",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -240,
+        -64
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{ $json.result === 'found' }}",
+              "value2": true
+            }
+          ]
+        }
+      },
+      "id": "f78e5849-9ac2-5312-8bcb-81ecb479ed45",
+      "name": "Recurso autorizado?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        0,
+        -64
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { success: false, message: $json.result === 'unauthorized' ? 'Sessao expirada ou invalida.' : 'Recurso nao encontrado.' } }}",
+        "options": {
+          "responseCode": "={{ $json.result === 'unauthorized' ? 401 : 404 }}",
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Access-Control-Allow-Origin",
+                "value": "https://serdial21.com"
+              },
+              {
+                "name": "Access-Control-Allow-Methods",
+                "value": "POST, OPTIONS"
+              },
+              {
+                "name": "Access-Control-Allow-Headers",
+                "value": "Content-Type, Authorization"
+              },
+              {
+                "name": "Vary",
+                "value": "Origin"
+              }
+            ]
+          }
+        }
+      },
+      "id": "029b58cb-2cfd-52e8-8975-1095d2526563",
+      "name": "Responder Recurso Indisponivel",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        240,
+        144
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{ !['concluido','concluído','processado','rejeitado'].includes(String($json.data.status || '').trim().toLowerCase()) }}",
+              "value2": true
+            }
+          ]
+        }
+      },
+      "id": "c38b4aac-7a92-5491-a2e4-1a4a85ab1c27",
+      "name": "Recurso aberto?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        240,
+        -64
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { success: false, message: 'Recurso encerrado.' } }}",
+        "options": {
+          "responseCode": 409,
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Access-Control-Allow-Origin",
+                "value": "https://serdial21.com"
+              },
+              {
+                "name": "Access-Control-Allow-Methods",
+                "value": "POST, OPTIONS"
+              },
+              {
+                "name": "Access-Control-Allow-Headers",
+                "value": "Content-Type, Authorization"
+              },
+              {
+                "name": "Vary",
+                "value": "Origin"
+              }
+            ]
+          }
+        }
+      },
+      "id": "f9562d03-ba04-5fdb-8864-ce539f74c9a6",
+      "name": "Responder Fechado",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        480,
+        144
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "chooseBranch",
+        "numberInputs": 2,
+        "chooseBranchMode": "waitForAll",
+        "output": "specifiedInput",
+        "useDataOfInput": 1
+      },
+      "id": "04e12167-320f-5323-a3f6-c6040d5bab39",
+      "name": "Liberar Entrada Autorizada",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        480,
+        -160
+      ],
+      "notesInFlow": true,
+      "notes": "A entrada 1 preserva o binario validado. A entrada 2 libera somente apos sessao e ownership serem revalidados pela procedure."
+    },
+    {
+      "parameters": {
+        "jsCode": "const detail = $('Normalizar Recurso').first().json;\nconst input = $('Validar Entrada').first().json;\nconst data = detail.data ?? {};\nconst rawArea = String(data.area ?? data.area_responsavel ?? '').normalize('NFD').replace(/[\\u0300-\\u036f]/g, '').toUpperCase();\nconst subpasta = rawArea.includes('FISC') ? '01_FISCAL' : rawArea.includes('PESSO') ? '02_PESSOAL' : rawArea.includes('CONTAB') ? '03_CONTABIL' : rawArea.includes('SOCIET') ? '04_SOCIETARIO' : '99_DIVERSOS';\nreturn [{ json: { ...input, drive_folder_id: detail.drive_folder_id, subpasta }, binary: $input.first().binary }];"
+      },
+      "id": "d63065d1-62dc-56d6-a6c0-4576b45efae1",
+      "name": "Mapear Subpasta",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        720,
+        -160
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{ $json.has_file }}",
+              "value2": true
+            }
+          ]
+        }
+      },
+      "id": "8fdc2236-a97e-5cb5-bb5b-3df5c5074be8",
+      "name": "Tem anexo?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        960,
+        -160
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "fileFolder",
+        "operation": "search",
+        "queryString": "={{ $json.subpasta }}",
+        "returnAll": false,
+        "limit": 1,
+        "filter": {
+          "whatToSearch": "folders",
+          "folderId": {
+            "__rl": true,
+            "value": "={{ $json.drive_folder_id }}",
+            "mode": "id"
+          }
+        },
+        "options": {}
+      },
+      "id": "e004a8fc-3966-58a7-8dd8-8611f40066f6",
+      "name": "Buscar Subpasta Drive",
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
+      "position": [
+        1200,
+        -288
+      ],
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{ $json.id }}",
+              "operation": "isNotEmpty"
+            },
+            {
+              "value1": "={{ $json.name }}",
+              "operation": "equal",
+              "value2": "={{ $('Mapear Subpasta').first().json.subpasta }}"
+            }
+          ]
+        }
+      },
+      "id": "2f24fbd0-f0f8-5e33-b2c6-2eb3a32fb4f3",
+      "name": "Subpasta encontrada?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        1440,
+        -288
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { success: false, message: 'Pasta de destino indisponivel.' } }}",
+        "options": {
+          "responseCode": 500,
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Access-Control-Allow-Origin",
+                "value": "https://serdial21.com"
+              },
+              {
+                "name": "Access-Control-Allow-Methods",
+                "value": "POST, OPTIONS"
+              },
+              {
+                "name": "Access-Control-Allow-Headers",
+                "value": "Content-Type, Authorization"
+              },
+              {
+                "name": "Vary",
+                "value": "Origin"
+              }
+            ]
+          }
+        }
+      },
+      "id": "aa801395-0b11-5032-b6ff-f9835feba90e",
+      "name": "Responder Falha de Pasta",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        1680,
+        -48
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "chooseBranch",
+        "numberInputs": 2,
+        "chooseBranchMode": "waitForAll",
+        "output": "specifiedInput",
+        "useDataOfInput": 1
+      },
+      "id": "8ae5af4c-b3e6-5d5d-ad8e-f28390453f8b",
+      "name": "Liberar Upload",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        1680,
+        -352
+      ],
+      "notesInFlow": true,
+      "notes": "Preserva o binario somente depois de confirmar a subpasta dentro da raiz do cliente autenticado."
+    },
+    {
+      "parameters": {
+        "driveId": {
+          "__rl": true,
+          "value": "My Drive",
+          "mode": "list",
+          "cachedResultName": "My Drive"
+        },
+        "folderId": {
+          "__rl": true,
+          "value": "={{ $('Buscar Subpasta Drive').first().json.id }}",
+          "mode": "id"
+        },
+        "options": {}
+      },
+      "id": "c99b28ed-b45c-5897-ba51-ac7b1db72c60",
+      "name": "Enviar Anexo ao Drive",
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
+      "position": [
+        1920,
+        -352
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const input = $('Validar Entrada').first().json;\nconst uploaded = $input.first().json ?? {};\nif (!uploaded.id) throw new Error('Upload sem identificador do Drive');\nreturn [{ json: { ...input, anexo_url: `https://drive.google.com/file/d/${uploaded.id}/view`, anexo_nome: input.arquivo_nome } }];"
+      },
+      "id": "911946e0-cf91-51b7-bef9-fcacab2681b2",
+      "name": "Preparar Registro com Anexo",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2160,
+        -352
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const input = $('Validar Entrada').first().json;\nreturn [{ json: { ...input, anexo_url: null, anexo_nome: null } }];"
+      },
+      "id": "6acaa36a-d038-5eee-b79a-e47b9162fbbc",
+      "name": "Preparar Registro sem Anexo",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1200,
+        -64
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "CALL sp_portal_complementar_documento($1, $2, $3, $4, $5);",
+        "options": {
+          "queryReplacement": "={{ [$json.token, $json.resource_id, $json.mensagem, $json.anexo_url, $json.anexo_nome] }}"
+        }
+      },
+      "id": "bde1a620-1dec-55a0-a7be-236388a05e3d",
+      "name": "Gravar Complemento",
+      "type": "n8n-nodes-base.mySql",
+      "typeVersion": 2.4,
+      "position": [
+        2400,
+        -160
+      ],
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "jsCode": "const values = $input.all().flatMap((item) => Array.isArray(item.json) ? item.json : [item.json]);\nconst row = values.find((value) => value && typeof value === 'object' && Object.prototype.hasOwnProperty.call(value, 'result'));\nreturn [{ json: row ?? { success: false, result: 'error' } }];"
+      },
+      "id": "1b5dd5ba-6042-52a8-b976-aa925e1525fe",
+      "name": "Normalizar Gravacao",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2640,
+        -160
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{ $json.result === 'created' }}",
+              "value2": true
+            }
+          ]
+        }
+      },
+      "id": "2891969c-0aaf-52b7-9e02-e30eec610f6a",
+      "name": "Complemento criado?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        2880,
+        -160
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { success: true, message: 'Complemento enviado.' } }}",
+        "options": {
+          "responseCode": 200,
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Access-Control-Allow-Origin",
+                "value": "https://serdial21.com"
+              },
+              {
+                "name": "Access-Control-Allow-Methods",
+                "value": "POST, OPTIONS"
+              },
+              {
+                "name": "Access-Control-Allow-Headers",
+                "value": "Content-Type, Authorization"
+              },
+              {
+                "name": "Vary",
+                "value": "Origin"
+              }
+            ]
+          }
+        }
+      },
+      "id": "494a1c44-1ac7-5c85-99d0-336d155ec954",
+      "name": "Responder Sucesso",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        3120,
+        -256
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { success: false, message: $json.result === 'closed' ? 'Recurso encerrado.' : $json.result === 'not_found' ? 'Recurso nao encontrado.' : $json.result === 'unauthorized' ? 'Sessao expirada ou invalida.' : 'Nao foi possivel complementar.' } }}",
+        "options": {
+          "responseCode": "={{ $json.result === 'closed' ? 409 : $json.result === 'not_found' ? 404 : $json.result === 'unauthorized' ? 401 : $json.result === 'invalid_input' ? 422 : 500 }}",
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Access-Control-Allow-Origin",
+                "value": "https://serdial21.com"
+              },
+              {
+                "name": "Access-Control-Allow-Methods",
+                "value": "POST, OPTIONS"
+              },
+              {
+                "name": "Access-Control-Allow-Headers",
+                "value": "Content-Type, Authorization"
+              },
+              {
+                "name": "Vary",
+                "value": "Origin"
+              }
+            ]
+          }
+        }
+      },
+      "id": "d4ee8765-b400-58b1-82e3-05fca9e6b14b",
+      "name": "Responder Falha Final",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        3120,
+        -64
+      ]
+    },
+    {
+      "parameters": {
+        "httpMethod": "OPTIONS",
+        "path": "portal/complementar-documento",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "b5ace51d-b6ad-532f-b8f6-8076a6a3e520",
+      "name": "OPTIONS",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        -720,
+        360
+      ],
+      "webhookId": "fdd47b77-2797-5b8f-ad55-e7ed228d89c1"
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "{}",
+        "options": {
+          "responseCode": 200,
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Access-Control-Allow-Origin",
+                "value": "https://serdial21.com"
+              },
+              {
+                "name": "Access-Control-Allow-Methods",
+                "value": "POST, OPTIONS"
+              },
+              {
+                "name": "Access-Control-Allow-Headers",
+                "value": "Content-Type, Authorization"
+              },
+              {
+                "name": "Vary",
+                "value": "Origin"
+              }
+            ]
+          }
+        }
+      },
+      "id": "64368828-115f-57c0-84d0-46a12ebf8a90",
+      "name": "Responder CORS",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        -480,
+        360
+      ]
+    }
+  ],
+  "connections": {
+    "POST Complementar": {
+      "main": [
+        [
+          {
+            "node": "Validar Entrada",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validar Entrada": {
+      "main": [
+        [
+          {
+            "node": "Entrada valida?",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Liberar Entrada Autorizada",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Entrada valida?": {
+      "main": [
+        [
+          {
+            "node": "Autorizar Recurso",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Responder Entrada Invalida",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Autorizar Recurso": {
+      "main": [
+        [
+          {
+            "node": "Normalizar Recurso",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalizar Recurso": {
+      "main": [
+        [
+          {
+            "node": "Recurso autorizado?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Recurso autorizado?": {
+      "main": [
+        [
+          {
+            "node": "Recurso aberto?",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Responder Recurso Indisponivel",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Recurso aberto?": {
+      "main": [
+        [
+          {
+            "node": "Liberar Entrada Autorizada",
+            "type": "main",
+            "index": 1
+          }
+        ],
+        [
+          {
+            "node": "Responder Fechado",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Liberar Entrada Autorizada": {
+      "main": [
+        [
+          {
+            "node": "Mapear Subpasta",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Mapear Subpasta": {
+      "main": [
+        [
+          {
+            "node": "Tem anexo?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Tem anexo?": {
+      "main": [
+        [
+          {
+            "node": "Buscar Subpasta Drive",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Liberar Upload",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Preparar Registro sem Anexo",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Buscar Subpasta Drive": {
+      "main": [
+        [
+          {
+            "node": "Subpasta encontrada?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Subpasta encontrada?": {
+      "main": [
+        [
+          {
+            "node": "Liberar Upload",
+            "type": "main",
+            "index": 1
+          }
+        ],
+        [
+          {
+            "node": "Responder Falha de Pasta",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Liberar Upload": {
+      "main": [
+        [
+          {
+            "node": "Enviar Anexo ao Drive",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Enviar Anexo ao Drive": {
+      "main": [
+        [
+          {
+            "node": "Preparar Registro com Anexo",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Preparar Registro com Anexo": {
+      "main": [
+        [
+          {
+            "node": "Gravar Complemento",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Preparar Registro sem Anexo": {
+      "main": [
+        [
+          {
+            "node": "Gravar Complemento",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Gravar Complemento": {
+      "main": [
+        [
+          {
+            "node": "Normalizar Gravacao",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalizar Gravacao": {
+      "main": [
+        [
+          {
+            "node": "Complemento criado?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Complemento criado?": {
+      "main": [
+        [
+          {
+            "node": "Responder Sucesso",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Responder Falha Final",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OPTIONS": {
+      "main": [
+        [
+          {
+            "node": "Responder CORS",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": false,
+    "saveDataErrorExecution": "none",
+    "saveDataSuccessExecution": "none",
+    "saveManualExecutions": false,
+    "saveExecutionProgress": false
+  },
+  "versionId": "a5516595-dd19-5a8d-ab06-92d9bf5de330"
+}

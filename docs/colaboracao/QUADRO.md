@@ -6,7 +6,7 @@ Protocolo: [README.md](README.md). Atualizado por quem mudar o estado de uma tar
 
 | ID | Título | Estado | Com quem | Arquivo |
 |---|---|---|---|---|
-| T-0008 | Portal do cliente: detalhe e complemento de chamados e documentos (parte do item 20) | APROVADA — aguardando implementação | Codex | [T-0008](tarefas/T-0008-portal-detalhe-complemento-chamados-documentos.md) |
+| T-0008 | Portal do cliente: detalhe e complemento de chamados e documentos (parte do item 20) | ACEITA — aguardando CI e publicação guiada | Proprietário | [T-0008](tarefas/T-0008-portal-detalhe-complemento-chamados-documentos.md) |
 | T-0009 | Onda 0: uma proposta por documento, reprocessamento explícito, correção só por estorno e anti-iframe (itens 26, 27 e parte do 6) | RASCUNHO — aguardando aprovação; implementar depois da T-0008 | Claude → Codex | [T-0009](tarefas/T-0009-onda0-proposta-unica-por-documento.md) |
 | ADR 0019 | Separar ou unir A e B; organização da contabilização em seis áreas; caminho do protótipo (pesquisa com especialistas, 04–05/10/2026) | ACEITA em 05/10/2026 — três pontos em aberto (piloto, exportação, data de entrada) | Proprietário | [Pesquisa](../PESQUISA_ARQUITETURA_A_B_CONTABILIZACAO_2026-10-05.md), [ADR 0019](../adr/0019-dois-runtimes-e-organizacao-da-contabilizacao.md) |
 
