@@ -324,6 +324,8 @@
     proposalActivity: syntheticProposalActivity,
     accountingCatalog: syntheticAccountingCatalog, accountingRule: syntheticAccountingRule,
     decideProposal: syntheticDecision,
+    reprocessJourney: async (companyId, id, version) => ({journey_id: id, status: 'PENDING_APPROVAL', version: Number(version) + 1, synthetic: true}),
+    supersedeJourney: async (companyId, id, version) => ({journey_id: id, status: 'SUPERSEDED', version: Number(version) + 1, synthetic: true}),
     decisionLine,
     itemClassifications: listItemClassifications, itemClassification: syntheticItemClassification,
     decideItemClassification: syntheticItemClassificationDecision,

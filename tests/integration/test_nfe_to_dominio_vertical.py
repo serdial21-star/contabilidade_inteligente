@@ -22,6 +22,7 @@ from serdial21.modules.access_control.adapters.outbound.persistence.models impor
 )
 from serdial21.modules.access_control.application.services.authorization import AccessDeniedError
 from serdial21.modules.audit.adapters.outbound.persistence.repositories import SqlAlchemyAuditRepository
+from serdial21.modules.audit.adapters.outbound.persistence.models import AuditEventModel
 from serdial21.modules.audit.application.services.audit import AuditService
 from serdial21.modules.audit.domain.entities import AuditOrigin
 from serdial21.modules.chart_of_accounts.domain.entities import AccountVersion, Ledger
@@ -216,7 +217,6 @@ def test_nonapproved_or_superseded_revision_never_reaches_connector(env: Environ
         journey = env.approve(journey, 'REJECTED')
         assert journey.effect is None
     if state == 'SUPERSEDED':
-        journey = env.approve(journey)
         journey = env.runtime().supersede(env.context(env.proposer), journey.id, expected_version=journey.version)
         env.session.commit()
     def forbidden(*_: object) -> None:
@@ -253,9 +253,12 @@ def test_every_lock_scope_blocks_the_critical_effect(env: Environment, scope: Lo
     env.session.rollback()
 
 
-def test_idempotency_conflict_and_unique_correlations(env: Environment) -> None:
+def test_request_retry_and_document_effect_uniqueness(env: Environment) -> None:
     first = env.prepare()
-    again = env.prepare()
+    again = env.runtime().prepare(
+        replace(env.command(), approval_expires_at=NOW + timedelta(days=2)),
+        content=FIXTURE.read_bytes(), filename='synthetic.xml',
+    )
     assert (first.id, first.version, first.correlation_id) == (again.id, again.version, again.correlation_id)
     with pytest.raises(JourneyConflictError, match='content conflict'):
         env.runtime().prepare(env.command(), content=FIXTURE.read_bytes() + b' ', filename='synthetic.xml')
@@ -263,8 +266,78 @@ def test_idempotency_conflict_and_unique_correlations(env: Environment) -> None:
     second = env.runtime().prepare(replace(env.command(), idempotency_key='another-journey'),
                                    content=FIXTURE.read_bytes(), filename='synthetic.xml')
     env.session.commit()
-    assert second.correlation_id != first.correlation_id
+    assert second.id == first.id
+    assert second.correlation_id == first.correlation_id
     assert second.imported.artifact_id == first.imported.artifact_id
+
+
+def test_rejection_releases_document_for_a_new_journey(env: Environment) -> None:
+    first = env.prepare()
+    rejected = env.approve(first, 'REJECTED')
+    second = env.runtime().prepare(
+        replace(env.command(), idempotency_key='after-rejection'),
+        content=FIXTURE.read_bytes(), filename='synthetic.xml',
+    )
+    env.session.commit()
+    assert rejected.status == 'REJECTED'
+    assert second.id != first.id
+
+
+def test_historical_nonowner_duplicates_can_be_rejected_or_superseded(
+    env: Environment,
+) -> None:
+    owner = env.prepare()
+    repository = SqlAlchemyJourneyRepository(env.session)
+    document_id = owner.imported.fiscal_document_id
+
+    duplicate_to_reject = replace(
+        owner, id=uuid4(), correlation_id=uuid4(),
+        idempotency_key='historical-duplicate-reject', version=1,
+    )
+    repository.append(duplicate_to_reject)
+    env.session.commit()
+    rejected = env.approve(duplicate_to_reject, 'REJECTED')
+    assert rejected.status == 'REJECTED'
+    assert repository.reservation_owner(env.tenant, env.company, document_id) == owner.id
+
+    duplicate_to_supersede = replace(
+        owner, id=uuid4(), correlation_id=uuid4(),
+        idempotency_key='historical-duplicate-supersede', version=1,
+    )
+    repository.append(duplicate_to_supersede)
+    env.session.commit()
+    superseded = env.runtime().supersede(
+        env.context(env.proposer), duplicate_to_supersede.id,
+        expected_version=duplicate_to_supersede.version,
+    )
+    env.session.commit()
+    assert superseded.status == 'SUPERSEDED'
+    assert repository.reservation_owner(env.tenant, env.company, document_id) == owner.id
+    assert env.session.scalar(select(func.count()).select_from(AuditEventModel).where(
+        AuditEventModel.action == 'journey_reservation.released',
+    )) == 0
+
+    env.approve(owner, 'REJECTED')
+    assert repository.reservation_owner(env.tenant, env.company, document_id) is None
+    assert env.session.scalar(select(func.count()).select_from(AuditEventModel).where(
+        AuditEventModel.action == 'journey_reservation.released',
+    )) == 1
+
+
+def test_pending_rule_reprocesses_in_same_journey(env: Environment) -> None:
+    published = env.catalog.plan
+    env.catalog.plan = None
+    pending = env.prepare()
+    assert pending.status == 'PENDING_RULE'
+    env.catalog.plan = published
+    result = env.runtime().reprocess(
+        env.context(env.proposer), pending.id, expected_version=pending.version,
+        approval_expires_at=NOW + timedelta(days=2),
+    )
+    env.session.commit()
+    assert result.id == pending.id
+    assert result.version > pending.version
+    assert result.status == 'PENDING_APPROVAL'
 
 
 @pytest.mark.parametrize('missing', ['catalog', 'rule', 'conflict'])
@@ -309,7 +382,7 @@ def test_invalid_human_decisions_have_no_effect(env: Environment, invalid: str) 
         context = env.context(env.proposer)
     elif invalid == 'sod':
         # O Contador também propõe, mas não pode aprovar a própria proposta.
-        env.session.rollback()
+        env.approve(journey, 'REJECTED')
         journey = env.runtime().prepare(replace(env.command(), actor_id=env.accountant, idempotency_key='sod'),
                                         content=FIXTURE.read_bytes(), filename='synthetic.xml')
         env.session.commit()

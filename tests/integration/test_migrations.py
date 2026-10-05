@@ -44,6 +44,7 @@ EXPECTED_TABLES = {
     'authorized_effects',
     'pre_homologation_export_batches',
     'nfe_journey_checkpoints',
+    'nfe_journey_document_reservations',
     'production_catalogs',
     'production_catalog_versions',
     'retention_policies',

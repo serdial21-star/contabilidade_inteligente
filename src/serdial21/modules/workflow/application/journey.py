@@ -110,6 +110,11 @@ class Journey:
     effect: AuthorizedEffect | None = None
     batch: ExportBatch | None = None
     connector_configuration: ConnectorConfiguration | None = None
+    # Preservados no snapshot para reprocessar sem reinterpretar a evidência.
+    accounting_date: date | None = None
+    period_start: date | None = None
+    period_end: date | None = None
+    approval_expires_at: datetime | None = None
 
     def advance(self, **changes: object) -> 'Journey':
         return replace(self, version=self.version + 1, **changes)
@@ -124,6 +129,18 @@ class JourneyRepository(Protocol):
     def find_by_key(self, tenant_id: UUID, company_id: UUID, key: str) -> Journey | None: ...
     def get(self, tenant_id: UUID, company_id: UUID, journey_id: UUID) -> Journey | None: ...
     def find_by_export(self, tenant_id: UUID, company_id: UUID, batch_id: UUID) -> Journey | None: ...
+    def reserve_document(
+        self, tenant_id: UUID, company_id: UUID, fiscal_document_id: UUID,
+        journey_id: UUID, *, created_by: UUID, created_at: datetime,
+    ) -> UUID | None: ...
+    def reservation_owner(
+        self, tenant_id: UUID, company_id: UUID, fiscal_document_id: UUID,
+    ) -> UUID | None: ...
+    def release_document(
+        self, tenant_id: UUID, company_id: UUID, fiscal_document_id: UUID,
+        journey_id: UUID, *, released_by: UUID, released_at: datetime,
+        reason: str,
+    ) -> bool: ...
     def append(self, journey: Journey) -> None: ...
 
 

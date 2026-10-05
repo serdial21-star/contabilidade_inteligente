@@ -7,5 +7,6 @@ n8n.example.invalid {
 }
 
 contabilidade.example.invalid {
+    header X-Frame-Options "DENY"
     reverse_proxy serdial21-web:8080
 }

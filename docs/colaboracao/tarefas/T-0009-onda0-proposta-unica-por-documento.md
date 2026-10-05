@@ -2,7 +2,7 @@
 
 | Campo | Valor |
 |---|---|
-| Estado | RASCUNHO |
+| Estado | EM_REVISÃO |
 | Origem | ADR 0019, aceito em 05/10/2026; pesquisa A/B, seções 3.1–3.3; fila, itens 26, 27 e 6 (parte anti-iframe) |
 | Sistema | Sistema B |
 | Exige ADR | não (aplica o ADR 0019) |
@@ -131,3 +131,160 @@ Nenhuma nesta tarefa. A publicação no VPS (migration e Caddy) vira runbook sep
 ### [2026-10-05] Aprovação
 
 O proprietário aprovou o briefing ("t-0009 aprovado"). Estado: APROVADA. Implementação pelo Codex depois da publicação da T-0008, porque o protocolo admite uma tarefa em implementação por vez.
+
+---
+
+## 3. Implementação (Codex)
+
+### [2026-10-05] Codex — Implementação entregue para revisão
+
+**Resultado.** Foi implementada uma reserva ativa por documento fiscal, com
+constraint no banco, escopo composto de tenant/empresa/documento e referência à
+jornada dona. Criação e liberação compartilham a transação dos checkpoints e da
+auditoria. Rejeição e substituição liberam a reserva; os demais estados a
+preservam. Reenvio com outra chave retorna a jornada dona, e o reprocessamento
+mantém jornada e reserva enquanto cria novos checkpoints.
+
+**Hash do comando.** Entram exatamente `tenant_id`, `company_id`, SHA-256 do
+conteúdo, `accounting_date`, `period_start` e `period_end`: eles definem escopo,
+evidência e efeito contábil. Ficam fora `actor_id`, `idempotency_key`,
+`approval_expires_at`, nome do arquivo e correlação, que identificam transporte,
+autoria ou validade de uma aprovação futura. Assim, repetição no dia seguinte
+não conflita; conteúdo ou período/data contábil diferentes com a mesma chave
+continuam em conflito.
+
+**Migration.** Criada `20261005_0017_nfe_journey_document_reservations.py`.
+Como MySQL não possui índice parcial, `active_marker='ACTIVE'` participa da
+UNIQUE; na liberação torna-se `NULL`. Isso preserva reservas antigas e permite
+uma nova ativa. O backfill seleciona a jornada mais recente cujo último
+checkpoint não é `REJECTED` nem `SUPERSEDED`; duplicatas históricas não
+interrompem a migration. `T-0009-reservas-duplicadas.sql` lista as demais para
+decisão humana.
+
+**Aplicação e tela.** Foram adicionadas rotas autenticadas de `reprocess` e
+`supersede`, com versão esperada, permissão `journal.propose`, escopo autenticado
+e resposta neutra fora do escopo. O reprocessamento aceita somente
+`PENDING_RULE`/`ACCOUNT_MAPPING_REQUIRED`, usa o catálogo vigente e revalida
+bloqueios quando materializa as linhas. A tela mantém a chave aleatória,
+identifica a jornada existente, mostra “Este documento já tem proposta” e só
+exibe “Reprocessar”/“Substituir” com permissão. Os Caddyfiles enviam CSP com
+`frame-ancestors 'none'` e `X-Frame-Options: DENY`; a meta CSP foi mantida.
+`JournalEntryRevision.correct()` agora recusa revisão aprovada; estorno não foi
+implementado.
+
+**Arquivos.** Foram criados a migration 0017, seu teste MariaDB, o teste de
+concorrência da reserva e a consulta de diagnóstico. Foram alterados jornada/serviço/repositório, borda operacional, API,
+domínio contábil, cliente e tela web, ambos Caddyfiles, testes unitários, de
+integração, API, frontend e migration, além deste registro e do quadro.
+
+**Testes.** A suíte local sem serviços externos terminou com `665 passed`, `4
+skipped` e `17 deselected`; o novo teste de rota/isolamento passou isoladamente.
+O ciclo SQLite de upgrade/downgrade, o teste concorrente (uma única reserva
+ativa) e o teste estático dos cabeçalhos passaram.
+O teste `tests/mariadb/test_migration_0017.py` foi criado no padrão do Migration
+Lab, mas não executado, pois o protocolo proíbe atuar contra banco real nesta
+etapa. `git diff --check` não encontrou erros.
+
+**Limitações e riscos.** Jornadas antigas sem os novos campos contábeis no JSON
+continuam legíveis, mas não podem ser reprocessadas automaticamente; falham
+fechado e exigem substituição/nova preparação. A migration não decide o destino
+contábil das duplicatas históricas: reserva a mais recente elegível e gera o
+relatório para decisão humana. Nenhuma publicação, deploy ou banco real foi
+alterado. `.claude/settings.local.json` permaneceu não rastreado e intocado.
+
+Estado entregue: **EM_REVISÃO**.
+
+## 4. Revisões (Claude) e respostas (Codex)
+
+### [2026-10-05] Claude — Revisão 1
+
+**Veredito: AJUSTES.** São três ajustes. O restante está aceito: reserva com UNIQUE e `active_marker`, hash sem campos diários, rotas com versão esperada e escopo autenticado, `correct()` bloqueado, cabeçalhos no Caddy do web, teste de concorrência.
+
+**Conferido:**
+- suíte `tests/unit tests/integration tests/api tests/frontend`: 645 aprovados;
+- `alembic heads` = `20261005_0017`;
+- diff de `nfe_to_dominio.py`, `journeys.py`, migration 0017, rotas e Caddyfiles.
+
+**Ajustes:**
+
+1. **Jornada duplicada antiga fica presa (`nfe_to_dominio.py`, `_release_reservation`).**
+   - O problema:
+     - O backfill reserva só a jornada mais recente.
+     - As demais duplicatas não rejeitadas, que são as listadas por `T-0009-reservas-duplicadas.sql`, não são donas de reserva.
+     - Ao rejeitá-las (`record_decision` → REJECTED) ou substituí-las (`supersede`), `release_document` devolve `False` e a operação levanta `JourneyConflictError`.
+     - Exatamente as duplicatas que precisam de decisão humana não podem ser rejeitadas nem substituídas.
+   - Correção:
+     - liberar só quando a jornada for a dona da reserva ativa;
+     - se não for, seguir sem liberar e sem evento de reserva;
+     - se a reserva ativa pertencer à própria jornada e o UPDATE não afetar linha, manter o conflito.
+   - Testes:
+     - rejeitar e substituir uma duplicata não dona funciona e não mexe na reserva da dona;
+     - a dona continua liberando normalmente.
+
+2. **Backfill inventa ator (`20261005_0017_...py`, `created_by=actor or uuid4()`).**
+   - Um UUID aleatório como autor da reserva é dado fabricado (AGENTS.md §6.2 e §6.7).
+   - Correção: `created_by` anulável na tabela e no model. O backfill usa `proposer_id` do snapshot quando existir; senão grava `NULL`, documentado como "reserva criada pela migration 0017".
+   - Ajustar o teste da migration.
+
+3. **CSP do proxy público sobrescreve a da API (`deploy/host-caddy/Caddyfile.example`).**
+   - `header Content-Security-Policy ...` no site inteiro substitui o CSP mais restrito que a API envia (`default-src 'none'`, `security_headers.py:17`), porque `/api/*` passa pelo mesmo bloco.
+   - Correção: no exemplo do proxy público, manter só `X-Frame-Options "DENY"`, que é igual ao da API. O CSP do `/app` e do `/ui` já vem do Caddy do web.
+   - Atualizar o teste estático.
+
+**Observação sem bloqueio:** `supersede` passou a recusar jornada `APPROVED` ou `BLOCKED_FOR_HOMOLOGATION`. É coerente com o ADR 0019 (depois da aprovação, só estorno). Consequência registrada: até o estorno da onda 1, uma proposta aprovada por engano não tem correção pelo sistema. Aceitável no piloto sintético.
+
+### [2026-10-05] Codex — Resposta à Revisão 1
+
+**Veredito sobre os achados.** Os três achados procediam e foram corrigidos sem
+alterar o escopo aprovado.
+
+1. **Duplicata histórica não dona.** `_release_reservation` agora consulta a
+reserva ativa antes do UPDATE. Se outra jornada for a dona, rejeição ou
+`supersede` continuam normalmente, sem liberar a reserva e sem emitir evento de
+liberação. Se a própria jornada for a dona e o UPDATE não afetar uma linha, o
+conflito permanece. O teste novo cria duas duplicatas históricas: uma é rejeitada
+e outra substituída; ambas concluem e a reserva continua com a dona. Em seguida,
+a rejeição da dona libera normalmente.
+
+2. **Ator ausente no backfill.** `created_by` passou a ser anulável no model e
+na migration. O backfill usa `proposer_id` quando presente e grava `NULL` quando
+o snapshot não possui autor, documentado no código como reserva histórica criada
+pela migration 0017. O teste MariaDB agora verifica explicitamente a nulabilidade
+da coluna. Nenhuma identidade é fabricada.
+
+3. **CSP do proxy público.** O exemplo do proxy de host não define mais
+`Content-Security-Policy`; mantém apenas `X-Frame-Options: DENY`. Assim, ele não
+sobrepõe o CSP `default-src 'none'` da API, enquanto `/app/*` e `/ui/*` continuam
+recebendo seu CSP no Caddy interno. O teste estático agora exige ausência de CSP
+global no host e presença de X-Frame-Options.
+
+**Testes.** Os testes focados terminaram com `17 passed`. A mesma suíte usada na
+revisão (`tests/unit tests/integration tests/api tests/frontend`) terminou com
+`646 passed` e apenas os dois avisos já conhecidos de depreciação
+Starlette/httpx. O teste MariaDB permanece preparado, mas não foi executado
+contra banco externo. Nenhum deploy, publicação, commit ou serviço real foi
+acionado. `.claude/settings.local.json` permaneceu intocado.
+
+Estado devolvido: **EM_REVISÃO**.
+
+### [2026-10-05] Claude — Revisão 2
+
+**Veredito: ACEITA.**
+
+**Os três ajustes foram conferidos no diff:**
+- `_release_reservation` só libera quando a jornada é a dona;
+- `created_by` anulável, sem UUID fabricado;
+- o proxy público só envia `X-Frame-Options`.
+
+**Defeito encontrado e corrigido pelo Claude:** o backfill passava `proposer_id` como **texto**, que é como o UUID fica guardado no snapshot JSON, para uma coluna `Uuid`. O SQLAlchemy falha com `AttributeError: 'str' object has no attribute 'hex'`, tanto em SQLite quanto em MySQL. Qualquer banco com jornada existente quebraria no `upgrade`. O defeito já existia na versão anterior (`actor or uuid4()`) e não era coberto por teste com dados.
+- Correção: `_snapshot_actor()` converte para `UUID`; ausente ou inválido vira NULL.
+- Teste: `tests/unit/test_migration_0017_backfill_actor.py`.
+
+**Suíte:** 646 aprovados antes desta correção. Os testes da correção e de migrations passam.
+
+**Publicação, ação do proprietário, em runbook à parte:**
+- backup do banco do piloto;
+- `alembic upgrade head` (0017);
+- consulta `T-0009-reservas-duplicadas.sql`;
+- atualização da imagem web/API e do Caddy no VPS;
+- conferência dos cabeçalhos.

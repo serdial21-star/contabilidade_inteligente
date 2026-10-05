@@ -131,3 +131,10 @@ def test_prototype_brand_assets_and_required_specs_are_preserved() -> None:
         'app/oidc-client.js',
     ):
         assert (ROOT / relative).is_file(), relative
+def test_caddy_denies_iframe_for_application_pages() -> None:
+    web = Path('deploy/web/Caddyfile').read_text(encoding='utf-8')
+    host = Path('deploy/host-caddy/Caddyfile.example').read_text(encoding='utf-8')
+    assert web.count("frame-ancestors 'none'") >= 2
+    assert web.count('X-Frame-Options "DENY"') >= 2
+    assert 'Content-Security-Policy' not in host
+    assert 'X-Frame-Options "DENY"' in host

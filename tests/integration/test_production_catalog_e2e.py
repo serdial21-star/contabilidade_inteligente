@@ -186,6 +186,12 @@ def test_governed_catalog_versions_drive_real_document_journey(env: Environment)
     )
     env.session.commit()
 
+    # A nova versão do catálogo não duplica efeito para o mesmo documento.
+    # A substituição explícita libera a reserva antes da nova preparação.
+    runtime.supersede(
+        env.context(env.proposer), journey_v1.id, expected_version=journey_v1.version,
+    )
+    env.session.commit()
     journey_v2 = runtime.prepare(
         _command(env, 'persistent-catalog-v2', date(2026, 9, 6)),
         content=FIXTURE.read_bytes(), filename='catalog-v2.xml',

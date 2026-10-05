@@ -1098,6 +1098,24 @@ class OperationalService:
             revision_id=revision_id, revision_hash=revision_hash,
             decision=decision, idempotency_key=idempotency_key)
 
+    def reprocess_journey(
+        self, tenant_id: UUID, company_id: UUID, actor_id: UUID,
+        correlation_id: UUID, journey_id: UUID, *, expected_version: int,
+        approval_expires_at: datetime,
+    ) -> Journey:
+        return self._nfe.reprocess(IntakeContext(
+            tenant_id, company_id, actor_id, AuditOrigin.HUMAN, correlation_id,
+        ), journey_id, expected_version=expected_version,
+            approval_expires_at=approval_expires_at)
+
+    def supersede_journey(
+        self, tenant_id: UUID, company_id: UUID, actor_id: UUID,
+        correlation_id: UUID, journey_id: UUID, *, expected_version: int,
+    ) -> Journey:
+        return self._nfe.supersede(IntakeContext(
+            tenant_id, company_id, actor_id, AuditOrigin.HUMAN, correlation_id,
+        ), journey_id, expected_version=expected_version)
+
     def exceptions(
         self, tenant_id: UUID, company_id: UUID, actor_id: UUID, *, limit: int,
     ) -> tuple[ExceptionView, ...]:

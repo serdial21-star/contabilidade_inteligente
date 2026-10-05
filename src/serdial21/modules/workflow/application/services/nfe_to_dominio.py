@@ -111,7 +111,14 @@ class NFeToDominioService:
             raise ValueError('invalid idempotency key')
         if command.approval_expires_at.tzinfo is None:
             raise ValueError('approval expiry requires timezone')
-        command_hash = digest({'command': asdict(command), 'source_hash': sha256(content).hexdigest()})
+        # Identidade do efeito: escopo, evidência e período/data contábil. Ator,
+        # chave de transporte e validade da futura aprovação não alteram o efeito.
+        command_hash = digest({
+            'tenant_id': command.tenant_id, 'company_id': command.company_id,
+            'accounting_date': command.accounting_date,
+            'period_start': command.period_start, 'period_end': command.period_end,
+            'source_hash': sha256(content).hexdigest(),
+        })
         existing = self._repository.find_by_key(command.tenant_id, command.company_id, command.idempotency_key)
         if existing is not None:
             if existing.command_hash != command_hash:
@@ -129,13 +136,40 @@ class NFeToDominioService:
         journey = Journey(
             uuid4(), command.tenant_id, command.company_id, correlation_id,
             command.idempotency_key, command_hash, 1, 'IMPORTED', command.actor_id, imported,
+            accounting_date=command.accounting_date, period_start=command.period_start,
+            period_end=command.period_end, approval_expires_at=command.approval_expires_at,
         )
         if imported.status not in {'IMPORTED', 'IDEMPOTENT_REDELIVERY'}:
             return self._completed(
                 self._save(replace(journey, status='QUARANTINED'), command.actor_id, 'journey.quarantined'),
                 started,
             )
+        pair = self._fiscal.find_by_access_key(
+            command.tenant_id, command.company_id, imported.access_key or '',
+        )
+        if pair is None:
+            raise JourneyUnavailableError()
+        document, canonical = pair
+        if document.id != imported.fiscal_document_id or canonical.id != imported.canonical_record_id:
+            raise JourneyConflictError('canonical source mismatch')
+        owner_id = self._repository.reserve_document(
+            command.tenant_id, command.company_id, document.id, journey.id,
+            created_by=command.actor_id, created_at=now,
+        )
+        if owner_id is not None:
+            owner = self._repository.get(command.tenant_id, command.company_id, owner_id)
+            if owner is None:
+                raise JourneyConflictError('document reservation owner unavailable')
+            self._metrics.increment('retries_total')
+            return self._completed(owner, started)
+        self._audit_reservation(journey, command.actor_id, 'journey_reservation.created')
         self._save(journey, command.actor_id, 'journey.imported')
+        return self._continue_preparation(journey, command, started)
+
+    def _continue_preparation(
+        self, journey: Journey, command: JourneyCommand, started: float,
+    ) -> Journey:
+        imported = journey.imported
         plan = self._catalog.preparation(
             command.tenant_id, command.company_id, command.accounting_date,
         )
@@ -237,6 +271,42 @@ class NFeToDominioService:
             started,
         )
 
+    def reprocess(
+        self, context: IntakeContext, journey_id: UUID, *, expected_version: int,
+        approval_expires_at: datetime,
+    ) -> Journey:
+        """Reavalia a mesma jornada e reserva contra o catálogo publicado atual."""
+        started = processing_started()
+        self._human(context)
+        self._require(context.tenant_id, context.company_id, context.actor_id, 'journal.propose')
+        journey = self._get(context, journey_id)
+        self._expected(journey, expected_version)
+        if journey.status not in {'PENDING_RULE', 'ACCOUNT_MAPPING_REQUIRED'}:
+            raise JourneyNotReadyError('journey cannot be reprocessed')
+        if approval_expires_at.tzinfo is None or approval_expires_at <= self._now():
+            raise JourneyNotReadyError('approval expiry must be future and timezone-aware')
+        if None in (journey.accounting_date, journey.period_start, journey.period_end):
+            raise JourneyNotReadyError('journey command snapshot unavailable')
+        owner = self._repository.reservation_owner(
+            journey.tenant_id, journey.company_id, journey.imported.fiscal_document_id,
+        )
+        if owner != journey.id:
+            raise JourneyConflictError('journey does not own document reservation')
+        command = JourneyCommand(
+            journey.tenant_id, journey.company_id, context.actor_id, journey.idempotency_key,
+            journey.accounting_date, journey.period_start, journey.period_end,
+            approval_expires_at,
+        )
+        journey = self._save(journey.advance(
+            status='REPROCESSING', proposer_id=context.actor_id,
+            plan=None, evaluation=None, proposal=None, revision=None, lines=(), sources=(),
+            line_sources=(), revision_hash=None, validation_status=None, case=None, item=None,
+            subject=None, request=None, step=None, decision=None,
+            decision_idempotency_key=None, decision_payload_hash=None, effect=None, batch=None,
+            connector_configuration=None, approval_expires_at=approval_expires_at,
+        ), context.actor_id, 'journey.reprocessing_started')
+        return self._continue_preparation(journey, command, started)
+
     def record_decision(
         self, context: IntakeContext, journey_id: UUID, *, expected_version: int,
         revision_id: UUID, revision_hash: str, decision: str,
@@ -290,6 +360,7 @@ class NFeToDominioService:
                                       else replace(journey.revision, status='REJECTED')),
         ), context.actor_id, 'approval_decision.recorded')
         if decision == 'REJECTED':
+            self._release_reservation(journey, context.actor_id, 'REJECTED')
             return journey
         effect = AuthorizedEffect(uuid4(), journey.request.id, result.id, 'DOMINIO_EXPORT', 'AUTHORIZED')
         return self._save(journey.advance(effect=effect), context.actor_id, 'authorized_effect.created')
@@ -331,15 +402,19 @@ class NFeToDominioService:
         self._require(context.tenant_id, context.company_id, context.actor_id, 'journal.propose')
         journey = self._get(context, journey_id)
         self._expected(journey, expected_version)
-        if journey.revision is None or journey.status in {'SUPERSEDED', 'REJECTED'}:
-            raise JourneyNotReadyError('revision cannot be superseded')
-        self._check_locks(journey, EffectOperation.ALTER)
-        return self._save(journey.advance(
-            status='SUPERSEDED', revision=replace(journey.revision, status='SUPERSEDED'),
+        if journey.status in {'SUPERSEDED', 'REJECTED', 'APPROVED', 'BLOCKED_FOR_HOMOLOGATION'}:
+            raise JourneyNotReadyError('journey cannot be superseded')
+        if journey.revision is not None:
+            self._check_locks(journey, EffectOperation.ALTER)
+        journey = self._save(journey.advance(
+            status='SUPERSEDED',
+            revision=replace(journey.revision, status='SUPERSEDED') if journey.revision else None,
             request=replace(journey.request, status='INVALIDATED') if journey.request else None,
             effect=replace(journey.effect, status='INVALIDATED') if journey.effect else None,
             batch=replace(journey.batch, status='CANCELLED') if journey.batch else None,
         ), context.actor_id, 'journal_revision.superseded')
+        self._release_reservation(journey, context.actor_id, 'SUPERSEDED')
+        return journey
 
     def trace_export(self, context: IntakeContext, batch_id: UUID) -> tuple[Journey, bytes]:
         self._require(context.tenant_id, context.company_id, context.actor_id, 'journal.read')
@@ -500,6 +575,32 @@ class NFeToDominioService:
         ))
         self._record_metric(action, journey.status)
         return journey
+
+    def _audit_reservation(self, journey: Journey, actor_id: UUID, action: str) -> None:
+        self._audit.record(AuditRecord(
+            tenant_id=journey.tenant_id, company_id=journey.company_id, actor_id=actor_id,
+            origin=AuditOrigin.HUMAN, module='workflow', action=action,
+            subject_type='NFeJourneyDocumentReservation',
+            subject_id=journey.imported.fiscal_document_id,
+            subject_version=journey.version, before=None,
+            after={'journey_id': journey.id, 'active': action.endswith('.created')},
+            reason=None, correlation_id=journey.correlation_id,
+        ))
+
+    def _release_reservation(self, journey: Journey, actor_id: UUID, reason: str) -> None:
+        owner = self._repository.reservation_owner(
+            journey.tenant_id, journey.company_id, journey.imported.fiscal_document_id,
+        )
+        # Duplicatas históricas não donas continuam rejeitáveis/substituíveis;
+        # sua decisão não pode liberar a reserva escolhida pelo backfill.
+        if owner != journey.id:
+            return
+        if not self._repository.release_document(
+            journey.tenant_id, journey.company_id, journey.imported.fiscal_document_id,
+            journey.id, released_by=actor_id, released_at=self._now(), reason=reason,
+        ):
+            raise JourneyConflictError('active document reservation unavailable')
+        self._audit_reservation(journey, actor_id, 'journey_reservation.released')
 
     def _record_metric(self, action: str, status: str) -> None:
         if action == 'journey.imported':

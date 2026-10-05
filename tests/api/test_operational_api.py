@@ -1329,6 +1329,39 @@ def test_nfe_import_rejects_cross_tenant_and_unknown_company_uniformly(
     assert cross_tenant.json() == unknown.json() == {'detail': 'access denied'}
 
 
+def test_journey_mutations_are_scoped_and_supersede_releases_owner(
+    operational: OperationalFixture,
+) -> None:
+    imported = operational.client.post(
+        f'/api/v1/operations/companies/{operational.company}/imports/nfe',
+        params=_nfe_params(), content=NFE.read_bytes(), headers=operational.headers(
+            'proposer', content_type='application/xml', filename='supersede.xml',
+            key='nfe-supersede-route',
+        ),
+    )
+    assert imported.status_code == 202
+    journey = imported.json()
+    superseded = operational.client.post(
+        f"/api/v1/operations/companies/{operational.company}/journeys/{journey['resource_id']}/supersede",
+        json={'expected_version': journey['version']},
+        headers=operational.headers('proposer'),
+    )
+    assert superseded.status_code == 200
+    assert superseded.json()['status'] == 'SUPERSEDED'
+
+    payload = {'expected_version': 1, 'approval_expires_at': (datetime.now(UTC) + timedelta(days=1)).isoformat()}
+    cross_company = operational.client.post(
+        f'/api/v1/operations/companies/{operational.other_company}/journeys/{uuid4()}/reprocess',
+        json=payload, headers=operational.headers('proposer'),
+    )
+    unknown_company = operational.client.post(
+        f'/api/v1/operations/companies/{uuid4()}/journeys/{uuid4()}/reprocess',
+        json=payload, headers=operational.headers('proposer'),
+    )
+    assert cross_company.status_code == unknown_company.status_code == 403
+    assert cross_company.json() == unknown_company.json() == {'detail': 'access denied'}
+
+
 def test_bank_account_master_is_scoped_audited_and_controls_ofx_matching(
     operational: OperationalFixture,
 ) -> None:

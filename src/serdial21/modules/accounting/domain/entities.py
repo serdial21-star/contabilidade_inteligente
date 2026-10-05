@@ -23,8 +23,8 @@ class JournalEntryRevision:
   if self.status!='DRAFT':raise ValueError('revisão aprovada é imutável')
   return replace(self,status='APPROVED_INTERNAL')
  def correct(self,**changes):
-  if self.status!='APPROVED_INTERNAL':raise ValueError('correção exige revisão aprovada')
-  return replace(self,id=uuid4(),revision_no=self.revision_no+1,status='DRAFT',previous_revision_id=self.id,**changes)
+  if self.status=='APPROVED_INTERNAL':raise ValueError('revisão aprovada é imutável; correção exige estorno, transferência ou complemento')
+  raise ValueError('correção de lançamento não está disponível antes do livro')
 @dataclass(frozen=True,slots=True)
 class JournalLine:
  id:UUID;tenant_id:UUID;company_id:UUID;ledger_id:UUID;revision_id:UUID;account_version_id:UUID;debit:Decimal;credit:Decimal

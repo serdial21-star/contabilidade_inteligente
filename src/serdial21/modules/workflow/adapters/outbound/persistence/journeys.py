@@ -6,7 +6,8 @@ from typing import Any
 from uuid import UUID, uuid4
 
 from pydantic import TypeAdapter
-from sqlalchemy import Date, ForeignKeyConstraint, Index, JSON, String, Text, UniqueConstraint, Uuid, event, select
+from sqlalchemy import CheckConstraint, Date, ForeignKeyConstraint, Index, JSON, String, Text, UniqueConstraint, Uuid, event, select, update
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Mapped, Session, mapped_column
 
 from serdial21.bootstrap.database import Base, UTCDateTime
@@ -46,6 +47,42 @@ class JourneyCheckpointModel(Base):
     rule_search: Mapped[str | None] = mapped_column(String(255))
     source_search: Mapped[str | None] = mapped_column(String(100))
     accounting_date_index: Mapped[date | None] = mapped_column(Date())
+
+
+class JourneyDocumentReservationModel(Base):
+    __tablename__ = 'nfe_journey_document_reservations'
+    __table_args__ = (
+        UniqueConstraint(
+            'tenant_id', 'company_id', 'fiscal_document_id', 'active_marker',
+            name='uq_nfe_journey_document_active',
+        ),
+        ForeignKeyConstraint(
+            ['tenant_id', 'company_id'], ['companies.tenant_id', 'companies.id'],
+            name='fk_nfe_journey_reservation_company',
+        ),
+        ForeignKeyConstraint(
+            ['tenant_id', 'company_id', 'fiscal_document_id'],
+            ['fiscal_documents.tenant_id', 'fiscal_documents.company_id', 'fiscal_documents.id'],
+            name='fk_nfe_journey_reservation_document',
+        ),
+        CheckConstraint(
+            "active_marker = 'ACTIVE' OR active_marker IS NULL",
+            name='ck_nfe_journey_reservation_active',
+        ),
+        Index('ix_nfe_journey_reservation_owner', 'tenant_id', 'company_id', 'journey_id'),
+        {'mysql_charset': 'utf8mb4', 'mysql_collate': 'utf8mb4_unicode_ci'},
+    )
+    id: Mapped[UUID] = mapped_column(Uuid(), primary_key=True, default=uuid4)
+    tenant_id: Mapped[UUID] = mapped_column(Uuid(), nullable=False)
+    company_id: Mapped[UUID] = mapped_column(Uuid(), nullable=False)
+    fiscal_document_id: Mapped[UUID] = mapped_column(Uuid(), nullable=False)
+    journey_id: Mapped[UUID] = mapped_column(Uuid(), nullable=False)
+    active_marker: Mapped[str | None] = mapped_column(String(16), nullable=True, default='ACTIVE')
+    created_by: Mapped[UUID | None] = mapped_column(Uuid(), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime(), nullable=False)
+    released_by: Mapped[UUID | None] = mapped_column(Uuid(), nullable=True)
+    released_at: Mapped[datetime | None] = mapped_column(UTCDateTime(), nullable=True)
+    release_reason: Mapped[str | None] = mapped_column(String(32), nullable=True)
 
 
 def snapshot_hash(snapshot: dict[str, Any]) -> str:
@@ -88,6 +125,56 @@ class SqlAlchemyJourneyRepository:
         found = self._latest(tenant_id, company_id, export_batch_id=batch_id)
         # Sempre retorna o estado atual, inclusive depois de supersession.
         return self.get(tenant_id, company_id, found.id) if found else None
+
+    def reservation_owner(
+        self, tenant_id: UUID, company_id: UUID, fiscal_document_id: UUID,
+    ) -> UUID | None:
+        return self._session.scalar(select(JourneyDocumentReservationModel.journey_id).where(
+            JourneyDocumentReservationModel.tenant_id == tenant_id,
+            JourneyDocumentReservationModel.company_id == company_id,
+            JourneyDocumentReservationModel.fiscal_document_id == fiscal_document_id,
+            JourneyDocumentReservationModel.active_marker == 'ACTIVE',
+        ))
+
+    def reserve_document(
+        self, tenant_id: UUID, company_id: UUID, fiscal_document_id: UUID,
+        journey_id: UUID, *, created_by: UUID, created_at: datetime,
+    ) -> UUID | None:
+        owner = self.reservation_owner(tenant_id, company_id, fiscal_document_id)
+        if owner is not None:
+            return owner
+        try:
+            with self._session.begin_nested():
+                self._session.add(JourneyDocumentReservationModel(
+                    id=uuid4(), tenant_id=tenant_id, company_id=company_id,
+                    fiscal_document_id=fiscal_document_id, journey_id=journey_id,
+                    active_marker='ACTIVE', created_by=created_by, created_at=created_at,
+                ))
+                self._session.flush()
+        except IntegrityError:
+            owner = self.reservation_owner(tenant_id, company_id, fiscal_document_id)
+            if owner is None:
+                raise JourneyConflictError('document reservation conflict') from None
+            return owner
+        return None
+
+    def release_document(
+        self, tenant_id: UUID, company_id: UUID, fiscal_document_id: UUID,
+        journey_id: UUID, *, released_by: UUID, released_at: datetime,
+        reason: str,
+    ) -> bool:
+        result = self._session.execute(update(JourneyDocumentReservationModel).where(
+            JourneyDocumentReservationModel.tenant_id == tenant_id,
+            JourneyDocumentReservationModel.company_id == company_id,
+            JourneyDocumentReservationModel.fiscal_document_id == fiscal_document_id,
+            JourneyDocumentReservationModel.journey_id == journey_id,
+            JourneyDocumentReservationModel.active_marker == 'ACTIVE',
+        ).values(
+            active_marker=None, released_by=released_by, released_at=released_at,
+            release_reason=reason,
+        ))
+        self._session.flush()
+        return bool(result.rowcount)
 
     def append(self, journey: Journey) -> None:
         current = self.get(journey.tenant_id, journey.company_id, journey.id)

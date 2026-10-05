@@ -47,6 +47,18 @@ class ImportResponse(BaseModel):
     version: int | None = None
     transformation_run_id: UUID | None = None
     duplicate_items: int = 0
+    existing_journey: bool = False
+
+
+class JourneyMutationRequest(BaseModel):
+    expected_version: int = Field(ge=1)
+    approval_expires_at: datetime | None = None
+
+
+class JourneyMutationResponse(BaseModel):
+    journey_id: UUID
+    status: str
+    version: int
 
 
 class ProcessingResponse(BaseModel):
@@ -997,6 +1009,54 @@ async def import_nfe(
         version=journey.version,
         transformation_run_id=journey.imported.transformation_run_id,
         duplicate_items=(1 if journey.imported.status == 'IDEMPOTENT_REDELIVERY' else 0),
+        existing_journey=journey.idempotency_key != idempotency_key,
+    )
+
+
+@router.post(
+    '/journeys/{journey_id}/reprocess', response_model=JourneyMutationResponse,
+)
+def reprocess_journey(
+    company_id: UUID, journey_id: UUID, payload: JourneyMutationRequest,
+    request: Request, principal: PrincipalDependency, session: SessionDependency,
+) -> JourneyMutationResponse:
+    if payload.approval_expires_at is None:
+        raise HTTPException(status_code=422, detail='invalid operation')
+    try:
+        journey = create_operational_runtime(
+            session, request.app.state.settings, metrics=request.app.state.metrics,
+        ).reprocess_journey(
+            principal.identity.tenant_id, company_id, principal.user_id,
+            UUID(request.state.correlation_id), journey_id,
+            expected_version=payload.expected_version,
+            approval_expires_at=payload.approval_expires_at,
+        )
+    except Exception as error:
+        _map_error(session, error)
+    return JourneyMutationResponse(
+        journey_id=journey.id, status=journey.status, version=journey.version,
+    )
+
+
+@router.post(
+    '/journeys/{journey_id}/supersede', response_model=JourneyMutationResponse,
+)
+def supersede_journey(
+    company_id: UUID, journey_id: UUID, payload: JourneyMutationRequest,
+    request: Request, principal: PrincipalDependency, session: SessionDependency,
+) -> JourneyMutationResponse:
+    try:
+        journey = create_operational_runtime(
+            session, request.app.state.settings, metrics=request.app.state.metrics,
+        ).supersede_journey(
+            principal.identity.tenant_id, company_id, principal.user_id,
+            UUID(request.state.correlation_id), journey_id,
+            expected_version=payload.expected_version,
+        )
+    except Exception as error:
+        _map_error(session, error)
+    return JourneyMutationResponse(
+        journey_id=journey.id, status=journey.status, version=journey.version,
     )
 
 

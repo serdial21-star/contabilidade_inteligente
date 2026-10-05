@@ -441,7 +441,14 @@
         WRONG_COMPANY: ['danger', 'Empresa divergente'], PERIOD_MISMATCH: ['danger', 'Fora do período'],
         FAILED: ['danger', 'Falhou'],
       }[item.status] || ['neutral', 'Resultado disponível'];
-      return `<li><span><strong>${escapeHtml(item.filename)}</strong><small>${escapeHtml(item.message || '')}</small></span><span class="badge ${presentation[0]}">${presentation[1]}</span></li>`;
+      const canPropose = hasPermission(currentPermissions(session.snapshot().profile), ['journal.propose']);
+      const existing = item.existingJourney
+        ? `<small>Este documento já tem proposta · <a href="#accounting?company=${encodeURIComponent(companyId)}&proposal=${encodeURIComponent(item.resourceId)}">abrir jornada existente</a></small>` : '';
+      const reprocess = canPropose && ['PENDING_RULE', 'ACCOUNT_MAPPING_REQUIRED'].includes(item.journeyStatus)
+        ? `<button class="btn ghost small" data-action="reprocess-journey" data-journey-id="${escapeHtml(item.resourceId)}" data-version="${escapeHtml(item.version)}">Reprocessar</button>` : '';
+      const supersede = canPropose && item.resourceId && !['QUARANTINED', 'REJECTED', 'SUPERSEDED', 'APPROVED', 'BLOCKED_FOR_HOMOLOGATION'].includes(item.journeyStatus)
+        ? `<button class="btn ghost small" data-action="supersede-journey" data-journey-id="${escapeHtml(item.resourceId)}" data-version="${escapeHtml(item.version)}">Substituir</button>` : '';
+      return `<li><span><strong>${escapeHtml(item.filename)}</strong><small>${escapeHtml(item.message || '')}</small>${existing}</span><span>${reprocess}${supersede}<span class="badge ${presentation[0]}">${presentation[1]}</span></span></li>`;
     }).join('');
     const detail = items ? `<ul class="import-results" aria-label="Resultado por arquivo">${items}</ul>` : '';
     return `<div class="alert ${loading ? 'info' : danger ? 'error' : duplicate ? 'warning' : 'success'}" role="status" aria-live="polite"><div><strong>${title}</strong><p>${escapeHtml(importFeedback.message || (importFeedback.synthetic ? 'Simulação local: nenhum arquivo foi enviado ou persistido.' : 'Acompanhe o processamento no módulo e na Central de Documentos.'))}</p>${detail}</div></div>`;
@@ -601,7 +608,10 @@
     const locks = detail.active_locks.length ? `<div class="alert warning" role="alert"><div><strong>Período/operação bloqueada</strong>${detail.active_locks.map((lock) => `<p>${escapeHtml(lock.scope)} · ${escapeHtml(lock.target)} · ${escapeHtml(lock.reason)} · criado em ${escapeHtml(formatDate(lock.created_at))}. Operações: ${escapeHtml(lock.operations.join(', '))}.</p>`).join('')}<p>A autoridade final de bloqueio é revalidada pelo backend no instante da decisão.</p></div></div>` : '';
     const decision = summary.decision_actor_id ? `<div class="alert ${summary.status === 'APPROVED' ? 'success' : 'warning'}"><div><strong>${summary.status === 'APPROVED' ? 'Aprovado' : 'Rejeitado'} por profissional</strong><p>Ator ${escapeHtml(summary.decision_actor_id)} · ${escapeHtml(formatDate(summary.decided_at))}</p></div></div>` : '';
     const canDecide = summary.status === 'PENDING_APPROVAL' && hasPermission(currentPermissions(profile), ['journal.approve']);
-    const actions = canDecide ? `<div class="professional-actions"><button class="btn" data-action="open-decision" data-decision="APPROVED">Aprovar internamente</button><button class="btn secondary" data-action="open-decision" data-decision="REJECTED">Rejeitar</button></div>` : summary.status === 'PENDING_APPROVAL' ? '<p class="row-note">Seu contexto permite consultar, mas não decidir esta proposta.</p>' : '';
+    const canPropose = hasPermission(currentPermissions(profile), ['journal.propose']);
+    const replaceAction = canPropose && !['APPROVED', 'REJECTED', 'SUPERSEDED', 'BLOCKED_FOR_HOMOLOGATION'].includes(summary.status)
+      ? `<button class="btn ghost" data-action="supersede-journey" data-journey-id="${escapeHtml(summary.journey_id)}" data-version="${escapeHtml(summary.version)}">Substituir</button>` : '';
+    const actions = canDecide ? `<div class="professional-actions"><button class="btn" data-action="open-decision" data-decision="APPROVED">Aprovar internamente</button><button class="btn secondary" data-action="open-decision" data-decision="REJECTED">Rejeitar</button>${replaceAction}</div>` : replaceAction;
     const activity = accountingModel.activity ? `<section class="card"><h2>Histórico contextual</h2><ol class="dashboard-list activity-list">${accountingModel.activity.map((event) => `<li><span><strong>${escapeHtml(event.action)}</strong><small>${escapeHtml(event.origin)} · versão ${escapeHtml(event.subject_version)}</small></span><time>${escapeHtml(formatDate(event.occurred_at))}</time></li>`).join('') || '<li>Nenhum evento contextual encontrado.</li>'}</ol><p class="row-note">Prévia minimizada. A Linha da Decisão completa permanece para a Fase 09.</p></section>` : '';
     return `<div class="page-heading"><div><span class="eyebrow">PROPOSTA CONTÁBIL · SUGESTÃO DETERMINÍSTICA</span><h1>Revisão profissional</h1><p>A proposta é assistiva e não substitui decisão humana nem sistema contábil externo.</p></div><a class="btn secondary" href="#accounting">Voltar à fila</a></div>${accountingTabs(profile)}<section class="proposal-priority"><article class="card"><span class="eyebrow">1 · Status</span><h2><span class="badge ${accountingStatusClass(summary.status)}">${escapeHtml(accountingService.statusLabel(summary.status))}</span></h2><dl class="detail-list"><div><dt>Data contábil</dt><dd>${escapeHtml(summary.accounting_date)}</dd></div><div><dt>Responsável</dt><dd>${escapeHtml(summary.responsible_role)}</dd></div><div><dt>Validação</dt><dd>${escapeHtml(summary.validation_status || 'Não informada')}</dd></div></dl>${actions}</article><article class="card intelligence-card"><span class="eyebrow">2 · Regra / por quê</span><h2>${escapeHtml(rule.name || rule.id)}</h2><p>Escopo ${escapeHtml(rule.scope)}, prioridade ${escapeHtml(rule.priority)} e automação ${escapeHtml(rule.automation_level)}.</p><ul>${conditions}</ul><p><strong>Resultado:</strong> débito ${escapeHtml(rule.debit_account_code)} · ${escapeHtml(rule.debit_account_name)} / crédito ${escapeHtml(rule.credit_account_code)} · ${escapeHtml(rule.credit_account_name)}.</p></article></section>${locks}${decision}<section class="card"><span class="eyebrow">3 · Débitos e créditos</span><h2>Partida contábil proposta</h2><div class="table-wrap"><table><thead><tr><th>Conta</th><th>Nome</th><th>Débito</th><th>Crédito</th></tr></thead><tbody>${lines}</tbody><tfoot><tr><th colspan="2">Totais autorizados pelo backend</th><th>${escapeHtml(money(summary.total_debit))}</th><th>${escapeHtml(money(summary.total_credit))}</th></tr></tfoot></table></div><p><span class="badge ${summary.balanced ? 'success' : 'danger'}">${summary.balanced ? 'BALANCEADO' : 'NÃO BALANCEADO'}</span> O frontend apenas apresenta a validação; não recalcula a autoridade contábil.</p></section><section class="card"><span class="eyebrow">4 · Origem e evidências</span><h2>Rastreabilidade</h2>${detail.sources.map(sourceEvidenceMarkup).join('')}</section><section class="card"><h2>Revisão</h2><dl class="detail-list"><div><dt>Proponente</dt><dd>${escapeHtml(summary.proposer_id)}</dd></div><div><dt>Revisão imutável</dt><dd><code>${escapeHtml(summary.revision_id)}</code></dd></div><div><dt>Hash</dt><dd class="monospace">${escapeHtml(summary.revision_hash)}</dd></div><div><dt>Expira em</dt><dd>${summary.expires_at ? escapeHtml(formatDate(summary.expires_at)) : 'Sem expiração informada'}</dd></div></dl><p class="row-note">Edição de proposta está adiada: não existe caso de uso seguro de escrita. Uma nova revisão invalidaria a aprovação anterior.</p></section>${activity}${decisionDialogMarkup(summary)}`;
   }
@@ -967,6 +977,20 @@
       location.hash = `accounting?company=${encodeURIComponent(companyId)}&proposal=${encodeURIComponent(actionElement.dataset.proposalId)}`;
       return;
     }
+    if (action === 'reprocess-journey') {
+      const expiryDate = workContextService.reviewExpiry(workContext.periodEnd, workContextSettings.reviewDays, workContextSettings.reviewBasis);
+      const expires = new Date(`${expiryDate}T23:59:59`).toISOString();
+      await accountingService.reprocessJourney(companyId, actionElement.dataset.journeyId, Number(actionElement.dataset.version), expires);
+      importFeedback = null; setAnnouncement('Jornada reprocessada contra o catálogo publicado vigente.');
+      await refreshIntelligence(session.snapshot().profile); return;
+    }
+    if (action === 'supersede-journey') {
+      await accountingService.supersedeJourney(companyId, actionElement.dataset.journeyId, Number(actionElement.dataset.version));
+      importFeedback = null; setAnnouncement('Jornada substituída; a reserva do documento foi liberada.');
+      if (route() === 'accounting') location.hash = 'accounting';
+      else await refreshIntelligence(session.snapshot().profile);
+      return;
+    }
     if (action === 'open-item-classification') {
       accountingModel = null; accountingRequest += 1; itemDecisionOpen = false; itemDecisionFeedback = null;
       location.hash = `accounting?company=${encodeURIComponent(companyId)}&item=${encodeURIComponent(actionElement.dataset.classificationId)}`;
@@ -1261,15 +1285,15 @@
                   accounting_date: values.accounting_date || '', period_start: values.period_start,
                   period_end: values.period_end, approval_expires_at: expires.toISOString(),
                 });
-                if (item.status === 'IDEMPOTENT_REDELIVERY' || Number(item.duplicate_items || 0) > 0) {
+                if (item.existing_journey || item.status === 'IDEMPOTENT_REDELIVERY' || Number(item.duplicate_items || 0) > 0) {
                   summary.duplicate += 1;
-                  items.push({filename: file.name, status: 'DUPLICATE', message: 'Este conteúdo já havia sido recebido; o resultado anterior foi reutilizado.'});
+                  items.push({filename: file.name, status: 'DUPLICATE', message: item.existing_journey ? 'Este documento já tem proposta' : 'Este conteúdo já havia sido recebido; o resultado anterior foi reutilizado.', existingJourney: item.existing_journey, resourceId: item.resource_id, journeyStatus: item.status, version: item.version});
                 } else if (item.status === 'QUARANTINED') {
                   summary.invalid += 1;
                   items.push({filename: file.name, status: 'INVALID', message: 'O arquivo não passou pela validação e requer atenção.'});
                 } else {
                   summary.success += 1;
-                  items.push({filename: file.name, status: 'SUCCESS', message: item.synthetic ? 'Teste sintético concluído; nenhum arquivo foi persistido.' : 'Arquivo recebido e encaminhado para processamento.'});
+                  items.push({filename: file.name, status: 'SUCCESS', message: item.synthetic ? 'Teste sintético concluído; nenhum arquivo foi persistido.' : 'Arquivo recebido e encaminhado para processamento.', resourceId: item.resource_id, journeyStatus: item.status, version: item.version});
                 }
               } catch (error) {
                 if (error?.code === 'NFE_COMPANY_MISMATCH') {
