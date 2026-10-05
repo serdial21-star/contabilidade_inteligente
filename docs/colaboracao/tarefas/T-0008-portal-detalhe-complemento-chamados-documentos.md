@@ -253,3 +253,16 @@ Produção, consulta somente leitura:
 - `inbox_documentos`: Novo (14), Recebido (11).
 
 Nenhum rótulo terminal está em uso hoje. Ainda falta confirmar quais rótulos terminais as telas do painel gravam, porque a lista implementada só funciona se eles coincidirem.
+
+### [2026-10-05] Publicação — migration 006 aplicada
+
+- Preflight:
+  - colunas e collations conferidas (`token_hash` em `utf8mb4_uca1400_ai_ci`; `inbox_documentos.id`/`cliente_id` int(11), compatíveis com a FK);
+  - as colunas de `tickets_master` lidas pela procedure existem;
+  - grants: ALL no schema.
+- Rótulos de status: chamado terminal "Concluído", confirmado em `listas_opcoes`. Documento: rótulo terminal ainda sem confirmação; não há documento encerrado hoje.
+- `006_up.sql` importado pelo proprietário. A conferência confirmou:
+  - coluna `tickets_mensagens.anexo_nome`;
+  - tabela `inbox_documentos_complementos` com 9 colunas, PK, FK composta e os dois CHECKs;
+  - as quatro procedures `INVOKER`.
+- Observação: o `verify_006.sql` usa `DATABASE()`, que voltou vazio no phpMyAdmin quando os comandos rodaram em bloco. A conferência foi refeita com o nome do schema literal.
