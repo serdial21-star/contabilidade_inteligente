@@ -278,3 +278,15 @@ O Claude gerou `n8n_admin_listagens_gerais_v2_t0008.json` com duas mudanças fun
 O arquivo é importado inativo e sem gravação de execuções. O teste `test_admin_documentos_patch_changes_only_documents_branch` garante que nenhum outro nó mudou.
 
 Os defeitos preexistentes desse workflow continuam no item 25 da fila: SQL interpolado, `NOW()`, CORS `*`, sem permissão de módulo.
+
+### [2026-10-05] Publicação — Lovable (antes de publicar)
+
+O Lovable aplicou o prompt nos arquivos:
+- `src/lib/complemento.ts` e `src/test/complemento.test.ts` (9 testes novos; 30 no total, todos aprovados);
+- `TicketDetailDrawer.tsx`, `DocumentDetailDrawer.tsx` e `AdminDocumentos.tsx`, este com linha do tempo somente leitura.
+
+O Lovable também respondeu às duas pendências:
+1. o painel não grava status de documento. A única lista é o filtro do portal: Recebido, Em Análise, Processado e Rejeitado. Os rótulos terminais Processado e Rejeitado coincidem com a lista implementada, o que encerra a pendência;
+2. o `proxy-webhook` não tem limite próprio de corpo. O teste de 10 MiB pelo caminho real continua obrigatório na UAT.
+
+Os erros 401, 404, 409, 422 e o item fechado ainda não foram testados na tela; serão verificados na UAT.
