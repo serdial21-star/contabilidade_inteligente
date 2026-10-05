@@ -1,0 +1,440 @@
+{
+  "name": "[CRUD] Receber Arquivo do Portal V2 (observação + SQL parametrizado)",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "portal/receber-arquivo-v2",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "688db081-bd18-466b-af59-096d85eb4d0b",
+      "name": "Receber Arquivo (POST)",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        -160,
+        -80
+      ],
+      "webhookId": "d0dd2e56-5f96-40f2-b200-21322b753330"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT c.id AS cliente_id, c.id_pasta_raiz FROM security_sessoes_clientes s JOIN clientes c ON s.cliente_id = c.id WHERE s.token_hash = SHA2('{{ $json.token }}', 256) AND s.expira_em > NOW() AND s.revogado_em IS NULL LIMIT 1;",
+        "options": {}
+      },
+      "id": "1b152854-ef95-4ddd-9ef0-c13f1b76a436",
+      "name": "1. Validar Token e Buscar Raiz",
+      "type": "n8n-nodes-base.mySql",
+      "typeVersion": 2.1,
+      "position": [
+        304,
+        -80
+      ],
+      "alwaysOutputData": true,
+      "credentials": {
+        "mySql": {
+          "id": "A8EKwXIiVjrNd53S",
+          "name": "MySQL account 3"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const dbResult = $('1. Validar Token e Buscar Raiz').first();\nconst rootId = dbResult && dbResult.json ? dbResult.json.id_pasta_raiz : null;\nconst clienteId = dbResult && dbResult.json ? dbResult.json.cliente_id : null;\n\nif (!clienteId || !rootId) {\n  throw new Error(\"Sessão inválida ou Cliente sem Pasta Raiz configurada.\");\n}\n\nconst area = $('Receber Arquivo (POST)').first().json.body.area || '';\nlet folderName = '99_DIVERSOS';\nconst areaLower = area.toLowerCase();\n\nif (areaLower.includes('fiscal')) folderName = '01_FISCAL';\nelse if (areaLower.includes('pessoal') || areaLower.includes('rh') || areaLower.includes('dp')) folderName = '02_PESSOAL';\nelse if (areaLower.includes('contabil') || areaLower.includes('contábil')) folderName = '03_CONTABIL';\nelse if (areaLower.includes('societario') || areaLower.includes('societário')) folderName = '04_SOCIETARIO';\nelse if (areaLower.includes('inbox')) folderName = '00_INBOX';\n\nreturn [{ json: { targetFolder: folderName, rootId: rootId, cliente_id: clienteId } }];"
+      },
+      "id": "2582275a-34ac-4c32-92f3-8fa03e64e3da",
+      "name": "2. Roteador de Área (JS)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        528,
+        -80
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "list",
+        "useQueryString": true,
+        "queryString": "={{ \"'\" + $json.rootId + \"' in parents and name = '\" + $json.targetFolder + \"' and mimeType = 'application/vnd.google-apps.folder' and trashed = false\" }}",
+        "limit": 1,
+        "options": {
+          "fields": [
+            "id",
+            "name"
+          ]
+        }
+      },
+      "id": "11143f00-eb99-45fe-960b-8757491efd57",
+      "name": "3. Localizar Subpasta no Drive",
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 2,
+      "position": [
+        752,
+        -80
+      ],
+      "credentials": {
+        "googleDriveOAuth2Api": {
+          "id": "Eq6ojZRPVsKeqAIF",
+          "name": "Google Drive account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const pasta = $input.first().json;\nconst webhookItem = $('Receber Arquivo (POST)').first();\nconst routeItem = $('2. Roteador de Área (JS)').first().json;\nconst body = webhookItem.json.body ?? {};\n// Observação opcional do cliente; o nome do campo no formulário não foi confirmado, por isso aceita as variantes conhecidas.\nconst rawObs = body.observacao ?? body.observacao_cliente ?? body.observacoes ?? '';\nconst observacao = String(rawObs).trim().slice(0, 2000) || null;\nconst rawComp = String(body.competencia ?? '').trim();\nconst competencia = /^(0[1-9]|1[0-2])\\/\\d{4}$/.test(rawComp) ? rawComp : null;\nconst binaryKeys = webhookItem.binary ? Object.keys(webhookItem.binary) : [];\n\nif (!binaryKeys.length) throw new Error('Nenhum arquivo binário encontrado');\n\nreturn [{\n  json: {\n    ...pasta,\n    cliente_id: routeItem.cliente_id,\n    area: webhookItem.json.body?.area ?? null,\n    titulo: webhookItem.json.body?.titulo ?? webhookItem.json.body?.nome_arquivo ?? 'arquivo_sem_nome',\n    observacao_cliente: observacao,\n    competencia,\n    binary_field_name: binaryKeys[0]\n  },\n  binary: webhookItem.binary\n}];"
+      },
+      "id": "9febed31-f741-4379-ae31-fe2201fffd59",
+      "name": "3.5. Preparar Anexo",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        960,
+        -80
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const item = $input.first();\nconst jsonBase = item.json || {};\nconst binaries = item.binary || {};\nconst output = [];\nfor (const [key, file] of Object.entries(binaries)) {\n  output.push({\n    json: { ...jsonBase, binary_source_field: key, nome_arquivo_original: file.fileName || null, mime_type: file.mimeType || null },\n    binary: { data: file }\n  });\n}\nreturn output;"
+      },
+      "id": "7662f2b7-abfd-4c6d-934e-fc216cfe65ca",
+      "name": "Formatador Binário",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1184,
+        -80
+      ]
+    },
+    {
+      "parameters": {
+        "name": "={{ ($json.titulo || 'documento') + ' - ' + ($json.nome_arquivo_original || 'arquivo') }}",
+        "driveId": {
+          "__rl": true,
+          "value": "myDrive",
+          "mode": "list"
+        },
+        "folderId": {
+          "__rl": true,
+          "value": "={{ $('3. Localizar Subpasta no Drive').first().json.id }}",
+          "mode": "id"
+        },
+        "options": {}
+      },
+      "id": "2604120f-592f-42e1-a746-e043c16adc48",
+      "name": "4. Upload para Drive",
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
+      "position": [
+        1408,
+        -80
+      ],
+      "credentials": {
+        "googleDriveOAuth2Api": {
+          "id": "Eq6ojZRPVsKeqAIF",
+          "name": "Google Drive account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO inbox_documentos (cliente_id, titulo, area_responsavel, competencia, status, nome_arquivo, tipo_documento, link_externo_url, observacao_cliente, criado_em)\nVALUES ($1, $2, $3, $4, 'Novo', $5, $6, $7, $8, NOW());",
+        "options": {
+          "queryReplacement": "={{ [ $('Formatador Binário').item.json.cliente_id, String($('Formatador Binário').item.json.titulo ?? '').slice(0, 255), $('Formatador Binário').item.json.area ?? null, $('Formatador Binário').item.json.competencia ?? null, $('Formatador Binário').item.json.nome_arquivo_original ?? null, $('Formatador Binário').item.json.mime_type ?? null, $json.webViewLink ?? null, $('Formatador Binário').item.json.observacao_cliente ?? null ] }}"
+        }
+      },
+      "id": "20e77cf6-9013-490d-a3a6-a825ffe53e02",
+      "name": "5. Registar Documento",
+      "type": "n8n-nodes-base.mySql",
+      "typeVersion": 2.1,
+      "position": [
+        1632,
+        -80
+      ],
+      "credentials": {
+        "mySql": {
+          "id": "A8EKwXIiVjrNd53S",
+          "name": "MySQL account 3"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "{\n  \"success\": true,\n  \"message\": \"Arquivo recebido com segurança (V2)!\"\n}",
+        "options": {
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Access-Control-Allow-Origin",
+                "value": "*"
+              }
+            ]
+          }
+        }
+      },
+      "id": "975fb688-364e-487b-bbf7-fd14a37df047",
+      "name": "Responder Sucesso",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        1840,
+        -80
+      ]
+    },
+    {
+      "parameters": {
+        "httpMethod": "OPTIONS",
+        "path": "portal/receber-arquivo-v2",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "2bb5c65c-02d6-404d-bfc0-368f70a4d00f",
+      "name": "OPTIONS",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        80,
+        128
+      ],
+      "webhookId": "d62d4b7f-9ad9-47ac-b58f-9dcae2680e76"
+    },
+    {
+      "parameters": {
+        "respondWith": "text",
+        "responseBody": "OK",
+        "options": {
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Access-Control-Allow-Origin",
+                "value": "*"
+              },
+              {
+                "name": "Access-Control-Allow-Methods",
+                "value": "POST, OPTIONS"
+              },
+              {
+                "name": "Access-Control-Allow-Headers",
+                "value": "Content-Type, Authorization"
+              }
+            ]
+          }
+        }
+      },
+      "id": "98f1ad37-ef04-40de-9123-8f04c9cb517e",
+      "name": "CORS OK",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        304,
+        128
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const headers = $input.first().json.headers || {};\nconst auth = headers.authorization || headers.Authorization || '';\n// Mantém só letras e números: impede qualquer caractere de quebrar o SQL da validação.\nconst token = auth.replace(/^Bearer\\s+/i, '').replace(/[^a-zA-Z0-9]/g, '');\nreturn [{ json: { token } }];"
+      },
+      "id": "0e0d240a-c88d-4861-94e5-62a7c88d98d9",
+      "name": "Extrair Token",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -48,
+        -80
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{ $json.cliente_id ? true : false }}",
+              "value2": true
+            }
+          ]
+        }
+      },
+      "id": "1d4a6a6f-71b4-4ef0-bd11-fa5dc0d3ef85",
+      "name": "Sessão Válida?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        416,
+        192
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { success: false, message: \"Sessão expirada ou inválida. Faça login novamente.\" } }}",
+        "options": {
+          "responseCode": 401,
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Access-Control-Allow-Origin",
+                "value": "*"
+              }
+            ]
+          }
+        }
+      },
+      "id": "897b19cf-cdf7-4871-b3f6-8a20001d2a84",
+      "name": "Responder 401",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        640,
+        320
+      ]
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Receber Arquivo (POST)": {
+      "main": [
+        [
+          {
+            "node": "Extrair Token",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "1. Validar Token e Buscar Raiz": {
+      "main": [
+        [
+          {
+            "node": "Sessão Válida?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "2. Roteador de Área (JS)": {
+      "main": [
+        [
+          {
+            "node": "3. Localizar Subpasta no Drive",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "3. Localizar Subpasta no Drive": {
+      "main": [
+        [
+          {
+            "node": "3.5. Preparar Anexo",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "3.5. Preparar Anexo": {
+      "main": [
+        [
+          {
+            "node": "Formatador Binário",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Formatador Binário": {
+      "main": [
+        [
+          {
+            "node": "4. Upload para Drive",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "4. Upload para Drive": {
+      "main": [
+        [
+          {
+            "node": "5. Registar Documento",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "5. Registar Documento": {
+      "main": [
+        [
+          {
+            "node": "Responder Sucesso",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OPTIONS": {
+      "main": [
+        [
+          {
+            "node": "CORS OK",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extrair Token": {
+      "main": [
+        [
+          {
+            "node": "1. Validar Token e Buscar Raiz",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Sessão Válida?": {
+      "main": [
+        [
+          {
+            "node": "2. Roteador de Área (JS)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Responder 401",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": false,
+    "saveDataErrorExecution": "none",
+    "saveDataSuccessExecution": "none",
+    "saveManualExecutions": false,
+    "saveExecutionProgress": false
+  },
+  "meta": {
+    "instanceId": "09f67c6ad885284941575233f307d4ff003398dd6cce7ae1b2a6e52f5b12474b"
+  },
+  "tags": []
+}
