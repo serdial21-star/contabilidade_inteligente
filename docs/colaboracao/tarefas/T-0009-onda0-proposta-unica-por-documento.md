@@ -2,7 +2,7 @@
 
 | Campo | Valor |
 |---|---|
-| Estado | EM_REVISÃO |
+| Estado | CONCLUÍDA — publicada em 05/10/2026 |
 | Origem | ADR 0019, aceito em 05/10/2026; pesquisa A/B, seções 3.1–3.3; fila, itens 26, 27 e 6 (parte anti-iframe) |
 | Sistema | Sistema B |
 | Exige ADR | não (aplica o ADR 0019) |

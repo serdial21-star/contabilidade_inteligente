@@ -2,7 +2,7 @@
 
 | Campo | Valor |
 |---|---|
-| Estado | APROVADA — aguardando implementação pelo Codex |
+| Estado | CONCLUÍDA — publicada em 05/10/2026 |
 | Origem | QUADRO, fila item 20 (primeira parte); escolhida pelo usuário em 04/10/2026 para destravar os testes práticos com clientes |
 | Sistema | Sistema A (n8n, MySQL, frontend Lovable) |
 | Exige ADR | não — decisões D1–D5 registradas aqui; migration 006 não destrutiva |
