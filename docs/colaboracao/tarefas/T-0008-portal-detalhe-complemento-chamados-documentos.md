@@ -298,3 +298,14 @@ Os erros 401, 404, 409, 422 e o item fechado ainda não foram testados na tela; 
   - Causa, informada pelo Lovable: a busca do detalhe ficava em `onOpenChange` do Radix, que não dispara quando o pai define `open=true`.
   - Correção: `useEffect` acionado por `[open, itemId]` em `TicketDetailDrawer.tsx` e `DocumentDetailDrawer.tsx`. Os 30 testes passam.
 - **Fora do escopo da T-0008:** o arquivo de mais de 10 MB aceito na **abertura** de chamado ("Abrir Chamado", workflow antigo). Registrado no item 25 da fila.
+
+### [2026-10-05] UAT — resultado parcial e ampliação aprovada pelo fluxo
+
+- **Portal:** o detalhe do chamado chama o `proxy-webhook` (200) e mostra a descrição e os anexos da abertura. O envio de complemento funciona.
+- **Painel → Tickets:** os anexos não aparecem. O ramo `admin/tickets-v2` só devolvia `data`, `autor`, `mensagem` e `tipo`, sem `anexo_url`, e não lia `evidencias_protocolos`. O D5 cobria só documentos.
+  - Correção do Claude no mesmo workflow (`n8n_admin_listagens_gerais_v2_t0008.json`):
+    - "Buscar Mensagens" passa a trazer `anexo_nome`;
+    - novo nó "Buscar Anexos Abertura" (`evidencias_protocolos`);
+    - "Anexar Histórico" devolve `arquivo_url`/`arquivo_nome` no histórico e `anexos_abertura` por ticket.
+  - O teste foi atualizado. A tela do painel precisa de prompt do Lovable.
+- **Pendentes de esclarecimento:** onde o arquivo de mais de 10 MB passou (complemento ou "Enviar Documentos"); e a tela "Enviar Documentos" (fluxo antigo), que não informa campo obrigatório ausente.

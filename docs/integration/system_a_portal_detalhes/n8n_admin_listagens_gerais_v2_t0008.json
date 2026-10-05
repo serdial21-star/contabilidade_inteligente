@@ -269,7 +269,7 @@
     {
       "parameters": {
         "operation": "executeQuery",
-        "query": "SELECT m.ticket_id, m.remetente_tipo, m.mensagem, m.anexo_url, DATE_FORMAT(m.criado_em, '%Y-%m-%dT%H:%i:%s') AS criado_em, CASE WHEN m.remetente_tipo = 'Equipe' THEN COALESCE(f.nome_funcionario, 'Equipe') ELSE COALESCE(c.nome_cliente, 'Cliente') END AS autor FROM tickets_mensagens m JOIN tickets_master t ON t.id = m.ticket_id LEFT JOIN funcionarios f ON m.remetente_tipo = 'Equipe' AND f.id = m.remetente_id LEFT JOIN clientes c ON c.id = t.cliente_id ORDER BY m.criado_em ASC, m.id ASC;",
+        "query": "SELECT m.ticket_id, m.remetente_tipo, m.mensagem, m.anexo_url, m.anexo_nome, DATE_FORMAT(m.criado_em, '%Y-%m-%dT%H:%i:%s') AS criado_em, CASE WHEN m.remetente_tipo = 'Equipe' THEN COALESCE(f.nome_funcionario, 'Equipe') ELSE COALESCE(c.nome_cliente, 'Cliente') END AS autor FROM tickets_mensagens m JOIN tickets_master t ON t.id = m.ticket_id LEFT JOIN funcionarios f ON m.remetente_tipo = 'Equipe' AND f.id = m.remetente_id LEFT JOIN clientes c ON c.id = t.cliente_id ORDER BY m.criado_em ASC, m.id ASC;",
         "options": {}
       },
       "id": "db98061a-b82b-4b67-807f-bfcd8c073e95",
@@ -290,7 +290,7 @@
     },
     {
       "parameters": {
-        "jsCode": "// Junta a conversa (tickets_mensagens) a cada ticket, no formato que a gaveta de detalhes espera.\nconst tickets = $('Buscar Todos os Tickets').all().map((i) => i.json).filter((t) => t && t.id !== undefined && t.id !== null);\nconst mensagens = $input.all().map((i) => i.json).filter((m) => m && m.ticket_id !== undefined && m.ticket_id !== null);\n\nconst porTicket = {};\nfor (const m of mensagens) {\n  (porTicket[m.ticket_id] = porTicket[m.ticket_id] || []).push({\n    data: m.criado_em,\n    autor: m.autor || (m.remetente_tipo === 'Equipe' ? 'Equipe' : 'Cliente'),\n    mensagem: m.mensagem,\n    tipo: m.remetente_tipo,\n  });\n}\n\nif (tickets.length === 0) return [{ json: {} }];   // lista vazia (o nó de resposta descarta este item)\nreturn tickets.map((t) => ({ json: { ...t, historico: porTicket[t.id] || [] } }));"
+        "jsCode": "// Junta a conversa (tickets_mensagens) e os anexos de abertura (evidencias_protocolos) a cada ticket.\nconst tickets = $('Buscar Todos os Tickets').all().map((i) => i.json).filter((t) => t && t.id !== undefined && t.id !== null);\nconst mensagens = $('Buscar Mensagens').all().map((i) => i.json).filter((m) => m && m.ticket_id !== undefined && m.ticket_id !== null);\nconst anexos = $input.all().map((i) => i.json).filter((a) => a && a.ticket_id !== undefined && a.ticket_id !== null);\n\nconst porTicket = {};\nfor (const m of mensagens) {\n  (porTicket[m.ticket_id] = porTicket[m.ticket_id] || []).push({\n    data: m.criado_em,\n    autor: m.autor || (m.remetente_tipo === 'Equipe' ? 'Equipe' : 'Cliente'),\n    mensagem: m.mensagem,\n    tipo: m.remetente_tipo,\n    arquivo_url: m.anexo_url || null,\n    arquivo_nome: m.anexo_nome || null,\n  });\n}\nconst abertura = {};\nfor (const a of anexos) {\n  (abertura[a.ticket_id] = abertura[a.ticket_id] || []).push({ nome: a.nome_evidencia, tipo: a.tipo, arquivo_url: a.link_arquivo });\n}\n\nif (tickets.length === 0) return [{ json: {} }];   // lista vazia (o nó de resposta descarta este item)\nreturn tickets.map((t) => ({ json: { ...t, historico: porTicket[t.id] || [], anexos_abertura: abertura[t.id] || [] } }));"
       },
       "id": "cd989e3e-315e-41cc-a0bc-eb972f0fefc1",
       "name": "Anexar Histórico",
@@ -313,6 +313,28 @@
         1232,
         208
       ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT e.ticket_id, e.nome_evidencia, e.tipo, e.link_arquivo FROM evidencias_protocolos e WHERE e.ticket_id IS NOT NULL ORDER BY e.id ASC;",
+        "options": {}
+      },
+      "id": "8c4d2a1e-5b3f-4e7a-9d10-2f6b7c8d9e01",
+      "name": "Buscar Anexos Abertura",
+      "type": "n8n-nodes-base.mySql",
+      "typeVersion": 2.1,
+      "position": [
+        1344,
+        -160
+      ],
+      "alwaysOutputData": true,
+      "credentials": {
+        "mySql": {
+          "id": "A8EKwXIiVjrNd53S",
+          "name": "MySQL account 3"
+        }
+      }
     }
   ],
   "pinData": {},
@@ -445,7 +467,7 @@
       "main": [
         [
           {
-            "node": "Anexar Histórico",
+            "node": "Buscar Anexos Abertura",
             "type": "main",
             "index": 0
           }
@@ -468,6 +490,17 @@
         [
           {
             "node": "Responder Lista",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Buscar Anexos Abertura": {
+      "main": [
+        [
+          {
+            "node": "Anexar Histórico",
             "type": "main",
             "index": 0
           }

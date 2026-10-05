@@ -289,8 +289,10 @@ def test_admin_documentos_patch_changes_only_documents_branch() -> None:
     before = {node['name']: node['parameters'] for node in baseline['nodes']}
     after = {node['name']: node['parameters'] for node in patched['nodes']}
     changed = sorted(name for name in before if before[name] != after.get(name))
-    assert changed == ['Buscar Todos os Documentos']
-    assert sorted(set(after) - set(before)) == ['Converter Complementos']
+    assert changed == ['Anexar Histórico', 'Buscar Mensagens', 'Buscar Todos os Documentos']
+    assert sorted(set(after) - set(before)) == ['Buscar Anexos Abertura', 'Converter Complementos']
+    assert 'm.anexo_nome' in after['Buscar Mensagens']['query']
+    assert 'anexos_abertura' in after['Anexar Histórico']['jsCode']
     query = after['Buscar Todos os Documentos']['query']
     assert 'inbox_documentos_complementos' in query
     assert 'x.cliente_id = d.cliente_id' in query
