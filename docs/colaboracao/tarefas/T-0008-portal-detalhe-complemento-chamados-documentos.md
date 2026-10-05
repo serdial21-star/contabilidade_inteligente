@@ -266,3 +266,15 @@ Nenhum rótulo terminal está em uso hoje. Ainda falta confirmar quais rótulos 
   - tabela `inbox_documentos_complementos` com 9 colunas, PK, FK composta e os dois CHECKs;
   - as quatro procedures `INVOKER`.
 - Observação: o `verify_006.sql` usa `DATABASE()`, que voltou vazio no phpMyAdmin quando os comandos rodaram em bloco. A conferência foi refeita com o nome do schema literal.
+
+### [2026-10-05] Publicação — patch do painel (D5)
+
+O proprietário enviou o export de produção de "API - Admin - Listagens Gerais V2 (Corrigido)". O baseline está em `docs/integration/system_a_portal_detalhes/baseline/n8n_admin_listagens_gerais_v2.json`.
+
+O Claude gerou `n8n_admin_listagens_gerais_v2_t0008.json` com duas mudanças funcionais:
+1. a consulta "Buscar Todos os Documentos" ganha a coluna `complementos`, com `x.cliente_id = d.cliente_id`;
+2. o novo nó "Converter Complementos" transforma o texto JSON em lista.
+
+O arquivo é importado inativo e sem gravação de execuções. O teste `test_admin_documentos_patch_changes_only_documents_branch` garante que nenhum outro nó mudou.
+
+Os defeitos preexistentes desse workflow continuam no item 25 da fila: SQL interpolado, `NOW()`, CORS `*`, sem permissão de módulo.

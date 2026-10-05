@@ -280,3 +280,20 @@ def test_embedded_n8n_code_nodes_compile_in_node() -> None:
                 # Sem herdar o stdin do pai: no Windows, um stdin inválido gera WinError 6 intermitente.
                 stdin=subprocess.DEVNULL,
             )
+
+
+def test_admin_documentos_patch_changes_only_documents_branch() -> None:
+    base_dir = Path(__file__).resolve().parents[2] / 'docs/integration/system_a_portal_detalhes'
+    baseline = json.loads((base_dir / 'baseline/n8n_admin_listagens_gerais_v2.json').read_text(encoding='utf-8'))
+    patched = json.loads((base_dir / 'n8n_admin_listagens_gerais_v2_t0008.json').read_text(encoding='utf-8'))
+    before = {node['name']: node['parameters'] for node in baseline['nodes']}
+    after = {node['name']: node['parameters'] for node in patched['nodes']}
+    changed = sorted(name for name in before if before[name] != after.get(name))
+    assert changed == ['Buscar Todos os Documentos']
+    assert sorted(set(after) - set(before)) == ['Converter Complementos']
+    query = after['Buscar Todos os Documentos']['query']
+    assert 'inbox_documentos_complementos' in query
+    assert 'x.cliente_id = d.cliente_id' in query
+    assert patched['active'] is False
+    assert patched['settings']['saveDataSuccessExecution'] == 'none'
+    assert patched['settings']['saveDataErrorExecution'] == 'none'
