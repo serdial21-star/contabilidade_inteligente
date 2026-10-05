@@ -309,3 +309,9 @@ Os erros 401, 404, 409, 422 e o item fechado ainda não foram testados na tela; 
     - "Anexar Histórico" devolve `arquivo_url`/`arquivo_nome` no histórico e `anexos_abertura` por ticket.
   - O teste foi atualizado. A tela do painel precisa de prompt do Lovable.
 - **Pendentes de esclarecimento:** onde o arquivo de mais de 10 MB passou (complemento ou "Enviar Documentos"); e a tela "Enviar Documentos" (fluxo antigo), que não informa campo obrigatório ausente.
+
+### [2026-10-05] UAT — anexos repetidos e observações
+
+- **Anexos repetidos no painel:** a gaveta do ticket mostrou o mesmo anexo 11 vezes. Causa provável: o nó MySQL "Buscar Anexos Abertura" executava uma vez por item recebido de "Buscar Mensagens". Correção: `executeOnce` nesse nó e em "Buscar Mensagens", com teste.
+- **Auditoria vazia** para `client_*_complement`: nenhum complemento foi enviado pela caixa "Adicionar Complemento". Os testes até aqui usaram a abertura de chamado e o envio de documento, que são fluxos antigos.
+- **Painel → Documentos:** a consulta passa a trazer `observacao_cliente` e `observacao_escritorio`. Antes não trazia, e por isso a observação digitada pelo cliente não aparecia. A exibição depende de prompt do Lovable.

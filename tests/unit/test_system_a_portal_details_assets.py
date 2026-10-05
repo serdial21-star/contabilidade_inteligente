@@ -293,6 +293,10 @@ def test_admin_documentos_patch_changes_only_documents_branch() -> None:
     assert sorted(set(after) - set(before)) == ['Buscar Anexos Abertura', 'Converter Complementos']
     assert 'm.anexo_nome' in after['Buscar Mensagens']['query']
     assert 'anexos_abertura' in after['Anexar Histórico']['jsCode']
+    nodes = {node['name']: node for node in patched['nodes']}
+    # Uma execução por item duplicaria os anexos (visto na UAT de 05/10/2026).
+    assert nodes['Buscar Mensagens'].get('executeOnce') is True
+    assert nodes['Buscar Anexos Abertura'].get('executeOnce') is True
     query = after['Buscar Todos os Documentos']['query']
     assert 'inbox_documentos_complementos' in query
     assert 'x.cliente_id = d.cliente_id' in query

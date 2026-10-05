@@ -157,7 +157,7 @@
     {
       "parameters": {
         "operation": "executeQuery",
-        "query": "SELECT d.id, d.titulo, d.area_responsavel, d.status, d.nome_arquivo, d.link_externo_url, DATE_FORMAT(d.criado_em, '%Y-%m-%dT%H:%i:%s') AS criado_em, COALESCE(c.nome_cliente, '—') AS nome_cliente, COALESCE((SELECT JSON_ARRAYAGG(JSON_OBJECT('id', x.id, 'mensagem', x.mensagem, 'arquivo_url', x.anexo_url, 'arquivo_nome', x.anexo_nome, 'criado_em', DATE_FORMAT(x.criado_em, '%Y-%m-%dT%H:%i:%s'), 'autor', x.remetente_tipo, 'tipo', IF(x.remetente_tipo = 'Cliente', 'cliente', 'equipe')) ORDER BY x.criado_em, x.id) FROM inbox_documentos_complementos x WHERE x.documento_id = d.id AND x.cliente_id = d.cliente_id), JSON_ARRAY()) AS complementos FROM inbox_documentos d LEFT JOIN clientes c ON d.cliente_id = c.id ORDER BY d.criado_em DESC;",
+        "query": "SELECT d.id, d.titulo, d.area_responsavel, d.status, d.nome_arquivo, d.link_externo_url, d.observacao_cliente, d.observacao_escritorio, DATE_FORMAT(d.criado_em, '%Y-%m-%dT%H:%i:%s') AS criado_em, COALESCE(c.nome_cliente, '—') AS nome_cliente, COALESCE((SELECT JSON_ARRAYAGG(JSON_OBJECT('id', x.id, 'mensagem', x.mensagem, 'arquivo_url', x.anexo_url, 'arquivo_nome', x.anexo_nome, 'criado_em', DATE_FORMAT(x.criado_em, '%Y-%m-%dT%H:%i:%s'), 'autor', x.remetente_tipo, 'tipo', IF(x.remetente_tipo = 'Cliente', 'cliente', 'equipe')) ORDER BY x.criado_em, x.id) FROM inbox_documentos_complementos x WHERE x.documento_id = d.id AND x.cliente_id = d.cliente_id), JSON_ARRAY()) AS complementos FROM inbox_documentos d LEFT JOIN clientes c ON d.cliente_id = c.id ORDER BY d.criado_em DESC;",
         "options": {}
       },
       "id": "9cbfa545-2ea8-4ffb-b4cc-c70f97d53aa5",
@@ -286,7 +286,8 @@
           "id": "A8EKwXIiVjrNd53S",
           "name": "MySQL account 3"
         }
-      }
+      },
+      "executeOnce": true
     },
     {
       "parameters": {
@@ -334,7 +335,8 @@
           "id": "A8EKwXIiVjrNd53S",
           "name": "MySQL account 3"
         }
-      }
+      },
+      "executeOnce": true
     }
   ],
   "pinData": {},
