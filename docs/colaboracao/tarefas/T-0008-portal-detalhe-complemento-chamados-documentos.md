@@ -290,3 +290,11 @@ O Lovable também respondeu às duas pendências:
 2. o `proxy-webhook` não tem limite próprio de corpo. O teste de 10 MiB pelo caminho real continua obrigatório na UAT.
 
 Os erros 401, 404, 409, 422 e o item fechado ainda não foram testados na tela; serão verificados na UAT.
+
+### [2026-10-05] UAT — defeito de tela e correção
+
+- **Servidor confirmado:** `evidencias_protocolos` tem os anexos de abertura dos chamados 9 e 10.
+- **Defeito na tela:** com o DevTools aberto, o painel de detalhe abria sem chamar o `proxy-webhook`.
+  - Causa, informada pelo Lovable: a busca do detalhe ficava em `onOpenChange` do Radix, que não dispara quando o pai define `open=true`.
+  - Correção: `useEffect` acionado por `[open, itemId]` em `TicketDetailDrawer.tsx` e `DocumentDetailDrawer.tsx`. Os 30 testes passam.
+- **Fora do escopo da T-0008:** o arquivo de mais de 10 MB aceito na **abertura** de chamado ("Abrir Chamado", workflow antigo). Registrado no item 25 da fila.
