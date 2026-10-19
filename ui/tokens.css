@@ -1,8 +1,8 @@
-/* Official brand palette: identidade visual S21 v1.png, supplied by user.
-   Semantic/interaction tokens are UI choices, not additional brand colors. */
+/* Official brand palette: D-093 (Sistema C, 2026-10-19) — marinho #09265B, dourado #D6A928, vermelho #C8102E.
+   Semantic/interaction tokens are UI choices, not additional brand colors. Dark theme: html[data-theme="dark"] (T-0010). */
 .foundation {
-  --brand-primary:#17295b; --brand-gold:#daa84f; --brand-red:#d8232a;
-  --background:#f3f4f6; --surface:#fff; --text:#17295b; --text-secondary:#566174;
+  --brand-primary:#09265b; --brand-gold:#d6a928; --brand-red:#c8102e; --sidebar-bg:#09265b;
+  --background:#f3f4f6; --surface:#fff; --text:#09265b; --text-secondary:#566174;
   --border:#dce1e9; --control-border:#7b8596; --success:#216c48;
   --warning:#80520c; --danger:#b51f2b; --info:#285d95; --intelligent:#77500a;
   --success-bg:#eaf5ee; --warning-bg:#fff3db; --danger-bg:#fff0ef;
@@ -10,7 +10,7 @@
   --space-1:4px; --space-2:8px; --space-3:12px; --space-4:16px;
   --space-5:20px; --space-6:24px; --space-8:32px; --space-10:40px; --space-12:48px;
   --radius-sm:6px; --radius-md:10px; --radius-lg:16px;
-  --shadow-sm:0 2px 8px #17295b08; --shadow-lg:0 16px 60px #17295b24;
+  --shadow-sm:0 2px 8px #09265b08; --shadow-lg:0 16px 60px #09265b24;
   --font-ui:Inter,'Segoe UI',Arial,sans-serif;
   --font-heading:Manrope,Inter,'Segoe UI',Arial,sans-serif;
   --font-caption:.75rem; --font-small:.8125rem; --font-body:.9375rem;
@@ -21,4 +21,14 @@
   --sidebar-width:240px; --content-width:1440px; --drawer-width:560px;
   --duration-fast:160ms;
   /* Media queries use literal 1200 / 800 / 480px: CSS variables cannot define breakpoints. */
+}
+html.foundation[data-theme="dark"] {
+  color-scheme: dark;
+  --brand-primary:#9db8ef; --sidebar-bg:#061a40;
+  --background:#0b1426; --surface:#111d33; --text:#e6ebf5; --text-secondary:#a9b4c8;
+  --border:#24324d; --control-border:#5a6b8c; --success:#6fcf97;
+  --warning:#f2c46d; --danger:#ff8a8f; --info:#8fb6ea; --intelligent:#e8c15a;
+  --success-bg:#12301f; --warning-bg:#33270d; --danger-bg:#3a1418;
+  --info-bg:#132640; --intelligent-bg:#2c2410; --neutral-bg:#1b2740;
+  --shadow-sm:0 2px 8px #00000040; --shadow-lg:0 16px 60px #00000066;
 }

@@ -138,3 +138,40 @@ def test_caddy_denies_iframe_for_application_pages() -> None:
     assert web.count('X-Frame-Options "DENY"') >= 2
     assert 'Content-Security-Policy' not in host
     assert 'X-Frame-Options "DENY"' in host
+
+
+def test_t0010_s21_contabil_brand_and_no_legacy_visible_name() -> None:
+    html = source('index.html')
+    javascript = source('app.js')
+    assert '<title>S21 Contábil</title>' in html
+    assert 'S21%20Contabil%20selo.png' in html and 'S21%20selo%20mestre.png' in html
+    assert 'S21%20Contabil%20selo.png' in javascript and 'S21%20selo%20mestre.png' in javascript
+    # Nome antigo e "Sistema A" não aparecem em textos do aplicativo; nomes de tenant/empresa vêm de dados.
+    for text in (html, javascript):
+        assert 'Serdial21' not in text
+        assert 'Sistema A' not in text
+    for relative in ('ui/assets/brand/S21 Contabil selo.png', 'ui/assets/brand/S21 selo mestre.png'):
+        assert (ROOT / relative).read_bytes()[:4] == b'\x89PNG', relative
+
+
+def test_t0010_official_palette_and_dark_theme_tokens() -> None:
+    tokens = (ROOT / 'ui/tokens.css').read_text(encoding='utf-8')
+    assert '--brand-primary:#09265b' in tokens
+    assert '--brand-gold:#d6a928' in tokens
+    assert '--brand-red:#c8102e' in tokens
+    assert 'html.foundation[data-theme="dark"]' in tokens
+    assert 'font-size:10px' not in (ROOT / 'ui/foundation.css').read_text(encoding='utf-8')
+
+
+def test_t0010_theme_toggle_and_logout_in_sidebar_footer() -> None:
+    html = source('index.html')
+    javascript = source('app.js')
+    theme = source('theme.js')
+    assert '<script src="theme.js"></script>' in html
+    assert 'content="light dark"' in html
+    assert 'data-action="toggle-theme"' in javascript
+    assert "action === 'toggle-theme'" in javascript
+    assert 'class="btn logout-button" data-action="logout"' in javascript
+    # Preferência só de tema; falha de armazenamento não quebra a tela.
+    assert theme.count('try {') >= 3 and "localStorage.getItem(KEY)" in theme
+    assert "prefers-color-scheme: dark" in theme

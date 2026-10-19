@@ -139,7 +139,7 @@
     const title = configurationError ? 'Autenticação não configurada neste ambiente.'
       : message || (synthetic ? 'Modo sintético habilitado explicitamente.' : 'Acesse com o provedor de identidade do escritório.');
     app.innerHTML = `<main id="main" class="login-layout" tabindex="-1">
-      <section class="login-brand"><img class="brand-vertical" src="../ui/assets/brand/S21%20assinatura%20vertical.png" alt="Serdial21 Contabilidade Inteligente"><div class="gold-line"></div><h1>Inteligência para automatizar.<br>Controle para decidir.</h1><p>Ambiente de trabalho seguro para a rotina do escritório contábil.</p></section>
+      <section class="login-brand"><img class="brand-selo" src="../ui/assets/brand/S21%20Contabil%20selo.png" alt="S21 Contábil"><div class="gold-line"></div><h1>Inteligência para automatizar.<br>Controle para decidir.</h1><p>Ambiente de trabalho seguro para a rotina do escritório contábil.</p></section>
       <section class="login-form"><div class="stack">
         <div class="actions"><span class="environment-banner">${escapeHtml(config.environmentLabel)}</span>${synthetic ? '<span class="badge intelligent">DADOS SINTÉTICOS</span>' : ''}</div>
         <div><span class="eyebrow">Acesso ao aplicativo</span><h2>Bem-vindo.</h2><p>Suas credenciais são tratadas somente pelo provedor de identidade.</p></div>
@@ -153,6 +153,12 @@
     document.querySelector('[data-action="begin-login"]:not([disabled]), [data-action="start-demo"]')?.focus();
   }
 
+  function themeButtonMarkup() {
+    const dark = root.S21Theme ? root.S21Theme.current() === 'dark' : false;
+    const label = dark ? 'Tema claro' : 'Tema escuro';
+    return `<button class="btn ghost theme-toggle" data-action="toggle-theme" aria-pressed="${dark}" title="${label}"><span aria-hidden="true">${dark ? '☀' : '☾'}</span><span class="nav-label">${label}</span></button>`;
+  }
+
   function renderState(state) {
     const states = {
       [STATES.FORBIDDEN]: ['Acesso não permitido', 'Você não possui permissão para acessar este recurso.', 'Voltar'],
@@ -160,7 +166,7 @@
       [STATES.SERVER_ERROR]: ['Serviço temporariamente indisponível', 'Não foi possível concluir a solicitação agora.', 'Tentar novamente'],
     };
     const [title, text, action] = states[state] || states[STATES.SERVER_ERROR];
-    app.innerHTML = `<main id="main" class="page-state" tabindex="-1"><section class="card"><img width="76" src="../ui/assets/brand/S21%20logo%20simplificada.png" alt=""><span class="eyebrow">Serdial21</span><h1>${title}</h1><p>${text}</p><button class="btn" data-action="safe-return">${action}</button></section></main>`;
+    app.innerHTML = `<main id="main" class="page-state" tabindex="-1"><section class="card"><img width="76" src="../ui/assets/brand/S21%20selo%20mestre.png" alt=""><span class="eyebrow">S21 Contábil</span><h1>${title}</h1><p>${text}</p><button class="btn" data-action="safe-return">${action}</button></section></main>`;
     app.setAttribute('aria-busy', 'false');
     document.querySelector('[data-action="safe-return"]').focus();
   }
@@ -721,7 +727,7 @@
 
   function placeholderMarkup(item, profile) {
     if (!item || !hasPermission(currentPermissions(profile), item.permissions)) return null;
-    return `<div class="page-heading"><div><span class="eyebrow">Aplicativo Serdial21</span><h1>${escapeHtml(item.label)}</h1><p>Esta área será integrada em uma etapa futura.</p></div></div><section class="card empty"><h2>Disponível em próxima etapa</h2><p>Nenhuma funcionalidade operacional fictícia foi criada.</p><a class="btn secondary" href="#overview">Voltar</a></section>`;
+    return `<div class="page-heading"><div><span class="eyebrow">S21 Contábil</span><h1>${escapeHtml(item.label)}</h1><p>Esta área será integrada em uma etapa futura.</p></div></div><section class="card empty"><h2>Disponível em próxima etapa</h2><p>Nenhuma funcionalidade operacional fictícia foi criada.</p><a class="btn secondary" href="#overview">Voltar</a></section>`;
   }
 
   function renderShell(loadDashboard = true) {
@@ -748,7 +754,7 @@
     const allOption = profile.companies.length > 1
       ? `<option value="${dashboardService.allAuthorizedId}" ${companyId === dashboardService.allAuthorizedId ? 'selected' : ''}>Todas as empresas autorizadas</option>`
       : '';
-    app.innerHTML = `<div class="app-shell auth-shell${sidebarCollapsed ? ' collapsed' : ''}"><aside class="sidebar ${drawerOpen ? 'open' : ''}" aria-label="Navegação lateral"><div class="sidebar-head"><a class="brand-link" href="#overview"><img class="brand-image shell-logo" src="../ui/assets/brand/S21%20assinatura%20principal.png" alt="Serdial21 Contabilidade Inteligente"></a><button class="btn ghost sidebar-collapse-toggle" data-action="toggle-sidebar" aria-pressed="${sidebarCollapsed}" title="${sidebarCollapsed ? 'Expandir menu' : 'Recolher menu'}"><span aria-hidden="true">${sidebarCollapsed ? '»' : '«'}</span></button></div><div class="office">${escapeHtml(profile.tenant.name)}<small>${mode === 'synthetic' ? 'Contexto fictício' : 'Contexto autorizado'}</small></div><nav class="nav" aria-label="Navegação principal">${navMarkup(profile)}</nav><div class="sidebar-foot"><div class="profile-menu"><button class="btn ghost profile-trigger" data-action="toggle-user-menu" aria-expanded="${userMenuOpen}" aria-controls="user-popover"><span class="avatar">${escapeHtml(initials(profile.user.displayName))}</span><span class="profile-label">${escapeHtml(profile.user.displayName)}<small>${escapeHtml(profile.user.roleLabel || '')}</small></span></button><div class="profile-popover" id="user-popover" ${userMenuOpen ? '' : 'hidden'}><strong>${escapeHtml(profile.user.displayName)}</strong><p>${escapeHtml(profile.tenant.name)}</p><button class="btn ghost" data-action="open-work-context">Contexto e preferências</button><button class="btn secondary" data-action="logout">Sair do aplicativo</button></div></div><button class="btn ghost drawer-close" data-action="close-drawer">Fechar menu</button></div></aside><button class="drawer-backdrop ${drawerOpen ? 'open' : ''}" data-action="close-drawer" aria-label="Fechar navegação"></button><div class="workspace"><header class="topbar"><div class="context"><button class="btn ghost mobile-menu" data-action="open-drawer" aria-label="Abrir navegação">☰</button><div class="context-copy"><strong>${escapeHtml(contextName)}</strong><small>${escapeHtml(profile.tenant.name)}</small></div><label>Empresa<select id="company-context" ${profile.companies.length < 2 ? 'disabled' : ''}>${allOption}${profile.companies.map((company) => `<option value="${escapeHtml(company.id)}" ${company.id === companyId ? 'selected' : ''}>${escapeHtml(company.name)}</option>`).join('')}</select></label><button class="btn ghost context-period" type="button" data-action="open-work-context"><span>Competência</span><strong>${escapeHtml(workContext.referenceMonth)}</strong></button></div><div class="topbar-actions"><span class="environment-banner">${escapeHtml(config.environmentLabel)}</span></div></header><div class="mode-banner">${mode === 'synthetic' ? 'DEMONSTRAÇÃO LOCAL · identidade, empresas e conteúdo sintéticos · sem acesso à API' : `SESSÃO OIDC · ${config.dataMode === 'synthetic' ? 'conteúdo de negócio sintético' : 'contexto autorizado'}`}</div><main id="main" tabindex="-1">${content}<p class="footer-note">Serdial21 Contabilidade Inteligente · A automação prepara. O profissional decide.</p></main>${workContextDialogMarkup(profile)}</div></div>`;
+    app.innerHTML = `<div class="app-shell auth-shell${sidebarCollapsed ? ' collapsed' : ''}"><aside class="sidebar ${drawerOpen ? 'open' : ''}" aria-label="Navegação lateral"><div class="sidebar-head"><a class="brand-link" href="#overview"><img class="brand-image shell-logo" src="../ui/assets/brand/${sidebarCollapsed ? 'S21%20selo%20mestre.png' : 'S21%20Contabil%20selo.png'}" alt="S21 Contábil"></a><button class="btn ghost sidebar-collapse-toggle" data-action="toggle-sidebar" aria-pressed="${sidebarCollapsed}" title="${sidebarCollapsed ? 'Expandir menu' : 'Recolher menu'}"><span aria-hidden="true">${sidebarCollapsed ? '»' : '«'}</span></button></div><div class="office">${escapeHtml(profile.tenant.name)}<small>${mode === 'synthetic' ? 'Contexto fictício' : 'Contexto autorizado'}</small></div><nav class="nav" aria-label="Navegação principal">${navMarkup(profile)}</nav><div class="sidebar-foot"><div class="profile-menu"><button class="btn ghost profile-trigger" data-action="toggle-user-menu" aria-expanded="${userMenuOpen}" aria-controls="user-popover"><span class="avatar">${escapeHtml(initials(profile.user.displayName))}</span><span class="profile-label">${escapeHtml(profile.user.displayName)}<small>${escapeHtml(profile.user.roleLabel || '')}</small></span></button><div class="profile-popover" id="user-popover" ${userMenuOpen ? '' : 'hidden'}><strong>${escapeHtml(profile.user.displayName)}</strong><p>${escapeHtml(profile.tenant.name)}</p><button class="btn ghost" data-action="open-work-context">Contexto e preferências</button></div></div>${themeButtonMarkup()}<button class="btn logout-button" data-action="logout" title="Sair do aplicativo"><span aria-hidden="true">⎋</span><span class="nav-label">Sair</span></button><button class="btn ghost drawer-close" data-action="close-drawer">Fechar menu</button></div></aside><button class="drawer-backdrop ${drawerOpen ? 'open' : ''}" data-action="close-drawer" aria-label="Fechar navegação"></button><div class="workspace"><header class="topbar"><div class="context"><button class="btn ghost mobile-menu" data-action="open-drawer" aria-label="Abrir navegação">☰</button><div class="context-copy"><strong>${escapeHtml(contextName)}</strong><small>${escapeHtml(profile.tenant.name)}</small></div><label>Empresa<select id="company-context" ${profile.companies.length < 2 ? 'disabled' : ''}>${allOption}${profile.companies.map((company) => `<option value="${escapeHtml(company.id)}" ${company.id === companyId ? 'selected' : ''}>${escapeHtml(company.name)}</option>`).join('')}</select></label><button class="btn ghost context-period" type="button" data-action="open-work-context"><span>Competência</span><strong>${escapeHtml(workContext.referenceMonth)}</strong></button></div><div class="topbar-actions"><span class="environment-banner">${escapeHtml(config.environmentLabel)}</span></div></header><div class="mode-banner">${mode === 'synthetic' ? 'DEMONSTRAÇÃO LOCAL · identidade, empresas e conteúdo sintéticos · sem acesso à API' : `SESSÃO OIDC · ${config.dataMode === 'synthetic' ? 'conteúdo de negócio sintético' : 'contexto autorizado'}`}</div><main id="main" tabindex="-1">${content}<p class="footer-note">S21 Contábil · A automação prepara. O profissional decide.</p></main>${workContextDialogMarkup(profile)}</div></div>`;
     app.setAttribute('aria-busy', 'false');
     hydrateRemediationUi();
     if (workContextDialogOpen) document.querySelector('#work-context-dialog')?.showModal();
@@ -1046,6 +1052,10 @@
       history.replaceState(null, '', location.pathname);
       if (wasOidc) await oidcClient.logout();
       renderLogin('A sessão do aplicativo foi encerrada.');
+    } else if (action === 'toggle-theme') {
+      const theme = root.S21Theme ? root.S21Theme.toggle() : 'light';
+      renderShell(false); setAnnouncement(theme === 'dark' ? 'Tema escuro ativado.' : 'Tema claro ativado.');
+      document.querySelector('[data-action="toggle-theme"]')?.focus();
     } else if (action === 'toggle-user-menu') {
       userMenuOpen = !userMenuOpen; renderShell(false); document.querySelector('[data-action="toggle-user-menu"]').focus();
     } else if (action === 'open-drawer') { drawerOpen = true; renderShell(false); }
@@ -1334,11 +1344,11 @@
     }
     if (config.authMode === 'bridge') {
       const bridgeToken = routeParams().get('bridge');
-      if (!bridgeToken) { session.unauthenticated(); renderLogin('Abra esta tela a partir do Sistema A.'); return; }
+      if (!bridgeToken) { session.unauthenticated(); renderLogin('Abra esta tela a partir do S21 Administrativo.'); return; }
       history.replaceState(null, '', location.pathname); // token nunca fica na URL nem em histórico
       session.authenticating(); renderLogin();
       try { await bootstrapAuthenticated(bridgeToken); }
-      catch (_) { session.unauthenticated(); renderLogin('Não foi possível entrar. Abra novamente a partir do Sistema A.'); }
+      catch (_) { session.unauthenticated(); renderLogin('Não foi possível entrar. Abra novamente a partir do S21 Administrativo.'); }
       return;
     }
     if (config.authMode !== 'oidc' || !oidcClient.isConfigured()) { session.unauthenticated(); renderLogin(); return; }
