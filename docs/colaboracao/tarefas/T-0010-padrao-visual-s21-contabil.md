@@ -2,7 +2,7 @@
 
 | Campo | Valor |
 |---|---|
-| Estado | IMPLEMENTADA — aguardando publicação |
+| Estado | CONCLUÍDA — publicada em 19/10/2026 (web t0010b) e conferida pelo usuário |
 | Origem | Pedido do usuário em 2026-10-19 ("logo marca do contábil está errada"; "padrão do menu … padronizar todos"; tema claro e escuro); decisão D-093 do Sistema C (marca e paleta oficiais) e `Serdial-Financeiro/Docs/painel-sp/PADRAO-VISUAL-S21.md` |
 | Sistema | Sistema B |
 | Exige ADR | não (só apresentação; nenhum contrato, rota, dado ou permissão muda) |
@@ -80,3 +80,7 @@ Publicado na VPS 187.127.63.78 (imagem `serdial21-b-web:t0010`, "healthy"; API m
 - `deploy/web/config.js`: `bridgeRelaunchUrl`. `app/config.js` (desenvolvimento) sem o campo: não redireciona.
 - Depende do endereço `/admin/abrir-contabil` no S21 Administrativo (pedido A-05 ao Lovable). Publicar o A antes do B.
 - Testes: `pytest tests/frontend` 83 aprovados (1 novo); `node app/tests/*.cjs`: os mesmos 5 subtestes pré-existentes falham, nenhum novo.
+
+### [2026-10-19] Usuário — Conferência final
+
+Publicado `serdial21-b-web:t0010b` (re-entrada automática) depois do endereço `/admin/abrir-contabil` no S21 Administrativo (pedido A-05, Lovable; Vercel publicou com atraso, conferido pelo pacote servido). Teste do usuário: F5 em Documentos volta para Documentos — "deu certo". Volta disponível: `SERDIAL21_IMAGE_TAG=t0010` (sem re-entrada) ou `229271b` (visual antigo).
