@@ -175,3 +175,21 @@ def test_t0010_theme_toggle_and_logout_in_sidebar_footer() -> None:
     # Preferência só de tema; falha de armazenamento não quebra a tela.
     assert theme.count('try {') >= 3 and "localStorage.getItem(KEY)" in theme
     assert "prefers-color-scheme: dark" in theme
+
+
+def test_t0010_bridge_relaunch_keeps_tokens_out_of_web_storage() -> None:
+    javascript = source('app.js')
+    config = (ROOT / 'deploy/web/config.js').read_text(encoding='utf-8')
+    # F5 sem crachá: volta ao S21 Administrativo para pedir outro.
+    assert "bridgeRelaunchUrl: 'https://serdial21.com/admin/abrir-contabil'" in config
+    assert "if (startBridgeRelaunch(returnHash, routeParams().get('r') === '1')) return;" in javascript
+    assert 'location.replace(`${target}?voltar=${encodeURIComponent(marked)}`)' in javascript
+    # Trava contra laço pela marca r=1 no endereço; nenhum Web Storage no aplicativo.
+    assert "`${returnHash}${returnHash.includes('?') ? '&' : '?'}r=1`" in javascript
+    assert 'localStorage' not in javascript and 'sessionStorage' not in javascript
+    # O token sai da URL antes de qualquer chamada; a volta aceita só rota e parâmetros da lista (r e bridge ficam de fora).
+    assert "history.replaceState(null, '', location.pathname); // token nunca fica na URL nem em histórico" in javascript
+    assert "RETURN_PARAMS = ['company', 'document', 'fiscal', 'statement']" in javascript
+    assert "/^[a-z-]{1,40}$/.test(requestedRoute || '')" in javascript
+    # Ambiente de desenvolvimento não redireciona para fora.
+    assert 'bridgeRelaunchUrl' not in source('config.js')

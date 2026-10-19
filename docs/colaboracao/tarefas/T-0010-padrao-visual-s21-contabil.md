@@ -68,3 +68,15 @@ Só a imagem `web` muda. Roteiro a preparar pelo Claude: atualizar o código em 
 - Suíte completa do backend não rodada (nenhum arquivo do backend mudou).
 
 **Riscos/limitações:** os selos têm ~1,1 MB cada e o `/app` e `/ui` usam `Cache-Control: no-store` (baixados a cada carga); otimizar exige derivado revisado (README dos ativos). Contraste AA conferido nas combinações principais (branco sobre #09265b ≈ 13:1; #09265b sobre #d6a928 ≈ 6,5:1; branco sobre #c8102e ≈ 5,9:1; tema escuro: #e6ebf5 sobre #111d33 ≈ 14:1).
+
+### [2026-10-19] Usuário — Publicação e pedido novo
+
+Publicado na VPS 187.127.63.78 (imagem `serdial21-b-web:t0010`, "healthy"; API mantida na imagem 229271b com tag `t0010`). Pedido do usuário: "quando teclo F5 a tela vai para a primeira página … corrigir isso que quando atualizar continua na mesma página". Escolha do usuário: **re-entrada automática** (sem guardar crachá no navegador).
+
+### [2026-10-19] Claude — Re-entrada automática (adendo)
+
+- Sem crachá na URL (F5 ou link direto) e com `bridgeRelaunchUrl` configurado, o B vai para `https://serdial21.com/admin/abrir-contabil?voltar=<#rota?params&r=1>`; o S21 Administrativo emite um crachá novo pela ponte existente e devolve `#rota?params&r=1&bridge=<token>`. O B remove o token da URL antes de qualquer chamada (inalterado) e volta à **mesma rota** (agora também na entrada normal), com os parâmetros `company`, `document`, `fiscal`, `statement` quando a rota for autorizada.
+- **Sem Web Storage:** a trava contra laço é a marca `r=1` no endereço; se voltar sem crachá e com a marca, o B mostra a mensagem. Uma primeira versão usava `sessionStorage` para a trava e foi descartada porque o teste `shell-smoke` 4 proíbe Web Storage no código de sessão (guardrail mantido, não afrouxado).
+- `deploy/web/config.js`: `bridgeRelaunchUrl`. `app/config.js` (desenvolvimento) sem o campo: não redireciona.
+- Depende do endereço `/admin/abrir-contabil` no S21 Administrativo (pedido A-05 ao Lovable). Publicar o A antes do B.
+- Testes: `pytest tests/frontend` 83 aprovados (1 novo); `node app/tests/*.cjs`: os mesmos 5 subtestes pré-existentes falham, nenhum novo.

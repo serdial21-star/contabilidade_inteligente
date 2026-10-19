@@ -764,6 +764,27 @@
     if (loadDashboard && route() === 'accounting') refreshAccounting(profile);
   }
 
+  // T-0010 — re-entrada automática pela ponte (F5 ou link direto). Nada vai para armazenamento do navegador: a trava
+  // contra laço é a marca "r=1" no endereço de volta; se a ponte devolver sem crachá e com a marca, o B para e avisa.
+  const RETURN_PARAMS = ['company', 'document', 'fiscal', 'statement'];
+  function safeReturnHash(requestedRoute, params) {
+    const routeId = /^[a-z-]{1,40}$/.test(requestedRoute || '') ? requestedRoute : 'overview';
+    const kept = new URLSearchParams();
+    for (const key of RETURN_PARAMS) {
+      const value = params.get(key);
+      if (value && /^[A-Za-z0-9_.:-]{1,80}$/.test(value)) kept.set(key, value);
+    }
+    const query = kept.toString();
+    return `#${routeId}${query ? `?${query}` : ''}`;
+  }
+  function startBridgeRelaunch(returnHash, alreadyTried) {
+    const target = config.bridgeRelaunchUrl;
+    if (alreadyTried || typeof target !== 'string' || !/^https:\/\/[^/?#]+\/[^?#]*$/.test(target)) return false;
+    const marked = `${returnHash}${returnHash.includes('?') ? '&' : '?'}r=1`;
+    location.replace(`${target}?voltar=${encodeURIComponent(marked)}`);
+    return true;
+  }
+
   async function bootstrapAuthenticated(accessToken, returnTo = '#overview') {
     const bootstrapClient = root.S21ApiClient.createApiClient({
       baseUrl: config.apiBaseUrl,
@@ -775,8 +796,10 @@
       const profile = normalizeCurrentApplication(current);
       session.establish({token: accessToken, userProfile: profile});
       initializeWorkContext(profile, true);
-      const requested = String(returnTo || '').match(/^#[a-z-]+$/)?.[0]?.slice(1);
-      location.hash = authorizedRoute(profile, requested);
+      const match = String(returnTo || '').match(/^#([a-z-]+)(\?[A-Za-z0-9_.:=&-]*)?$/);
+      const requested = match?.[1];
+      const target = authorizedRoute(profile, requested);
+      location.hash = target + (target === requested && match?.[2] ? match[2] : '');
       renderShell();
     } catch (error) {
       if (error.code === 'SESSION_EXPIRED') { session.expire(); renderLogin(); }
@@ -1344,10 +1367,15 @@
     }
     if (config.authMode === 'bridge') {
       const bridgeToken = routeParams().get('bridge');
-      if (!bridgeToken) { session.unauthenticated(); renderLogin('Abra esta tela a partir do S21 Administrativo.'); return; }
+      const returnHash = safeReturnHash(route(), routeParams());
+      if (!bridgeToken) {
+        // T-0010: F5 ou link direto — pede um crachá novo ao S21 Administrativo e volta para a mesma tela.
+        if (startBridgeRelaunch(returnHash, routeParams().get('r') === '1')) return;
+        session.unauthenticated(); renderLogin('Abra esta tela a partir do S21 Administrativo.'); return;
+      }
       history.replaceState(null, '', location.pathname); // token nunca fica na URL nem em histórico
       session.authenticating(); renderLogin();
-      try { await bootstrapAuthenticated(bridgeToken); }
+      try { await bootstrapAuthenticated(bridgeToken, returnHash); }
       catch (_) { session.unauthenticated(); renderLogin('Não foi possível entrar. Abra novamente a partir do S21 Administrativo.'); }
       return;
     }
