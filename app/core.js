@@ -26,6 +26,11 @@
       startSyntheticWorkspace: (userProfile) => {
         clear(); profile = userProfile; mode = 'synthetic'; state = STATES.AUTHENTICATED;
       },
+      // T-0012: passe renovado antes de vencer (login único S21); só vale com a sessão aberta.
+      renew: (token) => {
+        if (state !== STATES.AUTHENTICATED || !token) throw new Error('cannot renew without session');
+        accessToken = token;
+      },
       resume: () => {
         if (!profile) throw new Error('cannot resume without profile');
         state = STATES.AUTHENTICATED;

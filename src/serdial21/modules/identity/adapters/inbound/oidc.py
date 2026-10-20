@@ -37,7 +37,13 @@ class OidcJwtVerifier:
         unknown_kid_refresh_cooldown_seconds: int = 60,
         signing_key_resolver: Callable[[str], Any] | None = None,
         clock: Callable[[], float] = monotonic,
+        fixed_tenant_id: UUID | None = None,
+        claims_check: Callable[[dict[str, Any]], bool] | None = None,
     ) -> None:
+        # T-0012: o login único S21 não traz tenant_id; o escritório vem da configuração do servidor
+        # (o B tem um tenant fixo, ADR 0014 item 3) e o vínculo do usuário continua obrigatório.
+        self._fixed_tenant_id = fixed_tenant_id
+        self._claims_check = claims_check
         self._issuer = issuer.rstrip('/')
         self._audience = audience
         self._leeway_seconds = leeway_seconds
@@ -72,9 +78,12 @@ class OidcJwtVerifier:
                 issuer=self._issuer,
                 leeway=self._leeway_seconds,
                 options={
-                    'require': ['aud', 'exp', 'iat', 'iss', 'sub', 'tenant_id'],
+                    'require': ['aud', 'exp', 'iat', 'iss', 'sub']
+                    + ([] if self._fixed_tenant_id is not None else ['tenant_id']),
                 },
             )
+            if self._claims_check is not None and not self._claims_check(claims):
+                self._deny('claims_rejected')
             subject = claims['sub']
             if not isinstance(subject, str) or not subject.strip() or len(subject) > 255:
                 self._deny('invalid_subject')
@@ -83,7 +92,7 @@ class OidcJwtVerifier:
             return VerifiedIdentity(
                 issuer=self._issuer,
                 subject=subject,
-                tenant_id=UUID(str(claims['tenant_id'])),
+                tenant_id=self._fixed_tenant_id or UUID(str(claims['tenant_id'])),
                 issued_at=issued_at,
                 expires_at=expires_at,
             )
@@ -153,3 +162,29 @@ class OidcJwtVerifier:
     def _deny(reason: str) -> None:
         security_event('authentication.denied', fields={'reason': reason})
         raise AuthenticationError()
+
+
+def s21_login_claims_acceptable(claims: dict[str, Any]) -> bool:
+    """T-0012 (ADR 0025 do Financeiro): passe do login único S21 só vale como usuário autenticado, não anônimo e
+    com o código do celular (aal2)."""
+    return claims.get('role') == 'authenticated' and claims.get('is_anonymous') is not True and claims.get('aal') == 'aal2'
+
+
+class IssuerRoutingVerifier:
+    """Escolhe o verificador pelo emissor declarado no passe; quem confere assinatura, emissor, audiência e
+    validade é sempre o verificador escolhido. Emissor desconhecido é recusado sem buscar chave."""
+
+    def __init__(self, verifiers: dict[str, OidcJwtVerifier]) -> None:
+        self._verifiers = {issuer.rstrip('/'): verifier for issuer, verifier in verifiers.items()}
+
+    def verify(self, token: str) -> VerifiedIdentity:
+        if not token or len(token) > 16_384:
+            raise AuthenticationError()
+        try:
+            issuer = jwt.decode(token, options={'verify_signature': False}).get('iss')
+        except (InvalidTokenError, ValueError, TypeError):
+            raise AuthenticationError() from None
+        verifier = self._verifiers.get(issuer.rstrip('/')) if isinstance(issuer, str) else None
+        if verifier is None:
+            raise AuthenticationError()
+        return verifier.verify(token)

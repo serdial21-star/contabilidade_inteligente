@@ -2,7 +2,7 @@
 
 | Campo | Valor |
 |---|---|
-| Estado | BRIEFING — aguardando aprovação do usuário |
+| Estado | IMPLEMENTADA — aguardando publicação na VPS e conferência do usuário |
 | Origem | ADR 0025 do Sistema C ("login único S21"), aceito por Sérgio em 2026-10-20 17:40 (D-100 do C) |
 | Sistema | Sistema B |
 | Exige ADR | sim: **ADR 0021 do B** (revisa o ADR 0014 — a ponte do A deixa de ser a entrada), escrito junto com a implementação |
@@ -36,4 +36,12 @@ Desligar a ponte (etapa 3); clientes do portal (etapa 4); qualquer dado de negó
 
 ## 2. Aprovação
 
-(pendente)
+2026-10-20: Sérgio, "Aprovo T-0012, opção a" (tela própria do Contábil com o login S21).
+
+## 3. Resultado (Claude)
+
+- Servidor: `OidcJwtVerifier` com `fixed_tenant_id` e `claims_check`; `IssuerRoutingVerifier` (escolhe pelo emissor); `s21_login_claims_acceptable` (authenticated, não anônimo, aal2); configuração `S21_LOGIN_URL`, `S21_LOGIN_PUBLISHABLE_KEY`, `S21_LOGIN_TENANT_ID` (as três juntas; HTTPS fora de local/test; em homologation/production basta OIDC **ou** S21); `GET /api/v1/identity/login-config` público (endereço e chave publicável).
+- Tela: `app/s21-login.js` (senha → código → passe aal2; renovação; saída), formulário na tela de entrada, `#entrar` abre direto, renovação 60 s antes de vencer, sem Web Storage; `connect-src` libera só `https://bmpzxbihsvflqamdsjsp.supabase.co` (index.html e Caddyfile); `deploy/web/config.js` com `s21Login: true`; `compose.yaml` passa as 3 variáveis.
+- ADR 0021 do B (revisa o ADR 0014 e a regra "tela não pede senha", com a razão).
+- Testes: `tests/api/test_s21_login.py` 13/0 (aal2 entra; aal1, sem aal, anônimo, role anon, outra audiência, outro emissor, vencido → 401; outra chave → 401; sem cadastro → 403; ponte continua; configuração e rota pública); `app/tests/s21-login-smoke.cjs` 5/0; pytest sem MariaDB 686/0. Testes de tela antigos ajustados (shell-smoke 8, `test_app_shell`) para a regra nova.
+- Pré-existentes, não causados por esta tarefa: os mesmos 5 subtestes node (dashboard 2, intelligence 1, operational 1, shell 11), conferidos antes e depois; `tests/mariadb/test_migration_0017.py` com erro de sintaxe no Python 3.14 (coleta falha também sem a mudança); testes `tests/mariadb` exigem MariaDB descartável (não rodados).

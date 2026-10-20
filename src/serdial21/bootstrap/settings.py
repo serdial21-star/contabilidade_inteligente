@@ -4,6 +4,7 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Literal, Self
 from urllib.parse import urlsplit
+from uuid import UUID
 
 from pydantic import AliasChoices, Field, HttpUrl, SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -78,6 +79,10 @@ class AppSettings(BaseSettings):
         le=300,
         validation_alias='DATABASE_WRITE_TIMEOUT_SECONDS',
     )
+    # T-0012 (ADR 0025 do Financeiro): login único S21 (Supabase do Financeiro). Chave publicável não é segredo.
+    s21_login_url: HttpUrl | None = Field(default=None, validation_alias='S21_LOGIN_URL')
+    s21_login_publishable_key: str | None = Field(default=None, validation_alias='S21_LOGIN_PUBLISHABLE_KEY')
+    s21_login_tenant_id: UUID | None = Field(default=None, validation_alias='S21_LOGIN_TENANT_ID')
     oidc_issuer: str | None = Field(default=None, validation_alias='OIDC_ISSUER')
     oidc_audience: str | None = Field(default=None, validation_alias='OIDC_AUDIENCE')
     oidc_jwks_url: HttpUrl | None = Field(default=None, validation_alias='OIDC_JWKS_URL')
@@ -221,14 +226,20 @@ class AppSettings(BaseSettings):
             value is not None for value in oidc_values
         ):
             raise ValueError('configuração OIDC exige issuer, audience e JWKS URL')
-        if secured_environment and not self.oidc_configured:
-            raise ValueError('configuração OIDC é obrigatória em homologation/production')
-        if secured_environment:
+        s21_values = (self.s21_login_url, self.s21_login_publishable_key, self.s21_login_tenant_id)
+        if any(value is not None for value in s21_values) and not all(value is not None for value in s21_values):
+            raise ValueError('login único S21 exige S21_LOGIN_URL, S21_LOGIN_PUBLISHABLE_KEY e S21_LOGIN_TENANT_ID')
+        if secured_environment and not (self.oidc_configured or self.s21_login_configured):
+            raise ValueError('configuração de login (OIDC ou login único S21) é obrigatória em homologation/production')
+        if secured_environment and self.oidc_configured:
             assert self.oidc_issuer is not None and self.oidc_jwks_url is not None
             if not self.oidc_issuer.startswith('https://'):
                 raise ValueError('OIDC_ISSUER deve usar HTTPS fora de local/test')
             if self.oidc_jwks_url.scheme != 'https':
                 raise ValueError('OIDC_JWKS_URL deve usar HTTPS fora de local/test')
+        if secured_environment and self.s21_login_url is not None and self.s21_login_url.scheme != 'https':
+            raise ValueError('S21_LOGIN_URL deve usar HTTPS fora de local/test')
+        if secured_environment:
             if self.public_frontend_url is None or self.public_frontend_url.scheme != 'https':
                 raise ValueError('PUBLIC_FRONTEND_URL HTTPS é obrigatória em homologation/production')
             if not self.external_https:
@@ -300,6 +311,15 @@ class AppSettings(BaseSettings):
     @property
     def oidc_configured(self) -> bool:
         return all((self.oidc_issuer, self.oidc_audience, self.oidc_jwks_url))
+
+    @property
+    def s21_login_configured(self) -> bool:
+        return all((self.s21_login_url, self.s21_login_publishable_key, self.s21_login_tenant_id))
+
+    @property
+    def s21_login_issuer(self) -> str | None:
+        """Emissor dos passes do login S21 (Supabase): <url>/auth/v1."""
+        return str(self.s21_login_url).rstrip('/') + '/auth/v1' if self.s21_login_url is not None else None
 
     @property
     def resolved_database_pool_size(self) -> int:

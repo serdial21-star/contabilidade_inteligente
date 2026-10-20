@@ -42,6 +42,11 @@
     onAuthenticationFailure: () => { session.expire(); renderLogin(); },
   });
   const oidcClient = root.S21OidcClient.createOidcClient({config, getAccessToken: session.token});
+  // T-0012 (ADR 0025 do Sistema C): login único S21, com código do celular; passe só na memória.
+  const s21Login = config.s21Login && root.S21Login ? root.S21Login.createS21LoginClient({apiBaseUrl: config.apiBaseUrl}) : null;
+  let s21Step = 'credentials';
+  let s21Active = false;
+  let s21Timer = null;
   const dashboardService = root.S21Dashboard.createDashboardService({
     dataMode: config.dataMode,
     apiClient,
@@ -146,11 +151,52 @@
         ${expired ? '<div class="alert warning" role="alert"><div><strong>Sessão expirada</strong><p>Sua sessão expirou. Entre novamente para continuar.</p></div></div>' : ''}
         <div id="auth-feedback" class="alert ${configurationError ? 'error' : 'info'}" role="status" aria-live="polite"><div><strong>${authenticating ? 'Autenticando com segurança' : configurationError ? 'Configuração necessária' : 'Ambiente controlado'}</strong><p>${escapeHtml(authenticating ? 'Aguarde a resposta do provedor de identidade.' : title)}</p></div></div>
         ${config.authMode === 'oidc' ? `<button class="btn" type="button" data-action="begin-login" ${oidcConfigured && !authenticating ? '' : 'disabled'}>${authenticating ? '<span class="spinner" aria-hidden="true"></span>Autenticando…' : 'Entrar'}</button>` : ''}
+        ${s21Login && s21Login.isConfigured() ? s21FormMarkup(authenticating) : ''}
         ${synthetic ? '<div class="demo-entry"><strong>AMBIENTE DE DESENVOLVIMENTO</strong><p>Esta entrada usa identidade, empresas e permissões fictícias. Não concede acesso à API.</p><button class="btn secondary" type="button" data-action="start-demo">Abrir demonstração sintética</button></div>' : ''}
         <small class="login-help">Authorization Code + PKCE. MFA, recuperação de senha e revogação global pertencem ao IdP aprovado.</small>
       </div></section></main>`;
     app.setAttribute('aria-busy', 'false');
-    document.querySelector('[data-action="begin-login"]:not([disabled]), [data-action="start-demo"]')?.focus();
+    document.querySelector('#s21-code, #s21-email, [data-action="begin-login"]:not([disabled]), [data-action="start-demo"]')?.focus();
+  }
+
+  function s21FormMarkup(busy) {
+    const disabled = busy ? 'disabled' : '';
+    if (s21Step === 'code') {
+      return `<form id="s21-login-form" class="stack" novalidate>
+        <label for="s21-code">Código do aplicativo do celular</label>
+        <input id="s21-code" name="code" inputmode="numeric" autocomplete="one-time-code" maxlength="6" pattern="[0-9]{6}" required ${disabled}>
+        <button class="btn" type="submit" ${disabled}>${busy ? '<span class="spinner" aria-hidden="true"></span>Conferindo…' : 'Confirmar'}</button>
+        <button class="btn ghost" type="button" data-action="s21-back" ${disabled}>Voltar</button>
+      </form>`;
+    }
+    return `<form id="s21-login-form" class="stack" novalidate>
+      <label for="s21-email">E-mail</label>
+      <input id="s21-email" name="email" type="email" autocomplete="username" required ${disabled}>
+      <label for="s21-password">Senha</label>
+      <input id="s21-password" name="password" type="password" autocomplete="current-password" required ${disabled}>
+      <button class="btn" type="submit" ${disabled}>${busy ? '<span class="spinner" aria-hidden="true"></span>Entrando…' : 'Entrar com o login S21'}</button>
+    </form>`;
+  }
+
+  const S21_MESSAGES = {
+    REJECTED: 'E-mail, senha ou código não conferem.',
+    RATE_LIMITED: 'Muitas tentativas. Aguarde alguns minutos e tente de novo.',
+    NO_CODE: 'Sua conta ainda não tem o código do celular. Configure-o no S21 Financeiro e tente de novo.',
+    NETWORK: 'Não foi possível falar com o serviço de login. Verifique a conexão.',
+  };
+
+  function scheduleS21Renewal(token) {
+    if (s21Timer) clearTimeout(s21Timer);
+    const wait = Math.max(30, s21Login.secondsLeft(token) - 60) * 1000;
+    s21Timer = setTimeout(async () => {
+      try { session.renew(await s21Login.renew()); scheduleS21Renewal(session.token()); }
+      catch (_) { s21Active = false; s21Login.forget(); session.expire(); renderLogin(); }
+    }, wait);
+  }
+
+  function stopS21() {
+    if (s21Timer) clearTimeout(s21Timer);
+    s21Timer = null; s21Active = false; s21Step = 'credentials';
   }
 
   function themeButtonMarkup() {
@@ -1061,6 +1107,10 @@
       renderShell(false);
       return;
     }
+    if (action === 's21-back') {
+      s21Login?.forget(); s21Step = 'credentials'; session.unauthenticated(); renderLogin();
+      return;
+    }
     if (action === 'begin-login') {
       session.authenticating(); renderLogin();
       try { await oidcClient.beginLogin(`#${route()}`); }
@@ -1070,7 +1120,8 @@
       session.startSyntheticWorkspace(profile); initializeWorkContext(profile, true);
       location.hash = authorizedRoute(profile); renderShell();
     } else if (action === 'logout') {
-      const wasOidc = session.snapshot().mode === 'oidc';
+      const wasOidc = session.snapshot().mode === 'oidc' && !s21Active;
+      if (s21Active) { stopS21(); await s21Login.logout(); }
       session.logout(); userMenuOpen = false; companyId = null; workContext = null; workContextSettings = null; workContextDialogOpen = false; dashboardLayout = null; dashboardModel = null; dashboardRequest += 1; operationalModel = null; operationalRequest += 1; intelligenceModel = null; intelligenceRequest += 1; importFeedback = null; pendingNfeFiles = []; accountingModel = null; accountingRequest += 1; decisionIntent = null; decisionFeedback = null; itemDecisionOpen = false; itemDecisionFeedback = null;
       history.replaceState(null, '', location.pathname);
       if (wasOidc) await oidcClient.logout();
@@ -1139,6 +1190,29 @@
   });
 
   app.addEventListener('submit', async (event) => {
+    if (event.target.id === 's21-login-form') {
+      event.preventDefault();
+      if (!s21Login || session.snapshot().state === STATES.AUTHENTICATING) return;
+      const values = Object.fromEntries(new FormData(event.target).entries());
+      session.authenticating(); renderLogin();
+      try {
+        if (s21Step === 'credentials') {
+          await s21Login.signIn(String(values.email || '').trim(), String(values.password || ''));
+          s21Step = 'code'; session.unauthenticated(); renderLogin('Digite o código de 6 dígitos do aplicativo do celular.');
+          return;
+        }
+        const token = await s21Login.verifyCode(String(values.code || '').trim());
+        s21Active = true; s21Step = 'credentials';
+        await bootstrapAuthenticated(token, '#overview');
+        if (session.snapshot().state === STATES.AUTHENTICATED) scheduleS21Renewal(token);
+        else { stopS21(); s21Login.forget(); }
+      } catch (error) {
+        if (error?.code === 'NO_CODE') s21Step = 'credentials';
+        session.unauthenticated();
+        renderLogin(S21_MESSAGES[error?.code] || 'Não foi possível entrar agora. Tente de novo.');
+      }
+      return;
+    }
     if (event.target.id === 'work-context-form') {
       event.preventDefault();
       const profile = session.snapshot().profile;
@@ -1355,6 +1429,12 @@
   });
 
   async function boot() {
+    if (s21Login) await s21Login.load();
+    // T-0012: #entrar abre direto a tela do login S21 (sem passar pelo S21 Administrativo).
+    if (s21Login && s21Login.isConfigured() && (config.authMode === 's21' || route() === 'entrar')) {
+      history.replaceState(null, '', location.pathname);
+      session.unauthenticated(); renderLogin(); return;
+    }
     if (config.authMode === 'synthetic' && config.environment === 'development') {
       if (location.hash && route() !== 'overview') {
         const profile = root.S21SyntheticProvider.loadProfile();

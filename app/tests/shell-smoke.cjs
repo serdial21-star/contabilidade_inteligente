@@ -95,9 +95,14 @@ test('401 expires the frontend session and 403 remains a safe generic error', as
 });
 
 test('login UI delegates credentials to the IdP', () => {
+  // T-0012 (ADR 0021 do B / ADR 0025 do Sistema C): o login único S21 pede e-mail, senha e código na própria tela,
+  // e o navegador os entrega direto ao serviço de login S21 (s21-login.js). Nunca à API do B.
   const source = read('app.js');
-  assert.doesNotMatch(source, /type="email"/);
-  assert.doesNotMatch(source, /type="password"/);
+  assert.equal((source.match(/type="email"/g) || []).length, 1);
+  assert.equal((source.match(/type="password"/g) || []).length, 1);
+  assert.match(source, /function s21FormMarkup/);
+  assert.match(source, /s21Login\.signIn\(/);
+  assert.doesNotMatch(source, /(apiClient|bootstrapClient)\.[a-zA-Z]+\([^)]*password/i);
   assert.match(source, /data-action="begin-login"/);
   assert.match(source, /credenciais são tratadas somente pelo provedor/);
   assert.doesNotMatch(source, /console\.|\.value[^\n]*(password|senha)|(password|senha)[^\n]*\.value/i);

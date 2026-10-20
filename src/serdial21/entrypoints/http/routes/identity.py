@@ -108,6 +108,26 @@ SessionDependency = Annotated[Session, Depends(get_db_session)]
 PrincipalDependency = Annotated[AuthenticatedPrincipal, Depends(get_authenticated_principal)]
 
 
+class S21LoginConfigResponse(BaseModel):
+    url: str
+    publishable_key: str
+
+
+class LoginConfigResponse(BaseModel):
+    s21: S21LoginConfigResponse | None
+
+
+@router.get('/login-config', response_model=LoginConfigResponse)
+def login_config(request: Request) -> LoginConfigResponse:
+    """T-0012: endereço e chave publicável do login único S21 para a tela de entrada (nada secreto)."""
+    settings: AppSettings = request.app.state.settings
+    if not settings.s21_login_configured:
+        return LoginConfigResponse(s21=None)
+    assert settings.s21_login_url is not None and settings.s21_login_publishable_key is not None
+    return LoginConfigResponse(s21=S21LoginConfigResponse(
+        url=str(settings.s21_login_url).rstrip('/'), publishable_key=settings.s21_login_publishable_key))
+
+
 @router.get('/me', response_model=CurrentApplicationResponse)
 def current_application(
     principal: PrincipalDependency,

@@ -22,9 +22,11 @@ def test_application_boot_is_branded_and_protected() -> None:
 
 
 def test_unauthenticated_login_delegates_credentials_to_idp() -> None:
+    # T-0012 (ADR 0021 do B / ADR 0025 do Sistema C): só o formulário do login único S21 pede senha, e o
+    # navegador a entrega direto ao serviço de login S21 (s21-login.js), nunca à API do B.
     javascript = source('app.js')
-    assert 'type="email"' not in javascript
-    assert 'type="password"' not in javascript
+    assert javascript.count('type="email"') == 1 and javascript.count('type="password"') == 1
+    assert 'function s21FormMarkup' in javascript and 's21Login.signIn(' in javascript
     assert 'data-action="begin-login"' in javascript
     assert 'credenciais são tratadas somente pelo provedor' in javascript
 
