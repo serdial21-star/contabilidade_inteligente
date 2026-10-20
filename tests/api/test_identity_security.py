@@ -609,3 +609,15 @@ def test_each_internal_access_boundary_is_revalidated(
     response = client.get('/api/v1/identity/context', headers=_headers(target_token), params={'company_id': str(identity.company_a)})
     assert response.status_code == 403
     assert response.json() == {'detail': 'access denied'}
+
+
+def test_valid_portal_token_without_registration_in_b_is_denied(identity: IdentityFixture) -> None:
+    # M-111 (D-099 do Financeiro, 2026-10-20): a ponte do portal só prova quem é a pessoa; entra no S21 Contábil
+    # apenas quem foi cadastrado nele. Token válido (emissor, audiência e assinatura corretos) de funcionário sem
+    # cadastro no B: recusado no servidor, com a mesma resposta segura, em toda rota autenticada.
+    client = TestClient(identity.app)
+    token = identity.token(subject='funcionario:sem-cadastro-no-b')
+    me = client.get('/api/v1/identity/me', headers=_headers(token))
+    context = client.get('/api/v1/identity/context', headers=_headers(token), params={'company_id': str(identity.company_a)})
+    assert me.status_code == context.status_code == 403
+    assert me.json() == context.json() == {'detail': 'access denied'}
