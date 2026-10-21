@@ -195,3 +195,22 @@ def test_t0010_bridge_relaunch_keeps_tokens_out_of_web_storage() -> None:
     assert "/^[a-z-]{1,40}$/.test(requestedRoute || '')" in javascript
     # Ambiente de desenvolvimento não redireciona para fora.
     assert 'bridgeRelaunchUrl' not in source('config.js')
+
+
+def test_t0013_s21_login_error_is_prominent_and_f5_stays_on_s21_login() -> None:
+    # T-0013 (M-115 do Sistema C): erro do login S21 em destaque, e-mail mantido (senha não), F5 sem cair na ponte.
+    javascript = source('app.js')
+    assert "function renderLogin(message = '', tone = 'info')" in javascript
+    assert "role=\"${failed ? 'alert' : 'status'}\"" in javascript and "failed ? 'Não foi possível entrar'" in javascript
+    assert "renderLogin(S21_MESSAGES[error?.code] || 'Não foi possível entrar agora. Tente de novo.', 'error')" in javascript
+    assert 'value="${escapeHtml(s21Email)}"' in javascript
+    assert javascript.count('id="s21-password"') == 1 and 'value="${escapeHtml(s21Password' not in javascript
+    # A tela fica em #entrar; a aba marcada (window.name, só um texto fixo) volta ao login S21 e à mesma tela.
+    assert "history.replaceState(null, '', `${location.pathname}#entrar`)" in javascript
+    assert "const S21_TAB_MARK = 's21-contabil:login-s21';" in javascript
+    assert 'root.name = S21_TAB_MARK;' in javascript
+    assert "if (bridgeArrival && root.name === S21_TAB_MARK) root.name = '';" in javascript
+    assert "s21Return = safeReturnHash(route(), routeParams())" in javascript
+    assignments = re.findall(r"root\.name\s*=(?!=)\s*([^;]+);", javascript)
+    assert assignments and set(assignments) <= {'S21_TAB_MARK', "''"}
+    assert 'localStorage' not in javascript and 'sessionStorage' not in javascript
