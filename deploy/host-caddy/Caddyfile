@@ -1,0 +1,22 @@
+# Caddy do HOST da VPS de Campinas (contêiner n8n-caddy-1; arquivo /root/n8n/n8n/Caddyfile, montado em
+# /etc/caddy/Caddyfile). Cópia fiel do servidor, versionada pela T-0015 (M-116 do Sistema C), 2026-10-21.
+#
+# Regra: a política de conteúdo (Content-Security-Policy) do Contábil existe SÓ em deploy/web/Caddyfile e em
+# app/index.html. O host não repete a CSP: duas CSP valem juntas no navegador, e a do host desatualizada bloqueou o
+# login S21 em 2026-10-21. Qualquer mudança aqui é feita neste arquivo e aplicada pelo roteiro da tarefa.
+
+n8n.serdial21.com {
+	reverse_proxy n8n:5678
+}
+
+contabilidade.serdial21.com {
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options "nosniff"
+		Referrer-Policy "no-referrer"
+		Permissions-Policy "camera=(), geolocation=(), microphone=()"
+		X-Frame-Options "DENY"
+	}
+
+	reverse_proxy serdial21-web:8080
+}

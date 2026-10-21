@@ -238,3 +238,12 @@ def test_t0014b_f5_continuation_does_not_reopen_work_context() -> None:
     assert javascript.index("const relaunched = routeParams().get('r') === '1';") < javascript.index(
         "history.replaceState(null, '', location.pathname); // token nunca fica na URL nem em histórico")
     assert 'await bootstrapAuthenticated(bridgeToken, returnHash, !relaunched);' in javascript
+
+
+def test_t0015_host_caddy_does_not_repeat_the_content_security_policy() -> None:
+    # T-0015 (M-116 do Sistema C): a CSP do Contábil vive só no Caddy do contêiner web e no index.html.
+    host = (ROOT / 'deploy/host-caddy/Caddyfile').read_text(encoding='utf-8')
+    web = (ROOT / 'deploy/web/Caddyfile').read_text(encoding='utf-8')
+    assert 'Content-Security-Policy' not in host.split('contabilidade.serdial21.com', 1)[1]
+    assert 'reverse_proxy serdial21-web:8080' in host and 'X-Frame-Options "DENY"' in host
+    assert web.count('connect-src \'self\' https://bmpzxbihsvflqamdsjsp.supabase.co') == 2
