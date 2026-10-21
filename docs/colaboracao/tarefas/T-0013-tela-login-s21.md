@@ -2,7 +2,7 @@
 
 | Campo | Valor |
 |---|---|
-| Estado | IMPLEMENTADA — aguardando publicação na VPS e conferência do usuário |
+| Estado | PUBLICADA em 2026-10-21 (imagem web t0013); F5 revisto pela T-0014 |
 | Origem | Publicação da T-0012 em 2026-10-21 (S-035 do Sistema C): Sérgio não viu a mensagem de erro ("os dois se apagam… sem mensagem") e o F5 levou à ponte do S21 Administrativo. Pendência M-115 do C |
 | Sistema | Sistema B (só a tela; servidor sem mudança) |
 | Exige ADR | não: ajuste de tela dentro do ADR 0021 do B; a marca da aba está registrada abaixo |

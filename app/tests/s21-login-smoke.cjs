@@ -91,3 +91,42 @@ test('nada de armazenamento do navegador, registro ou passe na URL', () => {
   assert.match(html, /connect-src 'self' https:\/\/bmpzxbihsvflqamdsjsp\.supabase\.co;/);
   assert.ok(html.indexOf('s21-login.js') < html.indexOf('app.js'));
 });
+
+test('T-0014: entrega a renovação ao servidor; F5 retoma pelo cookie; renovação e saída passam pelo servidor', async () => {
+  const session = (status, body) => () => reply(status, body);
+  const server = fakeServer({
+    '/api/v1/identity/session': session(200, {access_token: 'srv-1', expires_in: 900}),
+    '/api/v1/identity/session/refresh': session(200, {access_token: 'srv-2', expires_in: 900}),
+    '/api/v1/identity/session/logout': session(200, {signed_out: true}),
+  });
+  const client = load(server.fetchImpl);
+  await client.load();
+  await client.signIn('pessoa@example.test', 'senha-ficticia');
+  await client.verifyCode('123456');
+  assert.equal(await client.keepSignedIn(), 'srv-1');
+  const handoff = server.calls.find((call) => call.url === '/api/v1/identity/session');
+  assert.deepEqual(JSON.parse(handoff.options.body), {refresh_token: 'r2'});
+  assert.equal(handoff.options.headers['X-S21-Session'], '1');
+  assert.equal(handoff.options.headers.Authorization, 'Bearer aal2');
+  assert.equal(handoff.options.credentials, 'same-origin');
+  assert.equal(handoff.options.headers.apikey, undefined);
+  assert.equal(await client.renew(), 'srv-2');
+  assert.ok(!server.calls.some((call) => call.url.endsWith('grant_type=refresh_token')), 'depois da entrega só o servidor renova');
+  await client.logout();
+  assert.ok(server.calls.some((call) => call.url === '/api/v1/identity/session/logout'));
+  assert.ok(!server.calls.some((call) => call.url.includes('/auth/v1/logout')));
+});
+
+test('T-0014: sem sessão no servidor, retomar devolve nada e o login continua só na memória', async () => {
+  const server = fakeServer({
+    '/api/v1/identity/session': () => reply(409, {detail: 'session cookie disabled'}),
+    '/api/v1/identity/session/refresh': () => reply(401, {detail: 'session ended'}),
+  });
+  const client = load(server.fetchImpl);
+  await client.load();
+  assert.equal(await client.resume(), null);
+  await client.signIn('pessoa@example.test', 'senha-ficticia');
+  await client.verifyCode('123456');
+  assert.equal(await client.keepSignedIn(), null);
+  assert.equal(await client.renew(), 'aal2-b');
+});

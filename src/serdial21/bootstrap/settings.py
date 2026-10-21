@@ -83,6 +83,10 @@ class AppSettings(BaseSettings):
     s21_login_url: HttpUrl | None = Field(default=None, validation_alias='S21_LOGIN_URL')
     s21_login_publishable_key: str | None = Field(default=None, validation_alias='S21_LOGIN_PUBLISHABLE_KEY')
     s21_login_tenant_id: UUID | None = Field(default=None, validation_alias='S21_LOGIN_TENANT_ID')
+    # T-0014 (D-059 do Sistema C): renovação no cookie HttpOnly; 20 min como no Financeiro (D-020 do C).
+    s21_session_cookie_max_age_seconds: int = Field(
+        default=1200, ge=300, le=43_200, validation_alias='S21_SESSION_COOKIE_MAX_AGE_SECONDS',
+    )
     oidc_issuer: str | None = Field(default=None, validation_alias='OIDC_ISSUER')
     oidc_audience: str | None = Field(default=None, validation_alias='OIDC_AUDIENCE')
     oidc_jwks_url: HttpUrl | None = Field(default=None, validation_alias='OIDC_JWKS_URL')

@@ -11,7 +11,7 @@ from starlette.middleware.trustedhost import TrustedHostMiddleware
 from serdial21 import __version__
 from serdial21.bootstrap.database import DatabaseRuntime
 from serdial21.bootstrap.settings import AppSettings, get_settings
-from serdial21.bootstrap.identity import build_oidc_verifier
+from serdial21.bootstrap.identity import build_oidc_verifier, build_s21_session_provider
 from serdial21.entrypoints.http.middleware.correlation_id import (
     CorrelationIdMiddleware,
 )
@@ -30,6 +30,7 @@ from serdial21.entrypoints.http.middleware.request_limits import (
 )
 from serdial21.entrypoints.http.routes.health import router as health_router
 from serdial21.entrypoints.http.routes.identity import router as identity_router
+from serdial21.entrypoints.http.routes.identity_session import router as identity_session_router
 from serdial21.entrypoints.http.routes.catalog import router as catalog_router
 from serdial21.entrypoints.http.routes.operations import router as operations_router
 from serdial21.entrypoints.http.routes.observability import router as observability_router
@@ -96,6 +97,7 @@ def create_app(
     app.state.metrics = metrics
     app.state.alerts = AlertDispatcher(alert_sink or NullAlertSink())
     app.state.oidc_verifier = build_oidc_verifier(resolved_settings)
+    app.state.s21_sessions = build_s21_session_provider(resolved_settings)
     app.add_middleware(
         RequestBodyLimitMiddleware,
         api_prefix=resolved_settings.api_prefix,
@@ -143,6 +145,7 @@ def create_app(
             return JSONResponse(status_code=500, content={'detail': 'internal server error'})
     app.include_router(health_router, prefix=resolved_settings.api_prefix)
     app.include_router(identity_router, prefix=resolved_settings.api_prefix)
+    app.include_router(identity_session_router, prefix=resolved_settings.api_prefix)
     app.include_router(catalog_router, prefix=resolved_settings.api_prefix)
     app.include_router(operations_router, prefix=resolved_settings.api_prefix)
     app.include_router(observability_router)

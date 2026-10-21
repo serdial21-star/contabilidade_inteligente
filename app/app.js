@@ -53,6 +53,7 @@
   // T-0013: marca da aba (window.name, só este texto, nunca passe) — quem entrou pelo login S21 volta a ele no F5,
   // em vez da re-entrada pela ponte (T-0010). Chegar com crachá da ponte apaga a marca.
   const S21_TAB_MARK = 's21-contabil:login-s21';
+  const S21_RENEW_MAX_SECONDS = 600;
   const dashboardService = root.S21Dashboard.createDashboardService({
     dataMode: config.dataMode,
     apiClient,
@@ -195,7 +196,8 @@
 
   function scheduleS21Renewal(token) {
     if (s21Timer) clearTimeout(s21Timer);
-    const wait = Math.max(30, s21Login.secondsLeft(token) - 60) * 1000;
+    // T-0014: no máximo a cada 10 min, como no Financeiro (D-059), para o cookie de 20 min não vencer com a página aberta.
+    const wait = Math.min(S21_RENEW_MAX_SECONDS, Math.max(30, s21Login.secondsLeft(token) - 60)) * 1000;
     s21Timer = setTimeout(async () => {
       try { session.renew(await s21Login.renew()); scheduleS21Renewal(session.token()); }
       catch (_) { s21Active = false; s21Login.forget(); session.expire(); renderLogin(); }
@@ -1212,7 +1214,9 @@
           s21Step = 'code'; session.unauthenticated(); renderLogin('Digite o código de 6 dígitos do aplicativo do celular.');
           return;
         }
-        const token = await s21Login.verifyCode(String(values.code || '').trim());
+        // T-0014: a renovação vai para o cookie do servidor (F5 mantém a sessão); sem sucesso, segue só na memória.
+        const verified = await s21Login.verifyCode(String(values.code || '').trim());
+        const token = (await s21Login.keepSignedIn()) || verified;
         s21Active = true; s21Step = 'credentials'; root.name = S21_TAB_MARK;
         const returnTo = s21Return; s21Return = '#overview';
         await bootstrapAuthenticated(token, returnTo);
@@ -1446,6 +1450,19 @@
     // T-0013: o endereço continua em #entrar (F5 fica na tela) e a aba marcada volta ao login S21, na mesma tela.
     const bridgeArrival = config.authMode === 'bridge' && Boolean(routeParams().get('bridge'));
     if (bridgeArrival && root.name === S21_TAB_MARK) root.name = '';
+    // T-0014 (D-059 do Sistema C): F5 com sessão do login S21 no cookie — passe novo e continua na mesma tela.
+    if (s21Login && s21Login.isConfigured() && !bridgeArrival) {
+      const resumed = await s21Login.resume();
+      if (resumed) {
+        const returnTo = route() === 'entrar' ? '#overview' : safeReturnHash(route(), routeParams());
+        s21Active = true; root.name = S21_TAB_MARK;
+        session.authenticating(); renderLogin();
+        await bootstrapAuthenticated(resumed, returnTo);
+        if (session.snapshot().state === STATES.AUTHENTICATED) scheduleS21Renewal(resumed);
+        else { stopS21(); s21Login.forget(); }
+        return;
+      }
+    }
     if (s21Login && s21Login.isConfigured() && !bridgeArrival
       && (config.authMode === 's21' || route() === 'entrar' || root.name === S21_TAB_MARK)) {
       if (route() !== 'entrar') s21Return = safeReturnHash(route(), routeParams());

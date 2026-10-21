@@ -12,6 +12,22 @@
     let access = null;
     let renewal = null;
     let factorId = null;
+    // T-0014 (D-059 do Sistema C): depois da entrega, a renovação mora no cookie HttpOnly do servidor do B e só ele renova.
+    let serverSession = false;
+    const apiUrl = (path) => `${String(apiBaseUrl).replace(/\/$/, '')}/identity/session${path}`;
+
+    /** Rotas da sessão no servidor do B (mesma origem; o cookie vai junto, a página nunca o lê). */
+    async function sessionCall(path, {body, token} = {}) {
+      const headers = {Accept: 'application/json', 'X-S21-Session': '1'};
+      if (body !== undefined) headers['Content-Type'] = 'application/json';
+      if (token) headers.Authorization = `Bearer ${token}`;
+      try {
+        const response = await http(apiUrl(path), {method: 'POST', headers, body: body === undefined ? undefined : JSON.stringify(body), credentials: 'same-origin'});
+        if (!response.ok) return null;
+        const payload = await response.json().catch(() => null);
+        return payload && typeof payload.access_token === 'string' ? payload.access_token : null;
+      } catch (_) { return null; }
+    }
 
     async function call(url, {method = 'POST', body, token} = {}) {
       const headers = {apikey: settings.publishable_key, Accept: 'application/json'};
@@ -68,18 +84,42 @@
         keep(await call(auth(`/factors/${encodeURIComponent(factorId)}/verify`), {body: {challenge_id: challenge.id, code}, token: access}));
         return access;
       },
+      /** T-0014: entrega a renovação ao servidor (cookie HttpOnly); sem sucesso, a sessão segue só na memória. */
+      async keepSignedIn() {
+        if (!settings || !access || !renewal) return null;
+        const token = await sessionCall('', {body: {refresh_token: renewal}, token: access});
+        if (!token) return null;
+        access = token; renewal = null; serverSession = true;
+        return access;
+      },
+      /** T-0014: F5 ou recarga — passe novo pelo cookie; null se não houver sessão. */
+      async resume() {
+        if (!settings) return null;
+        const token = await sessionCall('/refresh');
+        if (!token) return null;
+        access = token; renewal = null; serverSession = true;
+        return access;
+      },
       /** Renova o passe antes de vencer (o nível aal2 se mantém na renovação). */
       async renew() {
+        if (serverSession) {
+          const token = await sessionCall('/refresh');
+          if (!token) throw new S21LoginError('REJECTED');
+          access = token;
+          return access;
+        }
         if (!settings || !renewal) throw new S21LoginError('NOT_STARTED');
         keep(await call(auth('/token?grant_type=refresh_token'), {body: {refresh_token: renewal}}));
         return access;
       },
       async logout() {
         const token = access;
-        access = null; renewal = null; factorId = null;
+        const viaServer = serverSession;
+        access = null; renewal = null; factorId = null; serverSession = false;
+        if (viaServer) { await sessionCall('/logout', {token}); return; }
         if (settings && token) { try { await call(auth('/logout?scope=local'), {body: {}, token}); } catch (_) { /* sair local sempre vale */ } }
       },
-      forget() { access = null; renewal = null; factorId = null; },
+      forget() { access = null; renewal = null; factorId = null; serverSession = false; },
       /** Segundos até o passe vencer (lido do próprio passe; sem conferir assinatura — quem confere é o servidor). */
       secondsLeft(token, now = Date.now()) {
         try {

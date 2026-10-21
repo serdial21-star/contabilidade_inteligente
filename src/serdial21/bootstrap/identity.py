@@ -1,6 +1,7 @@
 '''Composição do verificador de login: ponte do Sistema A (OIDC) e login único S21 (T-0012).'''
 
 from serdial21.bootstrap.settings import AppSettings
+from serdial21.modules.identity.adapters.outbound.s21_session import SupabaseSessionProvider
 from serdial21.modules.identity.adapters.inbound.oidc import (
     IssuerRoutingVerifier,
     OidcJwtVerifier,
@@ -45,3 +46,11 @@ def build_oidc_verifier(settings: AppSettings) -> OidcJwtVerifier | IssuerRoutin
     if len(verifiers) == 1 and settings.oidc_configured:
         return next(iter(verifiers.values()))
     return IssuerRoutingVerifier(verifiers)
+
+
+def build_s21_session_provider(settings: AppSettings) -> SupabaseSessionProvider | None:
+    """T-0014: sessão que sobrevive ao F5 só existe com o login único S21 configurado."""
+    if not settings.s21_login_configured:
+        return None
+    assert settings.s21_login_url is not None and settings.s21_login_publishable_key is not None
+    return SupabaseSessionProvider(str(settings.s21_login_url), settings.s21_login_publishable_key)

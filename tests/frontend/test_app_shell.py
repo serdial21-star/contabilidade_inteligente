@@ -214,3 +214,15 @@ def test_t0013_s21_login_error_is_prominent_and_f5_stays_on_s21_login() -> None:
     assignments = re.findall(r"root\.name\s*=(?!=)\s*([^;]+);", javascript)
     assert assignments and set(assignments) <= {'S21_TAB_MARK', "''"}
     assert 'localStorage' not in javascript and 'sessionStorage' not in javascript
+
+
+def test_t0014_f5_keeps_s21_session_through_server_cookie() -> None:
+    # T-0014 (D-059 do Sistema C): F5 retoma a sessão pelo cookie do servidor e fica na mesma tela.
+    javascript = source('app.js')
+    login = source('s21-login.js')
+    assert 'const resumed = await s21Login.resume();' in javascript
+    assert "const returnTo = route() === 'entrar' ? '#overview' : safeReturnHash(route(), routeParams());" in javascript
+    assert 'const token = (await s21Login.keepSignedIn()) || verified;' in javascript
+    assert 'const S21_RENEW_MAX_SECONDS = 600;' in javascript
+    assert "'X-S21-Session': '1'" in login and "credentials: 'same-origin'" in login
+    assert 'localStorage' not in login and 'sessionStorage' not in login and 'document.cookie' not in login
