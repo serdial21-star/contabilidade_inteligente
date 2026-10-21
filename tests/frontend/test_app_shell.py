@@ -226,3 +226,15 @@ def test_t0014_f5_keeps_s21_session_through_server_cookie() -> None:
     assert 'const S21_RENEW_MAX_SECONDS = 600;' in javascript
     assert "'X-S21-Session': '1'" in login and "credentials: 'same-origin'" in login
     assert 'localStorage' not in login and 'sessionStorage' not in login and 'document.cookie' not in login
+
+
+def test_t0014b_f5_continuation_does_not_reopen_work_context() -> None:
+    # T-0014 (conferência de Sérgio): a janela "Contexto de trabalho" só abre na entrada de fato, não no F5.
+    javascript = source('app.js')
+    assert "async function bootstrapAuthenticated(accessToken, returnTo = '#overview', prompt = true)" in javascript
+    assert 'initializeWorkContext(profile, prompt);' in javascript
+    assert 'await bootstrapAuthenticated(resumed, returnTo, false);' in javascript
+    assert "const relaunched = routeParams().get('r') === '1';" in javascript
+    assert javascript.index("const relaunched = routeParams().get('r') === '1';") < javascript.index(
+        "history.replaceState(null, '', location.pathname); // token nunca fica na URL nem em histórico")
+    assert 'await bootstrapAuthenticated(bridgeToken, returnHash, !relaunched);' in javascript

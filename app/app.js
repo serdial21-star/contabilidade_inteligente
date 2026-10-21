@@ -841,7 +841,8 @@
     return true;
   }
 
-  async function bootstrapAuthenticated(accessToken, returnTo = '#overview') {
+  // T-0014: prompt = entrada de fato (senha e código ou botão do Administrativo); F5 continua a sessão sem a janela de contexto.
+  async function bootstrapAuthenticated(accessToken, returnTo = '#overview', prompt = true) {
     const bootstrapClient = root.S21ApiClient.createApiClient({
       baseUrl: config.apiBaseUrl,
       getAccessToken: () => accessToken,
@@ -851,7 +852,7 @@
       const current = await bootstrapClient.currentApplication();
       const profile = normalizeCurrentApplication(current);
       session.establish({token: accessToken, userProfile: profile});
-      initializeWorkContext(profile, true);
+      initializeWorkContext(profile, prompt);
       const match = String(returnTo || '').match(/^#([a-z-]+)(\?[A-Za-z0-9_.:=&-]*)?$/);
       const requested = match?.[1];
       const target = authorizedRoute(profile, requested);
@@ -1457,7 +1458,7 @@
         const returnTo = route() === 'entrar' ? '#overview' : safeReturnHash(route(), routeParams());
         s21Active = true; root.name = S21_TAB_MARK;
         session.authenticating(); renderLogin();
-        await bootstrapAuthenticated(resumed, returnTo);
+        await bootstrapAuthenticated(resumed, returnTo, false);
         if (session.snapshot().state === STATES.AUTHENTICATED) scheduleS21Renewal(resumed);
         else { stopS21(); s21Login.forget(); }
         return;
@@ -1487,9 +1488,11 @@
         if (startBridgeRelaunch(returnHash, routeParams().get('r') === '1')) return;
         session.unauthenticated(); renderLogin('Abra esta tela a partir do S21 Administrativo.'); return;
       }
+      // F5 pela ponte (T-0010) volta com a marca r=1: é continuação, não entrada nova (lida antes de limpar a URL).
+      const relaunched = routeParams().get('r') === '1';
       history.replaceState(null, '', location.pathname); // token nunca fica na URL nem em histórico
       session.authenticating(); renderLogin();
-      try { await bootstrapAuthenticated(bridgeToken, returnHash); }
+      try { await bootstrapAuthenticated(bridgeToken, returnHash, !relaunched); }
       catch (_) { session.unauthenticated(); renderLogin('Não foi possível entrar. Abra novamente a partir do S21 Administrativo.'); }
       return;
     }
